@@ -1,0 +1,5 @@
+/target/
+/.reference/
+/*.zip
+*.log
+
