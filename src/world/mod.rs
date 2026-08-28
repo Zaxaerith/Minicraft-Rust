@@ -1,3 +1,4 @@
+mod entity;
 mod generation;
 mod random;
 pub mod spawn;
@@ -8,10 +9,25 @@ use crate::{
     assets::Assets,
     gfx::{HEIGHT, Screen, WIDTH},
     input::Input,
+    item::{
+        ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ArmorKind, ENCHANTER_RECIPES, FURNACE_RECIPES,
+        HAND_RECIPES, Inventory, ItemId, ItemStack, LOOM_RECIPES, OVEN_RECIPES, PotionKind,
+        ToolKind, ToolTier, WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
+    },
 };
+
+pub use entity::FurnitureKind;
+use entity::{EntityArena, EntityKind};
 
 const TILE_SIZE: i32 = 16;
 const DAY_LENGTH: u32 = 64_800;
+const MAX_STAT: u8 = 10;
+const MAX_HEALTH: u8 = 20;
+const MAX_HUNGER_TICKS: i16 = 400;
+const HUNGER_STAMINA_STEPS: [i16; 3] = [10, 7, 5];
+const HUNGER_TICK_INTERVALS: [u64; 3] = [120, 30, 10];
+const HUNGER_MOVE_STEPS: [u8; 3] = [8, 3, 1];
+const STARVATION_HEALTH_FLOORS: [u8; 3] = [5, 3, 0];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
@@ -400,14 +416,41 @@ enum Direction {
     Right,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActiveItem {
+    Stack(ItemId),
+    Tool(usize),
+}
+
 struct Player {
     x: i32,
     y: i32,
     direction: Direction,
     walk_distance: u32,
+    attack_time: u8,
     health: u8,
+    max_health: u8,
     stamina: u8,
-    wood: u16,
+    hunger: u8,
+    armor: u8,
+    armor_kind: Option<ArmorKind>,
+    armor_damage_buffer: u8,
+    hurt_time: u8,
+    stamina_recharge: u8,
+    stamina_recharge_delay: u8,
+    hunger_stamina_count: i16,
+    hunger_ticks: i16,
+    step_count: u8,
+    hunger_charge_delay: u16,
+    hunger_starve_delay: u8,
+    potion_effects: [u16; PotionKind::ALL.len()],
+    regen_tick: u8,
+    fishing_level: Option<u8>,
+    fishing_ticks: u16,
+    watering_content: u16,
+    clothing: ItemId,
+    inventory: Inventory,
+    active_item: Option<ActiveItem>,
 }
 
 struct Level {
@@ -415,7 +458,8 @@ struct Level {
     tiles: Vec<Tile>,
     data: Vec<u16>,
     max_mob_count: usize,
-    pending_spawns: Vec<spawn::NaturalMob>,
+    pending_spawns: Vec<spawn::SpawnIntent>,
+    entities: EntityArena,
 }
 
 pub enum WorldAction {
@@ -433,10 +477,17 @@ pub struct World {
     tick: u64,
     day_tick: u32,
     days: u32,
+    difficulty: usize,
     paused: bool,
     pause_selection: usize,
     inventory_open: bool,
+    inventory_selection: usize,
+    inventory_item_selection: usize,
+    inventory_pane: usize,
+    crafting_station: Option<FurnitureKind>,
     notification: Option<(String, u16)>,
+    air_wizard_defeated: bool,
+    obsidian_knight_defeated: bool,
     random: random::JavaRandom,
 }
 
@@ -453,6 +504,7 @@ impl World {
                     data: generated.data,
                     max_mob_count: spawn::max_mob_count(depth, difficulty),
                     pending_spawns: Vec::new(),
+                    entities: EntityArena::default(),
                 }
             })
             .collect();
@@ -503,6 +555,9 @@ impl World {
                 }
             }
         }
+        for level in &mut levels {
+            structure::finalize_entities(level, size, size);
+        }
         let current_level = 1;
         let (spawn_x, spawn_y) = find_spawn(&levels[current_level].tiles, size, size);
         Self {
@@ -515,18 +570,46 @@ impl World {
                 y: spawn_y * TILE_SIZE + 8,
                 direction: Direction::Down,
                 walk_distance: 0,
+                attack_time: 0,
                 health: 10,
+                max_health: 10,
                 stamina: 10,
-                wood: 0,
+                hunger: 10,
+                armor: 0,
+                armor_kind: None,
+                armor_damage_buffer: 0,
+                hurt_time: 0,
+                stamina_recharge: 0,
+                stamina_recharge_delay: 0,
+                hunger_stamina_count: HUNGER_STAMINA_STEPS[difficulty.min(2)],
+                hunger_ticks: MAX_HUNGER_TICKS,
+                step_count: 0,
+                hunger_charge_delay: 0,
+                hunger_starve_delay: 0,
+                potion_effects: [0; PotionKind::ALL.len()],
+                regen_tick: 0,
+                fishing_level: None,
+                fishing_ticks: 0,
+                watering_content: 0,
+                clothing: ItemId::RegularClothes,
+                inventory: Inventory::new(32),
+                active_item: None,
             },
             seed,
             tick: 0,
             day_tick: 0,
             days: 1,
+            difficulty: difficulty.min(2),
             paused: false,
             pause_selection: 0,
             inventory_open: false,
+            inventory_selection: 0,
+            inventory_item_selection: 0,
+            inventory_pane: 0,
+            crafting_station: None,
             notification: Some(("A NEW WORLD AWAKENS".to_owned(), 150)),
+            air_wizard_defeated: false,
+            obsidian_knight_defeated: false,
             random: random::JavaRandom::new(seed ^ 0x05EE_D224),
         }
     }
@@ -549,6 +632,80 @@ impl World {
         world.player.y = y * TILE_SIZE + 8;
         world.notification = Some((format!("DEPTH {depth} PREVIEW"), 150));
         Ok(world)
+    }
+
+    /// Populates a compact deterministic scene for the headless renderer.
+    pub fn populate_entity_preview(&mut self) {
+        let center_x = self.player.x;
+        let center_y = self.player.y;
+        let level = &mut self.levels[self.current_level];
+        for (index, mob) in spawn::NaturalMob::ALL.into_iter().enumerate() {
+            let column = index as i32 % 3 - 1;
+            let row = index as i32 / 3 - 1;
+            level
+                .entities
+                .spawn_mob(mob, center_x + column * 32, center_y + row * 28);
+        }
+        level.entities.spawn_item(
+            ItemStack::new(ItemId::Wood, 2),
+            center_x + 20,
+            center_y + 14,
+        );
+        level
+            .entities
+            .spawn_furniture(FurnitureKind::Workbench, center_x + 64, center_y + 32);
+    }
+
+    /// Opens a deterministic workbench/inventory scene for visual regression.
+    pub fn populate_workbench_preview(&mut self) {
+        self.player.inventory.add(ItemId::Wood, 20);
+        self.player.inventory.add(ItemId::Stone, 10);
+        self.player.inventory.add(ItemId::Coal, 4);
+        if let Some(index) = WORKBENCH_TOOL_RECIPES[0].craft(&mut self.player.inventory) {
+            self.player.active_item = Some(ActiveItem::Tool(index));
+        }
+        self.inventory_open = true;
+        self.crafting_station = Some(FurnitureKind::Workbench);
+        self.inventory_pane = 1;
+        self.inventory_selection = WORKBENCH_STATION_RECIPES.len() + 4;
+    }
+
+    /// Opens a deterministic food inventory and oven scene for visual regression.
+    pub fn populate_food_preview(&mut self) {
+        for item in [
+            ItemId::Apple,
+            ItemId::RawFish,
+            ItemId::Bread,
+            ItemId::CookedFish,
+            ItemId::GoldenApple,
+        ] {
+            self.player.inventory.add(item, 2);
+        }
+        self.player.health = 8;
+        self.player.stamina = 8;
+        self.player.hunger = 6;
+        self.player.active_item = Some(ActiveItem::Stack(ItemId::CookedFish));
+        self.inventory_open = true;
+        self.crafting_station = Some(FurnitureKind::Oven);
+        self.inventory_pane = 0;
+        self.inventory_item_selection = 3;
+        self.inventory_selection = 2;
+        self.notification = Some(("FOOD SURVIVAL PREVIEW".to_owned(), 150));
+    }
+
+    /// Renders all currently ported crafting furniture from local entity art.
+    pub fn populate_stations_preview(&mut self) {
+        let center_x = self.player.x;
+        let center_y = self.player.y;
+        for (index, kind) in FurnitureKind::ALL.into_iter().enumerate() {
+            let column = index as i32 % 3 - 1;
+            let row = index as i32 / 3;
+            self.levels[self.current_level].entities.spawn_furniture(
+                kind,
+                center_x + column * 32,
+                center_y + 24 + row * 28,
+            );
+        }
     }
 
     pub fn tick(&mut self, input: &Input) -> WorldAction {
@@ -578,8 +735,60 @@ impl World {
         }
         if input.menu {
             self.inventory_open = !self.inventory_open;
+            if self.inventory_open {
+                self.crafting_station = None;
+                self.inventory_pane = 0;
+            }
         }
         if self.inventory_open {
+            if input.left_pressed {
+                self.inventory_pane = 0;
+            }
+            if input.right_pressed {
+                self.inventory_pane = 1;
+            }
+            if input.up_pressed {
+                if self.inventory_pane == 0 {
+                    self.inventory_item_selection = self.inventory_item_selection.saturating_sub(1);
+                } else {
+                    self.inventory_selection = self.inventory_selection.saturating_sub(1);
+                }
+            }
+            if input.down_pressed {
+                if self.inventory_pane == 0 {
+                    let count = self.player.inventory.used_slots();
+                    self.inventory_item_selection =
+                        (self.inventory_item_selection + 1).min(count.saturating_sub(1));
+                } else {
+                    let count = self.crafting_recipe_count();
+                    self.inventory_selection =
+                        (self.inventory_selection + 1).min(count.saturating_sub(1));
+                }
+            }
+            if input.attack && self.inventory_pane == 0 {
+                let stack_count = self.player.inventory.slots().len();
+                self.player.active_item = if self.inventory_item_selection < stack_count {
+                    self.player
+                        .inventory
+                        .slots()
+                        .get(self.inventory_item_selection)
+                        .map(|stack| ActiveItem::Stack(stack.item))
+                } else {
+                    let tool_index = self.inventory_item_selection - stack_count;
+                    self.player
+                        .inventory
+                        .tools()
+                        .get(tool_index)
+                        .map(|_| ActiveItem::Tool(tool_index))
+                };
+                if self.player.active_item.is_some() {
+                    self.inventory_open = false;
+                    self.notification = Some(("ITEM EQUIPPED".to_owned(), 45));
+                }
+            }
+            if input.select && self.inventory_pane == 1 && self.crafting_recipe_count() > 0 {
+                self.craft_selected_recipe();
+            }
             return WorldAction::None;
         }
 
@@ -605,6 +814,38 @@ impl World {
             self.days,
             &mut self.random,
         );
+        let time_slowed = self.effect_active(PotionKind::Time);
+        let outcome = {
+            let level = &mut self.levels[self.current_level];
+            for intent in std::mem::take(&mut level.pending_spawns) {
+                level.entities.spawn_mob(intent.kind, intent.x, intent.y);
+            }
+            level.entities.tick(
+                &mut level.tiles,
+                &level.data,
+                self.width,
+                self.height,
+                self.player.x,
+                self.player.y,
+                time_slowed,
+                &mut self.random,
+            )
+        };
+        self.player.hurt_time = self.player.hurt_time.saturating_sub(1);
+        self.player.attack_time = self.player.attack_time.saturating_sub(1);
+        if outcome.player_damage > 0 && self.hurt_player(outcome.player_damage, false) {
+            self.notification = Some(("A MONSTER HURTS YOU".to_owned(), 45));
+        }
+        for (x, y, radius) in outcome.explosions {
+            self.apply_explosion(x, y, radius);
+        }
+        for boss in outcome.defeated_bosses {
+            match boss {
+                spawn::NaturalMob::AirWizard => self.air_wizard_defeated = true,
+                spawn::NaturalMob::ObsidianKnight => self.obsidian_knight_defeated = true,
+                _ => {}
+            }
+        }
         if let Some((_, remaining)) = &mut self.notification {
             *remaining = remaining.saturating_sub(1);
             if *remaining == 0 {
@@ -633,30 +874,512 @@ impl World {
 
         if horizontal != 0 || vertical != 0 {
             let on_water = self.tile_at_pixel(self.player.x, self.player.y) == Tile::Water;
-            if !on_water || self.tick.is_multiple_of(2) {
-                self.move_player(horizontal, vertical);
+            let swimming = self.effect_active(PotionKind::Swim);
+            let speed = if self.effect_active(PotionKind::Speed) {
+                2
+            } else {
+                1
+            };
+            if (!on_water || swimming || self.tick.is_multiple_of(2))
+                && self.move_player(horizontal * speed, vertical * speed)
+            {
                 self.player.walk_distance = self.player.walk_distance.wrapping_add(1);
+                self.player.step_count = self.player.step_count.saturating_add(1);
             }
         }
-        if input.attack {
+        let collected = self.levels[self.current_level].entities.collect_near(
+            self.player.x,
+            self.player.y,
+            &mut self.player.inventory,
+        );
+        if let Some(stack) = collected.last() {
+            self.notification = Some((format!("{} +{}", stack.item, stack.count), 45));
+        }
+        if input.attack && !self.use_active_self_item() {
             self.attack();
         }
         if input.select {
-            self.use_stairs();
+            self.use_target();
         }
-        if self.tick.is_multiple_of(90) && self.player.stamina < 10 {
-            self.player.stamina += 1;
-        }
+        self.tick_potion_effects();
+        self.tick_fishing();
+        self.tick_survival_stats();
         if self.tile_at_pixel(self.player.x, self.player.y) == Tile::Lava
             && self.tick.is_multiple_of(30)
+            && !self.effect_active(PotionKind::Lava)
+            && self.hurt_player(1, false)
         {
-            self.player.health = self.player.health.saturating_sub(1);
             self.notification = Some(("THE LAVA BURNS".to_owned(), 45));
+        }
+        if self.player.health == 0 {
+            self.respawn();
         }
         WorldAction::None
     }
 
-    fn move_player(&mut self, horizontal: i32, vertical: i32) {
+    fn crafting_recipe_count(&self) -> usize {
+        match self.crafting_station {
+            None => HAND_RECIPES.len(),
+            Some(FurnitureKind::Workbench) => {
+                WORKBENCH_STATION_RECIPES.len() + WORKBENCH_TOOL_RECIPES.len()
+            }
+            Some(FurnitureKind::Oven) => OVEN_RECIPES.len(),
+            Some(FurnitureKind::Furnace) => FURNACE_RECIPES.len(),
+            Some(FurnitureKind::Anvil) => ANVIL_RECIPES.len() + ANVIL_TOOL_RECIPES.len(),
+            Some(FurnitureKind::Enchanter) => ENCHANTER_RECIPES.len(),
+            Some(FurnitureKind::Loom) => LOOM_RECIPES.len(),
+            _ => 0,
+        }
+    }
+
+    fn craft_selected_recipe(&mut self) {
+        let missing = "MISSING MATERIALS OR SPACE".to_owned();
+        let message = match self.crafting_station {
+            None => {
+                let recipe = HAND_RECIPES[self.inventory_selection];
+                if recipe.craft(&mut self.player.inventory) {
+                    format!("CRAFTED {} x{}", recipe.output.item, recipe.output.count)
+                } else {
+                    missing
+                }
+            }
+            Some(FurnitureKind::Workbench) => {
+                if let Some(recipe) = WORKBENCH_STATION_RECIPES.get(self.inventory_selection) {
+                    if recipe.craft(&mut self.player.inventory) {
+                        format!("CRAFTED {}", recipe.output.item)
+                    } else {
+                        missing
+                    }
+                } else {
+                    let index = self.inventory_selection - WORKBENCH_STATION_RECIPES.len();
+                    self.craft_tool(WORKBENCH_TOOL_RECIPES[index], missing)
+                }
+            }
+            Some(FurnitureKind::Oven) => {
+                self.craft_stack(OVEN_RECIPES[self.inventory_selection], missing)
+            }
+            Some(FurnitureKind::Furnace) => {
+                self.craft_stack(FURNACE_RECIPES[self.inventory_selection], missing)
+            }
+            Some(FurnitureKind::Anvil) => {
+                if let Some(recipe) = ANVIL_RECIPES.get(self.inventory_selection) {
+                    self.craft_stack(*recipe, missing)
+                } else {
+                    let index = self.inventory_selection - ANVIL_RECIPES.len();
+                    self.craft_tool(ANVIL_TOOL_RECIPES[index], missing)
+                }
+            }
+            Some(FurnitureKind::Enchanter) => {
+                self.craft_stack(ENCHANTER_RECIPES[self.inventory_selection], missing)
+            }
+            Some(FurnitureKind::Loom) => {
+                self.craft_stack(LOOM_RECIPES[self.inventory_selection], missing)
+            }
+            _ => return,
+        };
+        self.notification = Some((message, 60));
+    }
+
+    fn craft_stack(&mut self, recipe: crate::item::Recipe, missing: String) -> String {
+        if recipe.craft(&mut self.player.inventory) {
+            format!("CRAFTED {} x{}", recipe.output.item, recipe.output.count)
+        } else {
+            missing
+        }
+    }
+
+    fn craft_tool(&mut self, recipe: crate::item::ToolRecipe, missing: String) -> String {
+        if let Some(index) = recipe.craft(&mut self.player.inventory) {
+            self.player.active_item = Some(ActiveItem::Tool(index));
+            format!("CRAFTED {}", recipe.output.display_name())
+        } else {
+            missing
+        }
+    }
+
+    fn use_active_self_item(&mut self) -> bool {
+        let Some(ActiveItem::Stack(item)) = self.player.active_item else {
+            return false;
+        };
+        if item.food_value().is_some() {
+            self.eat_active_food();
+            return true;
+        }
+        if let Some(armor) = item.armor_kind() {
+            if self.player.armor_kind.is_none() && self.pay_stamina(9) {
+                self.player.armor = armor.durability();
+                self.player.armor_kind = Some(armor);
+                self.player.armor_damage_buffer = 0;
+                self.consume_active_stack(item);
+                self.notification = Some((format!("{} ARMOR EQUIPPED", armor.display_name()), 60));
+            }
+            return true;
+        }
+        if let Some(potion) = item.potion_kind() {
+            if self.apply_potion(potion) {
+                self.consume_active_stack(item);
+                if self.player.inventory.add(ItemId::GlassBottle, 1) != 0 {
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(ItemId::GlassBottle, 1),
+                        self.player.x,
+                        self.player.y,
+                    );
+                }
+                self.notification = Some((format!("{} POTION", potion.display_name()), 60));
+            }
+            return true;
+        }
+        if item == ItemId::AirTotem {
+            if self.levels[self.current_level].depth != 1 {
+                self.notification = Some(("USE THIS IN THE SKY".to_owned(), 60));
+            } else if self.levels[self.current_level]
+                .entities
+                .has_mob(spawn::NaturalMob::AirWizard)
+            {
+                self.notification = Some(("THE AIR WIZARD IS ALREADY ACTIVE".to_owned(), 60));
+            } else if self.pay_stamina(2) {
+                self.levels[self.current_level].entities.spawn_mob(
+                    spawn::NaturalMob::AirWizard,
+                    self.player.x + 8,
+                    self.player.y + 8,
+                );
+                self.consume_active_stack(item);
+                self.notification = Some(("THE AIR WIZARD RETURNS".to_owned(), 120));
+            }
+            return true;
+        }
+        if item == ItemId::ObsidianPoppet {
+            let center_x = self.width as i32 / 2;
+            let center_y = self.height as i32 / 2;
+            let near_center = (self.player.x.div_euclid(TILE_SIZE) - center_x).abs() <= 3
+                && (self.player.y.div_euclid(TILE_SIZE) - center_y).abs() <= 3;
+            if self.levels[self.current_level].depth != -4 || !near_center {
+                self.notification = Some(("USE THIS IN THE DUNGEON BOSS ROOM".to_owned(), 75));
+            } else if self.levels[self.current_level]
+                .entities
+                .has_mob(spawn::NaturalMob::ObsidianKnight)
+            {
+                self.notification = Some(("THE OBSIDIAN KNIGHT IS ALREADY ACTIVE".to_owned(), 60));
+            } else if self.levels[self.current_level]
+                .entities
+                .has_furniture(FurnitureKind::KnightStatue)
+            {
+                self.notification = Some(("THE KNIGHT STATUE IS ALREADY HERE".to_owned(), 60));
+            } else if self.pay_stamina(2) {
+                self.levels[self.current_level].entities.spawn_furniture(
+                    FurnitureKind::KnightStatue,
+                    center_x * TILE_SIZE + 8,
+                    center_y * TILE_SIZE + 8,
+                );
+                self.consume_active_stack(item);
+                self.notification = Some(("A KNIGHT STATUE APPEARS".to_owned(), 90));
+            }
+            return true;
+        }
+        if item == ItemId::ObsidianHeart {
+            if self.player.max_health < MAX_HEALTH {
+                self.player.max_health = (self.player.max_health + 5).min(MAX_HEALTH);
+                self.player.health = (self.player.health + 5).min(self.player.max_health);
+                self.consume_active_stack(item);
+                self.notification = Some(("MAX HEALTH INCREASED".to_owned(), 90));
+            }
+            return true;
+        }
+        if matches!(
+            item,
+            ItemId::RedClothes
+                | ItemId::BlueClothes
+                | ItemId::GreenClothes
+                | ItemId::YellowClothes
+                | ItemId::BlackClothes
+                | ItemId::OrangeClothes
+                | ItemId::PurpleClothes
+                | ItemId::CyanClothes
+                | ItemId::RegularClothes
+        ) {
+            if self.player.clothing != item {
+                let previous = self.player.clothing;
+                self.consume_active_stack(item);
+                self.player.inventory.add(previous, 1);
+                self.player.clothing = item;
+                self.notification = Some((format!("WEARING {item}"), 60));
+            }
+            return true;
+        }
+        false
+    }
+
+    fn consume_active_stack(&mut self, item: ItemId) {
+        debug_assert!(self.player.inventory.remove(item, 1));
+        if self.player.inventory.count(item) == 0 {
+            self.player.active_item = None;
+        }
+    }
+
+    fn pay_stamina(&mut self, cost: u8) -> bool {
+        if self.effect_active(PotionKind::Energy) {
+            return true;
+        }
+        if self.player.stamina == 0 {
+            return false;
+        }
+        self.player.stamina = self.player.stamina.saturating_sub(cost);
+        true
+    }
+
+    fn apply_potion(&mut self, potion: PotionKind) -> bool {
+        match potion {
+            PotionKind::Awkward => return false,
+            PotionKind::Health => {
+                self.player.health = (self.player.health + 5).min(self.player.max_health);
+            }
+            PotionKind::Escape => {
+                if self.current_level == 1 {
+                    self.notification = Some(("YOU CANNOT ESCAPE FROM HERE".to_owned(), 60));
+                    return false;
+                }
+                self.current_level = if self.current_level == 0 {
+                    1
+                } else {
+                    self.current_level - 1
+                };
+                let (x, y) = find_spawn(
+                    &self.levels[self.current_level].tiles,
+                    self.width,
+                    self.height,
+                );
+                self.player.x = x * TILE_SIZE + 8;
+                self.player.y = y * TILE_SIZE + 8;
+            }
+            _ => {
+                self.player.potion_effects[potion.id()] = potion.duration();
+            }
+        }
+        true
+    }
+
+    fn effect_active(&self, potion: PotionKind) -> bool {
+        self.player.potion_effects[potion.id()] > 0
+    }
+
+    fn tick_potion_effects(&mut self) {
+        for duration in &mut self.player.potion_effects {
+            *duration = duration.saturating_sub(1);
+        }
+        if self.effect_active(PotionKind::Regen) {
+            self.player.regen_tick = self.player.regen_tick.saturating_add(1);
+            if self.player.regen_tick > 60 {
+                self.player.regen_tick = 0;
+                self.player.health = self
+                    .player
+                    .health
+                    .saturating_add(1)
+                    .min(self.player.max_health);
+            }
+        } else {
+            self.player.regen_tick = 0;
+        }
+    }
+
+    fn tick_fishing(&mut self) {
+        let Some(level) = self.player.fishing_level else {
+            return;
+        };
+        self.player.fishing_ticks = self.player.fishing_ticks.saturating_add(1);
+        if self.player.fishing_ticks < 120 {
+            return;
+        }
+        self.player.fishing_ticks = 0;
+        self.player.fishing_level = None;
+        const CHANCES: [[i32; 4]; 4] = [
+            [44, 14, 9, 4],
+            [24, 14, 9, 4],
+            [59, 49, 9, 4],
+            [79, 69, 59, 4],
+        ];
+        let roll = self.random.next_int(100);
+        let chances = CHANCES[level as usize];
+        let caught = if roll > chances[0] {
+            Some(ItemId::RawFish)
+        } else if roll > chances[1] {
+            Some(
+                [
+                    ItemId::Cloth,
+                    ItemId::Leather,
+                    ItemId::Bone,
+                    ItemId::Slime,
+                    ItemId::Wood,
+                ][self.random.next_int(5) as usize],
+            )
+        } else if roll >= chances[3] && roll <= chances[2] {
+            Some(
+                [
+                    ItemId::Gunpowder,
+                    ItemId::Gem,
+                    ItemId::Book,
+                    ItemId::GoldenApple,
+                ][self.random.next_int(4) as usize],
+            )
+        } else {
+            None
+        };
+        if let Some(item) = caught {
+            if self.player.inventory.add(item, 1) != 0 {
+                self.levels[self.current_level].entities.spawn_item(
+                    ItemStack::new(item, 1),
+                    self.player.x,
+                    self.player.y,
+                );
+            }
+            self.notification = Some((format!("CAUGHT {item}"), 75));
+        } else {
+            let tiers = [
+                ToolTier::Wood,
+                ToolTier::Rock,
+                ToolTier::Iron,
+                ToolTier::Gold,
+            ];
+            let kinds = [ToolKind::Pickaxe, ToolKind::Axe, ToolKind::Shovel];
+            let tier = tiers[self.random.next_int(tiers.len() as i32) as usize];
+            let kind = kinds[self.random.next_int(kinds.len() as i32) as usize];
+            if self
+                .player
+                .inventory
+                .add_tool(crate::item::ToolItem::new(kind, tier))
+                .is_some()
+            {
+                self.notification = Some((
+                    format!("CAUGHT {} {}", tier.display_name(), kind.display_name()),
+                    75,
+                ));
+            }
+        }
+    }
+
+    fn hurt_player(&mut self, mut damage: u8, direct: bool) -> bool {
+        if self.player.hurt_time > 0 && !direct {
+            return false;
+        }
+        if self.effect_active(PotionKind::Shield) {
+            damage = damage.div_ceil(2);
+        }
+        let mut health_damage = damage;
+        if !direct && let Some(kind) = self.player.armor_kind {
+            self.player.armor_damage_buffer =
+                self.player.armor_damage_buffer.saturating_add(damage);
+            health_damage = 0;
+            while self.player.armor_damage_buffer > kind.level() {
+                self.player.armor_damage_buffer -= kind.level() + 1;
+                health_damage = health_damage.saturating_add(1);
+            }
+            let overflow = damage.saturating_sub(self.player.armor);
+            self.player.armor = self.player.armor.saturating_sub(damage);
+            if self.player.armor == 0 {
+                health_damage = health_damage.saturating_add(overflow);
+                self.player.armor_kind = None;
+                self.player.armor_damage_buffer = 0;
+            }
+        }
+        self.player.health = self.player.health.saturating_sub(health_damage);
+        self.player.hurt_time = 30;
+        true
+    }
+
+    fn eat_active_food(&mut self) -> bool {
+        let Some(ActiveItem::Stack(item)) = self.player.active_item else {
+            return false;
+        };
+        let Some(feed) = item.food_value() else {
+            return false;
+        };
+        if self.player.hunger >= MAX_STAT
+            || (self.player.stamina == 0 && !self.effect_active(PotionKind::Energy))
+        {
+            return false;
+        }
+        self.pay_stamina(2);
+        self.player.hunger = self.player.hunger.saturating_add(feed).min(MAX_STAT);
+        self.consume_active_stack(item);
+        self.notification = Some((format!("ATE {item}"), 45));
+        true
+    }
+
+    fn tick_survival_stats(&mut self) {
+        if self.player.stamina == 0
+            && self.player.stamina_recharge_delay == 0
+            && self.player.stamina_recharge == 0
+        {
+            self.player.stamina_recharge_delay = 40;
+        }
+        if self.player.stamina_recharge_delay > 0 && self.player.stamina < MAX_STAT {
+            self.player.stamina_recharge_delay -= 1;
+        }
+        if self.player.stamina_recharge_delay == 0 {
+            self.player.stamina_recharge = self.player.stamina_recharge.saturating_add(1);
+            while self.player.stamina_recharge > 10 {
+                self.player.stamina_recharge -= 10;
+                self.player.stamina = self.player.stamina.saturating_add(1).min(MAX_STAT);
+            }
+        }
+
+        let difficulty = self.difficulty.min(2);
+        if self.player.stamina < MAX_STAT {
+            self.player.hunger_ticks -= difficulty as i16;
+            if self.player.stamina == 0 {
+                self.player.hunger_ticks -= difficulty as i16;
+            }
+        }
+        if self.tick.is_multiple_of(HUNGER_TICK_INTERVALS[difficulty]) {
+            self.player.hunger_ticks -= 1;
+        }
+        if self.player.step_count >= HUNGER_MOVE_STEPS[difficulty] {
+            self.player.hunger_ticks -= 1;
+            self.player.step_count = 0;
+        }
+        if self.player.hunger_charge_delay > 0 {
+            self.player.hunger_ticks -= (2 + difficulty) as i16;
+            if self.player.hunger == 0 {
+                self.player.hunger_ticks -= difficulty as i16;
+            }
+        }
+        while self.player.hunger_ticks <= 0 {
+            self.player.hunger_ticks += MAX_HUNGER_TICKS;
+            self.player.hunger_stamina_count -= 1;
+        }
+        while self.player.hunger_stamina_count <= 0 {
+            self.player.hunger = self.player.hunger.saturating_sub(1);
+            self.player.hunger_stamina_count += HUNGER_STAMINA_STEPS[difficulty];
+        }
+
+        if self.player.health < self.player.max_health && self.player.hunger > MAX_STAT / 2 {
+            self.player.hunger_charge_delay += 1;
+            let distance = u16::from(MAX_STAT - self.player.hunger + 2);
+            if self.player.hunger_charge_delay > 20 * distance * distance {
+                self.player.health = self
+                    .player
+                    .health
+                    .saturating_add(1)
+                    .min(self.player.max_health);
+                self.player.hunger_charge_delay = 0;
+            }
+        } else {
+            self.player.hunger_charge_delay = 0;
+        }
+
+        if self.player.hunger_starve_delay == 0 {
+            self.player.hunger_starve_delay = 120;
+        }
+        if self.player.hunger == 0 && self.player.health > STARVATION_HEALTH_FLOORS[difficulty] {
+            self.player.hunger_starve_delay -= 1;
+            if self.player.hunger_starve_delay == 0 {
+                self.player.health = self.player.health.saturating_sub(1);
+            }
+        }
+    }
+
+    fn move_player(&mut self, horizontal: i32, vertical: i32) -> bool {
+        let old_x = self.player.x;
+        let old_y = self.player.y;
         let next_x = self.player.x + horizontal;
         if self.can_stand(next_x, self.player.y) {
             self.player.x = next_x;
@@ -665,6 +1388,7 @@ impl World {
         if self.can_stand(self.player.x, next_y) {
             self.player.y = next_y;
         }
+        self.player.x != old_x || self.player.y != old_y
     }
 
     fn can_stand(&self, x: i32, y: i32) -> bool {
@@ -673,6 +1397,9 @@ impl World {
             .all(|(offset_x, offset_y)| {
                 let (tile, data) = self.tile_and_data_at_pixel(x + offset_x, y + offset_y);
                 !tile.solid(data)
+                    && !self.levels[self.current_level]
+                        .entities
+                        .furniture_blocks(x + offset_x, y + offset_y)
             })
     }
 
@@ -691,28 +1418,268 @@ impl World {
     }
 
     fn attack(&mut self) {
+        self.player.attack_time = 5;
         let (offset_x, offset_y) = match self.player.direction {
             Direction::Down => (0, 12),
             Direction::Up => (0, -12),
             Direction::Left => (-12, 0),
             Direction::Right => (12, 0),
         };
+        let target_x = self.player.x + offset_x;
+        let target_y = self.player.y + offset_y;
+        if let Some(ActiveItem::Tool(index)) = self.player.active_item
+            && let Some(tool) = self.player.inventory.tools().get(index).copied()
+        {
+            if tool.kind == ToolKind::Bow {
+                if (self.player.stamina > 0 || self.effect_active(PotionKind::Energy))
+                    && self.player.inventory.count(ItemId::Arrow) > 0
+                    && !tool.is_depleted()
+                {
+                    self.player.inventory.remove(ItemId::Arrow, 1);
+                    self.player.inventory.tools_mut()[index].pay_durability();
+                    let (far_x, far_y) = match self.player.direction {
+                        Direction::Down => (self.player.x, self.player.y + 160),
+                        Direction::Up => (self.player.x, self.player.y - 160),
+                        Direction::Left => (self.player.x - 160, self.player.y),
+                        Direction::Right => (self.player.x + 160, self.player.y),
+                    };
+                    self.levels[self.current_level].entities.spawn_arrow(
+                        self.player.x,
+                        self.player.y,
+                        far_x,
+                        far_y,
+                        tool.tier.level() + 3,
+                        false,
+                    );
+                    self.notification = Some(("ARROW FIRED".to_owned(), 30));
+                }
+                return;
+            }
+            if tool.kind == ToolKind::Shears {
+                if self.levels[self.current_level].entities.shear_nearest(
+                    target_x,
+                    target_y,
+                    &mut self.random,
+                ) {
+                    self.player.inventory.tools_mut()[index].pay_durability();
+                    self.notification = Some(("SHEEP SHEARED".to_owned(), 45));
+                }
+                return;
+            }
+        }
+        if let Some(ActiveItem::Stack(item)) = self.player.active_item
+            && let Some(kind) = furniture_for_item(item)
+            && self.place_furniture(kind, item, offset_x, offset_y)
+        {
+            return;
+        }
+
+        if self.levels[self.current_level]
+            .entities
+            .ignite_tnt_near(target_x, target_y)
+        {
+            self.notification = Some(("TNT FUSE LIT".to_owned(), 45));
+            return;
+        }
+
+        let mut damage = (self.random.next_int(2) + 1) as u8;
+        if self.levels[self.current_level]
+            .entities
+            .mob_near(self.player.x + offset_x, self.player.y + offset_y)
+        {
+            damage = damage.saturating_add(self.pay_tool_melee_bonus());
+        }
+        if let Some(hit) = self.levels[self.current_level].entities.damage_nearest(
+            self.player.x + offset_x,
+            self.player.y + offset_y,
+            u16::from(damage),
+            &mut self.random,
+        ) {
+            self.levels[self.current_level].entities.spawn_particle(
+                entity::ParticleKind::Smash,
+                target_x,
+                target_y,
+            );
+            let message = if hit.defeated {
+                format!("{} DEFEATED", hit.species.display_name())
+            } else {
+                format!("{} HP {}", hit.species.display_name(), hit.health)
+            };
+            self.notification = Some((message, 45));
+            if hit.defeated {
+                match hit.species {
+                    spawn::NaturalMob::AirWizard => self.air_wizard_defeated = true,
+                    spawn::NaturalMob::ObsidianKnight => self.obsidian_knight_defeated = true,
+                    _ => {}
+                }
+            }
+            return;
+        }
         let tile_x = (self.player.x + offset_x) / TILE_SIZE;
         let tile_y = (self.player.y + offset_y) / TILE_SIZE;
         if tile_x < 0 || tile_y < 0 || tile_x >= self.width as i32 || tile_y >= self.height as i32 {
             return;
         }
         let index = tile_x as usize + tile_y as usize * self.width;
-        let damage = (self.random.next_int(3) + 1) as u16;
+        if let Some(ActiveItem::Stack(item)) = self.player.active_item {
+            let target = self.levels[self.current_level].tiles[index];
+            if item == ItemId::WateringCan {
+                if target == Tile::Water {
+                    self.player.watering_content = 1_800;
+                    self.notification = Some(("WATERING CAN FILLED".to_owned(), 45));
+                } else if self.player.watering_content > 0 {
+                    self.player.watering_content -= 1;
+                    if matches!(
+                        target,
+                        Tile::Wheat
+                            | Tile::Potato
+                            | Tile::Tomato
+                            | Tile::Carrot
+                            | Tile::HeavenlyBerries
+                            | Tile::HellishBerries
+                    ) {
+                        let data = self.levels[self.current_level].data[index];
+                        let fertilization = (data >> 7).min(150);
+                        self.levels[self.current_level].data[index] =
+                            (data & 0x7f) | ((fertilization + 1).min(150) << 7);
+                    } else if target == Tile::Farmland {
+                        self.levels[self.current_level].data[index] = 7;
+                    }
+                    self.notification =
+                        Some((format!("WATERING CAN {}", self.player.watering_content), 30));
+                } else {
+                    self.notification = Some(("WATERING CAN EMPTY".to_owned(), 45));
+                }
+                return;
+            }
+            if let Some(fishing_level) = item.fishing_level() {
+                if target == Tile::Water
+                    && self.tile_at_pixel(self.player.x, self.player.y) != Tile::Water
+                {
+                    self.player.fishing_level = Some(fishing_level);
+                    self.player.fishing_ticks = 0;
+                    self.notification = Some(("FISHING...".to_owned(), 90));
+                }
+                return;
+            }
+            if self.use_bucket(item, index) {
+                return;
+            }
+            if matches!(item, ItemId::Fertilizer | ItemId::ArcaneFertilizer)
+                && matches!(
+                    target,
+                    Tile::Wheat
+                        | Tile::Potato
+                        | Tile::Tomato
+                        | Tile::Carrot
+                        | Tile::HeavenlyBerries
+                        | Tile::HellishBerries
+                )
+            {
+                let data = self.levels[self.current_level].data[index];
+                let old = data >> 7;
+                let amount = if item == ItemId::ArcaneFertilizer {
+                    300
+                } else if old < 100 {
+                    40
+                } else if old < 200 {
+                    30
+                } else if old < 300 {
+                    25
+                } else if old < 400 {
+                    20
+                } else {
+                    10
+                };
+                self.levels[self.current_level].data[index] =
+                    (data & 0x7f) | ((old + amount).min(511) << 7);
+                self.consume_active_stack(item);
+                self.notification = Some(("CROP FERTILIZED".to_owned(), 45));
+                return;
+            }
+            if let Some((placed, data)) = tile_placement(item, target) {
+                self.levels[self.current_level].tiles[index] = placed;
+                self.levels[self.current_level].data[index] = data;
+                self.consume_active_stack(item);
+                self.notification = Some((format!("PLACED {item}"), 45));
+                return;
+            }
+        }
+
+        if let Some(tool) = self.active_tool() {
+            let target = self.levels[self.current_level].tiles[index];
+            let replacement = match (tool.kind, target) {
+                (ToolKind::Shovel, Tile::Dirt) => Some((Tile::Hole, Some(ItemId::Dirt))),
+                (ToolKind::Shovel, Tile::Grass) => Some((Tile::Dirt, None)),
+                (ToolKind::Shovel, Tile::Sand) => Some((Tile::Hole, Some(ItemId::Sand))),
+                (ToolKind::Shovel, Tile::Cloud) => Some((Tile::InfiniteFall, Some(ItemId::Cloud))),
+                (ToolKind::Hoe, Tile::Dirt | Tile::Grass) => Some((Tile::Farmland, None)),
+                (ToolKind::Pickaxe, Tile::Grass) => Some((Tile::Path, None)),
+                _ => None,
+            };
+            if let Some((tile, drop)) = replacement {
+                let cost = if target == Tile::Cloud { 5 } else { 4 };
+                if self.pay_tool_terrain_damage(tool.kind, cost).is_none() {
+                    return;
+                }
+                self.levels[self.current_level].tiles[index] = tile;
+                self.levels[self.current_level].data[index] = 0;
+                if let Some(item) = drop {
+                    let count = if item == ItemId::Cloud {
+                        (self.random.next_int(3) + 1) as u16
+                    } else {
+                        1
+                    };
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(item, count),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                } else if target == Tile::Grass {
+                    let seed = if tool.kind == ToolKind::Hoe {
+                        (self.random.next_int(5) != 0).then_some(ItemId::WheatSeeds)
+                    } else if tool.kind == ToolKind::Shovel {
+                        (self.random.next_int(5) == 0).then_some(ItemId::GrassSeeds)
+                    } else {
+                        None
+                    };
+                    if let Some(seed) = seed {
+                        self.levels[self.current_level].entities.spawn_item(
+                            ItemStack::new(seed, 1),
+                            tile_x * TILE_SIZE + 8,
+                            tile_y * TILE_SIZE + 8,
+                        );
+                    }
+                }
+                self.notification = Some(("GROUND WORKED".to_owned(), 30));
+                return;
+            }
+        }
+        let bare_damage = u16::from(damage);
         match self.levels[self.current_level].tiles[index] {
             Tile::Tree => {
+                let damage = self
+                    .pay_tool_terrain_damage(ToolKind::Axe, 4)
+                    .unwrap_or(bare_damage);
                 let total = self.levels[self.current_level].data[index] + damage;
                 if total >= 20 {
                     self.levels[self.current_level].tiles[index] = Tile::Grass;
                     self.levels[self.current_level].data[index] = 0;
                     let wood = (self.random.next_int(3) + 1) as u16;
-                    self.player.wood += wood;
-                    self.notification = Some((format!("WOOD +{wood}"), 60));
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(ItemId::Wood, wood),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                    let acorns = self.random.next_int(3) as u16;
+                    if acorns > 0 {
+                        self.levels[self.current_level].entities.spawn_item(
+                            ItemStack::new(ItemId::Acorn, acorns),
+                            tile_x * TILE_SIZE + 8,
+                            tile_y * TILE_SIZE + 8,
+                        );
+                    }
+                    self.notification = Some((format!("WOOD DROPPED {wood}"), 60));
                 } else {
                     self.levels[self.current_level].data[index] = total;
                     self.notification = Some((format!("TREE {total}/20"), 30));
@@ -723,33 +1690,128 @@ impl World {
                 self.notification = Some(("DOOR TOGGLED".to_owned(), 30));
             }
             Tile::Cactus => {
-                damage_tile(
+                if damage_tile(
                     &mut self.levels[self.current_level],
                     index,
-                    damage,
+                    bare_damage,
                     10,
                     Tile::Sand,
-                );
+                ) {
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(ItemId::Cactus, (self.random.next_int(3) + 2) as u16),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                }
+            }
+            Tile::Wheat
+            | Tile::Potato
+            | Tile::Tomato
+            | Tile::Carrot
+            | Tile::HeavenlyBerries
+            | Tile::HellishBerries => {
+                let crop = self.levels[self.current_level].tiles[index];
+                let data = self.levels[self.current_level].data[index];
+                let mature = (data >> 3) & 7 == 7;
+                self.levels[self.current_level].tiles[index] = Tile::Farmland;
+                self.levels[self.current_level].data[index] = data & 7;
+                let (produce, seed) = match crop {
+                    Tile::Wheat => (ItemId::Wheat, Some(ItemId::WheatSeeds)),
+                    Tile::Potato => (ItemId::Potato, None),
+                    Tile::Tomato => (ItemId::Tomato, Some(ItemId::TomatoSeeds)),
+                    Tile::Carrot => (ItemId::Carrot, None),
+                    Tile::HeavenlyBerries => (ItemId::HeavenlyBerries, None),
+                    Tile::HellishBerries => (ItemId::HellishBerries, None),
+                    _ => unreachable!(),
+                };
+                if let Some(seed) = seed {
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(seed, 1),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                }
+                if mature || seed.is_none() {
+                    let count = if mature {
+                        (self.random.next_int(3) + 2) as u16
+                    } else {
+                        1
+                    };
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(produce, count),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                }
+                self.notification = Some(("CROP HARVESTED".to_owned(), 30));
             }
             Tile::Rock => {
-                damage_tile(
-                    &mut self.levels[self.current_level],
-                    index,
-                    damage,
-                    50,
-                    Tile::Dirt,
-                );
+                let tool_damage = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 5);
+                let used_pickaxe = tool_damage.is_some();
+                let damage = tool_damage.unwrap_or(bare_damage);
+                let level = &mut self.levels[self.current_level];
+                if damage_tile(level, index, damage, 50, Tile::Dirt) {
+                    let count = if used_pickaxe {
+                        (self.random.next_int(3) + 2) as u16
+                    } else {
+                        1
+                    };
+                    level.entities.spawn_item(
+                        ItemStack::new(ItemId::Stone, count),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                    let coal_max = if self.difficulty == 2 { 1 } else { 2 };
+                    let coal = if used_pickaxe {
+                        self.random.next_int(coal_max + 1) as u16
+                    } else {
+                        0
+                    };
+                    if coal > 0 {
+                        level.entities.spawn_item(
+                            ItemStack::new(ItemId::Coal, coal),
+                            tile_x * TILE_SIZE + 8,
+                            tile_y * TILE_SIZE + 8,
+                        );
+                    }
+                }
             }
             Tile::HardRock => {
-                damage_tile(
-                    &mut self.levels[self.current_level],
-                    index,
-                    damage,
-                    200,
-                    Tile::Dirt,
-                );
+                let gem_pickaxe = self
+                    .active_tool()
+                    .is_some_and(|tool| tool.kind == ToolKind::Pickaxe && tool.tier.level() == 4);
+                if !gem_pickaxe {
+                    self.notification = Some(("GEM PICKAXE REQUIRED".to_owned(), 45));
+                    return;
+                }
+                let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 2) else {
+                    return;
+                };
+                let level = &mut self.levels[self.current_level];
+                if damage_tile(level, index, damage, 200, Tile::Dirt) {
+                    level.entities.spawn_item(
+                        ItemStack::new(ItemId::Stone, (self.random.next_int(3) + 1) as u16),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                    if self.random.next_bool() {
+                        level.entities.spawn_item(
+                            ItemStack::new(ItemId::Coal, 1),
+                            tile_x * TILE_SIZE + 8,
+                            tile_y * TILE_SIZE + 8,
+                        );
+                    }
+                }
             }
             Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => {
+                let required = if self.levels[self.current_level].tiles[index] == Tile::WoodWall {
+                    ToolKind::Axe
+                } else {
+                    ToolKind::Pickaxe
+                };
+                let damage = self
+                    .pay_tool_terrain_damage(required, 4)
+                    .unwrap_or(bare_damage);
                 let replacement = match self.levels[self.current_level].tiles[index] {
                     Tile::WoodWall => Tile::WoodFloor,
                     Tile::StoneWall => Tile::StoneFloor,
@@ -764,27 +1826,329 @@ impl World {
                 );
             }
             Tile::IronOre | Tile::GoldOre | Tile::GemOre | Tile::LapisOre | Tile::CloudOre => {
-                let replacement = if self.levels[self.current_level].tiles[index] == Tile::CloudOre
-                {
+                let ore_tile = self.levels[self.current_level].tiles[index];
+                let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 6) else {
+                    self.notification = Some(("PICKAXE REQUIRED".to_owned(), 45));
+                    return;
+                };
+                let replacement = if ore_tile == Tile::CloudOre {
                     Tile::Cloud
                 } else {
                     Tile::Dirt
                 };
                 let health = (self.random.next_int(10) * 4 + 20) as u16;
-                damage_tile(
+                let broken = damage_tile(
                     &mut self.levels[self.current_level],
                     index,
                     damage,
                     health,
                     replacement,
                 );
-                let _drop_count_roll = self.random.next_int(2);
+                let count = self.random.next_int(2) as u16 + if broken { 2 } else { 0 };
+                if count > 0 {
+                    let item = match ore_tile {
+                        Tile::IronOre => ItemId::IronOre,
+                        Tile::GoldOre => ItemId::GoldOre,
+                        Tile::GemOre => ItemId::Gem,
+                        Tile::LapisOre => ItemId::Lapis,
+                        Tile::CloudOre => ItemId::CloudOre,
+                        _ => unreachable!(),
+                    };
+                    self.levels[self.current_level].entities.spawn_item(
+                        ItemStack::new(item, count),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                }
             }
             _ => {}
         }
     }
 
-    fn use_stairs(&mut self) {
+    fn pay_tool_melee_bonus(&mut self) -> u8 {
+        let Some(ActiveItem::Tool(index)) = self.player.active_item else {
+            return 0;
+        };
+        let Some(tool) = self.player.inventory.tools().get(index).copied() else {
+            self.player.active_item = None;
+            return 0;
+        };
+        if tool.kind == ToolKind::Shears || tool.is_depleted() {
+            return 0;
+        }
+        let roll_bound = match tool.kind {
+            ToolKind::Axe => 4,
+            ToolKind::Sword => 2 + i32::from(tool.tier.level()).pow(2),
+            ToolKind::Claymore => 4 + i32::from(tool.tier.level()).pow(2) * 3,
+            ToolKind::Pickaxe => 2,
+            _ => 1,
+        };
+        let roll = self.random.next_int(roll_bound) as u8;
+        let bonus = tool.melee_bonus(roll);
+        let equipped = &mut self.player.inventory.tools_mut()[index];
+        if equipped.pay_durability() { bonus } else { 0 }
+    }
+
+    fn use_bucket(&mut self, item: ItemId, index: usize) -> bool {
+        let target = self.levels[self.current_level].tiles[index];
+        let replacement = match (item, target) {
+            (ItemId::EmptyBucket, Tile::Water) => Some((Tile::Hole, ItemId::WaterBucket)),
+            (ItemId::EmptyBucket, Tile::Lava) => Some((Tile::Hole, ItemId::LavaBucket)),
+            (ItemId::WaterBucket, Tile::Hole) => Some((Tile::Water, ItemId::EmptyBucket)),
+            (ItemId::LavaBucket, Tile::Hole) => Some((Tile::Lava, ItemId::EmptyBucket)),
+            (ItemId::WaterBucket, Tile::Lava) => Some((Tile::ObsidianFloor, ItemId::EmptyBucket)),
+            _ => None,
+        };
+        let Some((tile, bucket)) = replacement else {
+            return false;
+        };
+        self.levels[self.current_level].tiles[index] = tile;
+        self.levels[self.current_level].data[index] = 0;
+        self.consume_active_stack(item);
+        self.player.inventory.add(bucket, 1);
+        self.player.active_item = Some(ActiveItem::Stack(bucket));
+        self.notification = Some((format!("NOW HOLDING {bucket}"), 45));
+        true
+    }
+
+    fn apply_explosion(&mut self, x: i32, y: i32, radius: i32) {
+        let center_x = x.div_euclid(TILE_SIZE);
+        let center_y = y.div_euclid(TILE_SIZE);
+        for tile_y in center_y - radius..=center_y + radius {
+            for tile_x in center_x - radius..=center_x + radius {
+                if tile_x < 0
+                    || tile_y < 0
+                    || tile_x >= self.width as i32
+                    || tile_y >= self.height as i32
+                {
+                    continue;
+                }
+                let index = tile_x as usize + tile_y as usize * self.width;
+                if matches!(
+                    self.levels[self.current_level].tiles[index],
+                    Tile::StairsUp
+                        | Tile::StairsDown
+                        | Tile::BossWall
+                        | Tile::BossDoor
+                        | Tile::BossFloor
+                        | Tile::InfiniteFall
+                ) {
+                    continue;
+                }
+                self.levels[self.current_level].tiles[index] = Tile::Exploded;
+                self.levels[self.current_level].data[index] = 0;
+                self.levels[self.current_level].entities.spawn_particle(
+                    entity::ParticleKind::Fire,
+                    tile_x * TILE_SIZE + 8,
+                    tile_y * TILE_SIZE + 8,
+                );
+            }
+        }
+        self.notification = Some(("BOOM".to_owned(), 45));
+    }
+
+    fn active_tool(&self) -> Option<crate::item::ToolItem> {
+        let ActiveItem::Tool(index) = self.player.active_item? else {
+            return None;
+        };
+        self.player.inventory.tools().get(index).copied()
+    }
+
+    fn pay_tool_terrain_damage(&mut self, required: ToolKind, stamina_cost: u8) -> Option<u16> {
+        let ActiveItem::Tool(index) = self.player.active_item? else {
+            return None;
+        };
+        let tool = *self.player.inventory.tools().get(index)?;
+        if tool.kind != required || tool.is_depleted() {
+            return None;
+        }
+        let cost = stamina_cost.saturating_sub(tool.tier.level());
+        let infinite_energy = self.effect_active(PotionKind::Energy);
+        if !infinite_energy && self.player.stamina < cost {
+            self.notification = Some(("NOT ENOUGH STAMINA".to_owned(), 30));
+            return None;
+        }
+        let mut damage = tool.terrain_damage(self.random.next_int(5) as u8);
+        if self.effect_active(PotionKind::Haste) {
+            damage = damage.saturating_mul(2);
+        }
+        if !self.player.inventory.tools_mut()[index].pay_durability() {
+            return None;
+        }
+        if !infinite_energy {
+            self.player.stamina -= cost;
+        }
+        Some(damage)
+    }
+
+    fn place_furniture(
+        &mut self,
+        kind: FurnitureKind,
+        item: ItemId,
+        offset_x: i32,
+        offset_y: i32,
+    ) -> bool {
+        let tile_x = (self.player.x + offset_x) / TILE_SIZE;
+        let tile_y = (self.player.y + offset_y) / TILE_SIZE;
+        if tile_x < 0 || tile_y < 0 || tile_x >= self.width as i32 || tile_y >= self.height as i32 {
+            return false;
+        }
+        let index = tile_x as usize + tile_y as usize * self.width;
+        let tile = self.levels[self.current_level].tiles[index];
+        if tile.solid(self.levels[self.current_level].data[index])
+            || matches!(
+                tile,
+                Tile::Water
+                    | Tile::Lava
+                    | Tile::Hole
+                    | Tile::InfiniteFall
+                    | Tile::StairsUp
+                    | Tile::StairsDown
+            )
+        {
+            return false;
+        }
+        let x = tile_x * TILE_SIZE + 8;
+        let y = tile_y * TILE_SIZE + 8;
+        if self.levels[self.current_level]
+            .entities
+            .furniture_near(x, y, 8)
+            .is_some()
+        {
+            return false;
+        }
+        if !self.player.inventory.remove(item, 1) {
+            self.player.active_item = None;
+            return false;
+        }
+        self.levels[self.current_level]
+            .entities
+            .spawn_furniture(kind, x, y);
+        if self.player.inventory.count(item) == 0 {
+            self.player.active_item = None;
+        }
+        self.notification = Some((format!("{} PLACED", kind.display_name()), 60));
+        true
+    }
+
+    fn respawn(&mut self) {
+        let drop_x = self.player.x;
+        let drop_y = self.player.y;
+        for stack in self.player.inventory.take_all() {
+            self.levels[self.current_level]
+                .entities
+                .spawn_item(stack, drop_x, drop_y);
+        }
+        if let Some(armor) = self.player.armor_kind.take() {
+            self.levels[self.current_level].entities.spawn_item(
+                ItemStack::new(armor.item(), 1),
+                drop_x,
+                drop_y,
+            );
+        }
+        self.current_level = 1;
+        let (x, y) = find_spawn(
+            &self.levels[self.current_level].tiles,
+            self.width,
+            self.height,
+        );
+        self.player.x = x * TILE_SIZE + 8;
+        self.player.y = y * TILE_SIZE + 8;
+        self.player.health = self.player.max_health;
+        self.player.stamina = 10;
+        self.player.hunger = 10;
+        self.player.armor = 0;
+        self.player.armor_damage_buffer = 0;
+        self.player.hurt_time = 90;
+        self.player.stamina_recharge = 0;
+        self.player.stamina_recharge_delay = 0;
+        self.player.hunger_stamina_count = HUNGER_STAMINA_STEPS[self.difficulty];
+        self.player.hunger_ticks = MAX_HUNGER_TICKS;
+        self.player.step_count = 0;
+        self.player.attack_time = 0;
+        self.player.hunger_charge_delay = 0;
+        self.player.hunger_starve_delay = 0;
+        self.player.potion_effects = [0; PotionKind::ALL.len()];
+        self.player.regen_tick = 0;
+        self.player.fishing_level = None;
+        self.player.watering_content = 0;
+        self.player.fishing_ticks = 0;
+        self.notification = Some(("YOU AWAKEN AT THE SURFACE".to_owned(), 120));
+    }
+
+    fn use_target(&mut self) {
+        let (offset_x, offset_y) = match self.player.direction {
+            Direction::Down => (0, 12),
+            Direction::Up => (0, -12),
+            Direction::Left => (-12, 0),
+            Direction::Right => (12, 0),
+        };
+        if let Some(kind) = self.levels[self.current_level].entities.furniture_near(
+            self.player.x + offset_x,
+            self.player.y + offset_y,
+            14,
+        ) {
+            if kind.crafting() {
+                self.inventory_open = true;
+                self.crafting_station = Some(kind);
+                self.inventory_pane = 1;
+                self.inventory_selection = 0;
+                self.notification = Some((kind.display_name().to_owned(), 45));
+            } else if matches!(kind, FurnitureKind::Chest | FurnitureKind::DungeonChest) {
+                let active = match self.player.active_item {
+                    Some(ActiveItem::Stack(item)) => Some(item),
+                    _ => None,
+                };
+                let message = self.levels[self.current_level].entities.use_container_near(
+                    self.player.x + offset_x,
+                    self.player.y + offset_y,
+                    &mut self.player.inventory,
+                    active,
+                );
+                if let Some(item) = active
+                    && self.player.inventory.count(item) == 0
+                {
+                    self.player.active_item = None;
+                }
+                self.notification = message.map(|message| (message, 60));
+            } else if kind == FurnitureKind::Composter {
+                let active = match self.player.active_item {
+                    Some(ActiveItem::Stack(item)) => Some(item),
+                    _ => None,
+                };
+                let message = self.levels[self.current_level].entities.use_composter_near(
+                    self.player.x + offset_x,
+                    self.player.y + offset_y,
+                    &mut self.player.inventory,
+                    active,
+                );
+                if let Some(item) = active
+                    && self.player.inventory.count(item) == 0
+                {
+                    self.player.active_item = None;
+                }
+                self.notification = message.map(|message| (message, 60));
+            } else if kind == FurnitureKind::KnightStatue {
+                let touches = self.levels[self.current_level]
+                    .entities
+                    .tap_statue_near(self.player.x + offset_x, self.player.y + offset_y);
+                self.notification = touches.map(|touches| {
+                    if touches >= 3 {
+                        ("THE OBSIDIAN KNIGHT AWAKENS".to_owned(), 120)
+                    } else {
+                        (format!("THE STATUE STIRS {touches}/3"), 60)
+                    }
+                });
+            } else if kind == FurnitureKind::Bed {
+                self.day_tick = 16_200;
+                self.player.stamina = MAX_STAT;
+                self.notification = Some(("YOU REST UNTIL DAY".to_owned(), 75));
+            } else {
+                self.notification = Some((format!("USED {}", kind.display_name()), 45));
+            }
+            return;
+        }
+
         let tile = self.tile_at_pixel(self.player.x, self.player.y);
         let target = match tile {
             Tile::StairsDown if self.current_level + 1 < self.levels.len() => {
@@ -809,7 +2173,22 @@ impl World {
         let first_y = camera_y / TILE_SIZE;
         let last_x = ((camera_x + WIDTH as i32) / TILE_SIZE + 1).min(self.width as i32);
         let last_y = ((camera_y + HEIGHT as i32) / TILE_SIZE + 1).min(self.height as i32);
-        let mut lights = vec![(self.player.x - camera_x, self.player.y - camera_y, 5 * 8)];
+        let light_scale = if self.effect_active(PotionKind::Light) {
+            12
+        } else {
+            8
+        };
+        let mut lights = vec![(
+            self.player.x - camera_x,
+            self.player.y - camera_y,
+            5 * light_scale,
+        )];
+        lights.extend(
+            self.levels[self.current_level]
+                .entities
+                .light_sources()
+                .map(|(x, y, radius)| (x - camera_x, y - camera_y, radius * light_scale)),
+        );
 
         for tile_y in first_y..last_y {
             for tile_x in first_x..last_x {
@@ -865,10 +2244,24 @@ impl World {
                     lights.push((
                         tile_x * TILE_SIZE + 8 - camera_x,
                         tile_y * TILE_SIZE + 8 - camera_y,
-                        light_radius * 8,
+                        light_radius * light_scale,
                     ));
                 }
             }
+        }
+
+        let mut entities = self.levels[self.current_level]
+            .entities
+            .entities()
+            .iter()
+            .collect::<Vec<_>>();
+        entities.sort_by_key(|entity| (entity.y, entity.id));
+        for entity in entities
+            .iter()
+            .copied()
+            .take_while(|entity| entity.y <= self.player.y)
+        {
+            render_entity(screen, assets, entity, camera_x, camera_y, self.tick);
         }
 
         let (source_x, flip) = match self.player.direction {
@@ -890,6 +2283,35 @@ impl World {
             16,
             flip,
         );
+        if self.player.attack_time > 0
+            && let Some(active) = self.player.active_item
+        {
+            let image = match active {
+                ActiveItem::Stack(item) => Some(assets.item(item)),
+                ActiveItem::Tool(index) => self
+                    .player
+                    .inventory
+                    .tools()
+                    .get(index)
+                    .map(|tool| assets.tool(*tool)),
+            };
+            let (held_x, held_y) = match self.player.direction {
+                Direction::Down => (self.player.x + 3, self.player.y + 5),
+                Direction::Up => (self.player.x - 4, self.player.y - 13),
+                Direction::Left => (self.player.x - 13, self.player.y - 3),
+                Direction::Right => (self.player.x + 5, self.player.y - 3),
+            };
+            if let Some(image) = image {
+                screen.blit(image, held_x - camera_x, held_y - camera_y);
+            }
+        }
+        for entity in entities
+            .iter()
+            .copied()
+            .skip_while(|entity| entity.y <= self.player.y)
+        {
+            render_entity(screen, assets, entity, camera_x, camera_y, self.tick);
+        }
 
         let depth = self.levels[self.current_level].depth;
         let darkness = if depth == 0 {
@@ -914,7 +2336,15 @@ impl World {
             screen.centered_text(&assets.font, message, 23);
         }
         if self.inventory_open {
-            render_inventory(screen, assets, &self.player);
+            render_inventory(
+                screen,
+                assets,
+                &self.player,
+                self.inventory_item_selection,
+                self.inventory_selection,
+                self.inventory_pane,
+                self.crafting_station,
+            );
         }
         if self.paused {
             render_pause(screen, assets, self.pause_selection);
@@ -922,14 +2352,158 @@ impl World {
     }
 }
 
-fn damage_tile(level: &mut Level, index: usize, damage: u16, health: u16, replacement: Tile) {
+fn damage_tile(
+    level: &mut Level,
+    index: usize,
+    damage: u16,
+    health: u16,
+    replacement: Tile,
+) -> bool {
     let total = level.data[index].saturating_add(damage);
     if total >= health {
         level.tiles[index] = replacement;
         level.data[index] = 0;
+        true
     } else {
         level.data[index] = total;
+        false
     }
+}
+
+fn furniture_for_item(item: ItemId) -> Option<FurnitureKind> {
+    Some(match item {
+        ItemId::Workbench => FurnitureKind::Workbench,
+        ItemId::Oven => FurnitureKind::Oven,
+        ItemId::Furnace => FurnitureKind::Furnace,
+        ItemId::Anvil => FurnitureKind::Anvil,
+        ItemId::Enchanter => FurnitureKind::Enchanter,
+        ItemId::Loom => FurnitureKind::Loom,
+        ItemId::Chest => FurnitureKind::Chest,
+        ItemId::DungeonChest => FurnitureKind::DungeonChest,
+        ItemId::Lantern => FurnitureKind::Lantern,
+        ItemId::IronLantern => FurnitureKind::IronLantern,
+        ItemId::GoldLantern => FurnitureKind::GoldLantern,
+        ItemId::Tnt => FurnitureKind::Tnt,
+        ItemId::Bed => FurnitureKind::Bed,
+        ItemId::Composter => FurnitureKind::Composter,
+        ItemId::CowSpawner => FurnitureKind::CowSpawner,
+        ItemId::PigSpawner => FurnitureKind::PigSpawner,
+        ItemId::SheepSpawner => FurnitureKind::SheepSpawner,
+        ItemId::SlimeSpawner => FurnitureKind::SlimeSpawner,
+        ItemId::ZombieSpawner => FurnitureKind::ZombieSpawner,
+        ItemId::CreeperSpawner => FurnitureKind::CreeperSpawner,
+        ItemId::SkeletonSpawner => FurnitureKind::SkeletonSpawner,
+        ItemId::SnakeSpawner => FurnitureKind::SnakeSpawner,
+        ItemId::KnightSpawner => FurnitureKind::KnightSpawner,
+        _ => return None,
+    })
+}
+
+fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
+    let fluid_or_hole = matches!(target, Tile::Hole | Tile::Water | Tile::Lava);
+    let floor_target = matches!(
+        target,
+        Tile::Dirt
+            | Tile::Grass
+            | Tile::Sand
+            | Tile::Path
+            | Tile::WoodFloor
+            | Tile::StoneFloor
+            | Tile::ObsidianFloor
+            | Tile::RawStone
+            | Tile::RawObsidian
+            | Tile::OrnateStone
+            | Tile::OrnateObsidian
+            | Tile::WhiteWool
+            | Tile::RedWool
+            | Tile::BlueWool
+            | Tile::GreenWool
+            | Tile::YellowWool
+            | Tile::BlackWool
+    );
+    Some(match item {
+        ItemId::Flower if target == Tile::Grass => (Tile::Flower, 0),
+        ItemId::Acorn if target == Tile::Grass => (Tile::TreeSapling, 0),
+        ItemId::Dirt if fluid_or_hole => (Tile::Dirt, 0),
+        ItemId::NaturalRock
+            if fluid_or_hole
+                || matches!(target, Tile::Dirt | Tile::Grass | Tile::Sand | Tile::Path) =>
+        {
+            (Tile::Rock, 0)
+        }
+        ItemId::Plank if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud) => {
+            (Tile::WoodFloor, 0)
+        }
+        ItemId::PlankWall if target == Tile::WoodFloor => (Tile::WoodWall, 0),
+        ItemId::WoodDoor if target == Tile::WoodFloor => (Tile::WoodDoor, 0),
+        ItemId::WoodFence if floor_target => (Tile::WoodFence, target.id() as u16),
+        ItemId::Stone if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) => {
+            (Tile::RawStone, 0)
+        }
+        ItemId::StoneBrick
+            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
+        {
+            (Tile::StoneFloor, 0)
+        }
+        ItemId::OrnateStone
+            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
+        {
+            (Tile::OrnateStone, 0)
+        }
+        ItemId::StoneWall if target == Tile::StoneFloor => (Tile::StoneWall, 0),
+        ItemId::StoneDoor if target == Tile::StoneFloor => (Tile::StoneDoor, 0),
+        ItemId::StoneFence if floor_target => (Tile::StoneFence, target.id() as u16),
+        ItemId::RawObsidian
+            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
+        {
+            (Tile::RawObsidian, 0)
+        }
+        ItemId::ObsidianBrick
+            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
+        {
+            (Tile::ObsidianFloor, 0)
+        }
+        ItemId::OrnateObsidian
+            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
+        {
+            (Tile::OrnateObsidian, 0)
+        }
+        ItemId::ObsidianWall if target == Tile::ObsidianFloor => (Tile::ObsidianWall, 0),
+        ItemId::ObsidianDoor if target == Tile::ObsidianFloor => (Tile::ObsidianDoor, 0),
+        ItemId::ObsidianFence if floor_target => (Tile::ObsidianFence, target.id() as u16),
+        ItemId::Wool if matches!(target, Tile::Hole | Tile::Water) => (Tile::WhiteWool, 0),
+        ItemId::RedWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::RedWool, 0),
+        ItemId::BlueWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlueWool, 0),
+        ItemId::GreenWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::GreenWool, 0),
+        ItemId::YellowWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::YellowWool, 0),
+        ItemId::BlackWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlackWool, 0),
+        ItemId::Sand if fluid_or_hole => (Tile::Sand, 0),
+        ItemId::Cactus if target == Tile::Sand => (Tile::CactusSapling, 0),
+        ItemId::Cloud if target == Tile::InfiniteFall => (Tile::Cloud, 0),
+        ItemId::WheatSeeds if target == Tile::Farmland => (Tile::Wheat, 0),
+        ItemId::Potato if target == Tile::Farmland => (Tile::Potato, 0),
+        ItemId::Carrot if target == Tile::Farmland => (Tile::Carrot, 0),
+        ItemId::TomatoSeeds if target == Tile::Farmland => (Tile::Tomato, 0),
+        ItemId::HeavenlyBerries if target == Tile::Farmland => (Tile::HeavenlyBerries, 0),
+        ItemId::HellishBerries if target == Tile::Farmland => (Tile::HellishBerries, 0),
+        ItemId::GrassSeeds if target == Tile::Dirt => (Tile::Grass, 0),
+        ItemId::Torch if floor_target => (Tile::Torch, target.id() as u16),
+        ItemId::Sign if floor_target => (Tile::Sign, target.id() as u16),
+        ItemId::FarmlandItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
+            (Tile::Farmland, 0)
+        }
+        ItemId::HoleItem if matches!(target, Tile::Dirt | Tile::Grass) => (Tile::Hole, 0),
+        ItemId::LavaItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
+            (Tile::Lava, 0)
+        }
+        ItemId::PathItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
+            (Tile::Path, 0)
+        }
+        ItemId::WaterItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
+            (Tile::Water, 0)
+        }
+        _ => return None,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -943,10 +2517,11 @@ fn try_queue_natural_spawn(
     days: u32,
     random: &mut random::JavaRandom,
 ) {
-    if level.pending_spawns.len() >= level.max_mob_count {
+    let mob_count = level.entities.mob_count() + level.pending_spawns.len();
+    if mob_count >= level.max_mob_count {
         return;
     }
-    let skip = spawn::spawn_skip_chance(level.pending_spawns.len(), level.max_mob_count);
+    let skip = spawn::spawn_skip_chance(mob_count, level.max_mob_count);
     if skip > 0 && random.next_int(skip.min(i32::MAX as usize) as i32) != 0 {
         return;
     }
@@ -964,15 +2539,19 @@ fn try_queue_natural_spawn(
         let tile = level.tiles[x + y * width];
         let lit = torch_lit(&level.tiles, width, height, x, y);
         if spawn::hostile_allowed(level.depth, day_tick, days, tile, lit) {
-            level
-                .pending_spawns
-                .push(spawn::choose_hostile(level.depth, roll));
+            level.pending_spawns.push(spawn::SpawnIntent {
+                kind: spawn::choose_hostile(level.depth, roll),
+                x: pixel_x,
+                y: pixel_y,
+            });
             return;
         }
         if spawn::passive_allowed(level.depth, tile) {
-            level
-                .pending_spawns
-                .push(spawn::choose_passive(day_tick >= 48_600, roll));
+            level.pending_spawns.push(spawn::SpawnIntent {
+                kind: spawn::choose_passive(day_tick >= 48_600, roll),
+                x: pixel_x,
+                y: pixel_y,
+            });
             return;
         }
     }
@@ -997,13 +2576,15 @@ fn render_hud(
 ) {
     screen.rect(0, 0, WIDTH as i32, 18, 0x101018);
     screen.text(&assets.font, "HP", 4, 5);
+    let health_segments =
+        (u16::from(player.health) * 10).div_ceil(u16::from(player.max_health.max(1))) as i32;
     for index in 0..10 {
         screen.rect(
             23 + index * 5,
             5,
             4,
             7,
-            if index < player.health as i32 {
+            if index < health_segments {
                 0xDD3333
             } else {
                 0x431818
@@ -1024,14 +2605,68 @@ fn render_hud(
             },
         );
     }
-    screen.text(&assets.font, &format!("WOOD {}", player.wood), 158, 5);
+    screen.text(&assets.font, "HU", 158, 5);
+    for index in 0..10 {
+        screen.rect(
+            177 + index * 5,
+            5,
+            4,
+            7,
+            if index < player.hunger as i32 {
+                0xD88A35
+            } else {
+                0x4A2B18
+            },
+        );
+    }
     screen.text(
         &assets.font,
         &format!("D{days} {}", time_name(day_tick)),
-        220,
+        232,
         5,
     );
-    screen.text(&assets.font, &format!("SEED {seed}"), 4, HEIGHT as i32 - 9);
+    let status = if let Some(armor) = player.armor_kind {
+        format!("AR {} {}", armor.display_name(), player.armor)
+    } else {
+        format!("SEED {seed}")
+    };
+    screen.text(&assets.font, &status, 4, HEIGHT as i32 - 9);
+    let effects = PotionKind::ALL
+        .into_iter()
+        .filter(|effect| player.potion_effects[effect.id()] > 0)
+        .map(|effect| {
+            format!(
+                "{} {}",
+                &effect.display_name()[..effect.display_name().len().min(3)],
+                player.potion_effects[effect.id()].div_ceil(60)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !effects.is_empty() {
+        let width = effects.chars().count() as i32 * 8 + 4;
+        screen.rect(2, HEIGHT as i32 - 21, width, 10, 0x101018);
+        screen.text(&assets.font, &effects, 4, HEIGHT as i32 - 20);
+    }
+    if let Some(active) = player.active_item {
+        let label = match active {
+            ActiveItem::Stack(item) => item.display_name().to_owned(),
+            ActiveItem::Tool(index) => player
+                .inventory
+                .tools()
+                .get(index)
+                .map(|tool| {
+                    format!(
+                        "{} {}/{}",
+                        tool.display_name(),
+                        tool.durability,
+                        tool.max_durability
+                    )
+                })
+                .unwrap_or_default(),
+        };
+        screen.centered_text(&assets.font, &label, HEIGHT as i32 - 9);
+    }
     screen.text(
         &assets.font,
         &format!("DEPTH {depth}"),
@@ -1059,18 +2694,249 @@ fn time_name(tick: u32) -> &'static str {
     }
 }
 
-fn render_inventory(screen: &mut Screen, assets: &Assets, player: &Player) {
-    screen.rect(58, 42, 172, 108, 0x15151D);
-    screen.frame(58, 42, 172, 108, 0xC8C8C8);
-    screen.centered_text(&assets.font, "INVENTORY", 50);
+#[allow(clippy::too_many_arguments)]
+fn render_inventory(
+    screen: &mut Screen,
+    assets: &Assets,
+    player: &Player,
+    item_selection: usize,
+    craft_selection: usize,
+    pane: usize,
+    station: Option<FurnitureKind>,
+) {
+    screen.rect(18, 32, 252, 128, 0x15151D);
+    screen.frame(18, 32, 252, 128, 0xC8C8C8);
     screen.text(
         &assets.font,
-        &format!("WOOD              {}", player.wood),
-        72,
-        76,
+        if pane == 0 {
+            ">INVENTORY"
+        } else {
+            " INVENTORY"
+        },
+        28,
+        50,
     );
-    screen.text(&assets.font, "MORE ITEMS ARRIVE IN PHASE 5", 40, 116);
-    screen.centered_text(&assets.font, "X OR ESC TO CLOSE", 135);
+    if player.inventory.used_slots() == 0 {
+        screen.text(&assets.font, "EMPTY", 32, 70);
+    } else {
+        let start = item_selection.saturating_sub(4);
+        let stack_count = player.inventory.slots().len();
+        for (row, combined) in (start..player.inventory.used_slots()).take(5).enumerate() {
+            let y = 66 + row as i32 * 14;
+            let marker = if pane == 0 && combined == item_selection {
+                ">"
+            } else {
+                " "
+            };
+            if let Some(stack) = player.inventory.slots().get(combined) {
+                screen.blit(assets.item(stack.item), 30, y);
+                screen.text(
+                    &assets.font,
+                    &format!("{marker}{} x{}", stack.item, stack.count),
+                    42,
+                    y,
+                );
+                continue;
+            }
+            let tool = &player.inventory.tools()[combined - stack_count];
+            screen.blit(assets.tool(*tool), 30, y);
+            let tool_label = if tool.kind == ToolKind::Shears {
+                format!("SHEARS {}", tool.durability)
+            } else {
+                format!(
+                    "{} {} {}",
+                    &tool.tier.display_name()[..1],
+                    tool.kind.display_name(),
+                    tool.durability
+                )
+            };
+            screen.text(&assets.font, &format!("{marker}{tool_label}"), 42, y);
+        }
+    }
+    let crafting_title = if pane == 1 {
+        station
+            .map(|kind| kind.display_name())
+            .map(|name| format!(">{name}"))
+            .unwrap_or_else(|| ">CRAFT".to_owned())
+    } else {
+        station
+            .map(|kind| format!(" {}", kind.display_name()))
+            .unwrap_or_else(|| " CRAFT".to_owned())
+    };
+    screen.text(&assets.font, &crafting_title, 156, 50);
+    let recipes = recipe_views(station);
+    let start = craft_selection.saturating_sub(2);
+    for (row, (index, (output, costs))) in
+        recipes.iter().enumerate().skip(start).take(3).enumerate()
+    {
+        let marker = if index == craft_selection { ">" } else { " " };
+        screen.text(
+            &assets.font,
+            &format!("{marker}{output}"),
+            142,
+            66 + row as i32 * 26,
+        );
+        render_costs(screen, assets, costs, 150, 76 + row as i32 * 26);
+    }
+    screen.centered_text(&assets.font, "ARROWS MOVE  C EQUIP  ENTER CRAFT", 145);
+}
+
+fn recipe_views(station: Option<FurnitureKind>) -> Vec<(String, &'static [ItemStack])> {
+    let stack = |recipe: &crate::item::Recipe| {
+        (
+            format!("{} x{}", recipe.output.item, recipe.output.count),
+            recipe.costs,
+        )
+    };
+    let tool = |recipe: &crate::item::ToolRecipe| (recipe.output.display_name(), recipe.costs);
+    match station {
+        None => HAND_RECIPES.iter().map(stack).collect(),
+        Some(FurnitureKind::Workbench) => WORKBENCH_STATION_RECIPES
+            .iter()
+            .map(stack)
+            .chain(WORKBENCH_TOOL_RECIPES.iter().map(tool))
+            .collect(),
+        Some(FurnitureKind::Oven) => OVEN_RECIPES.iter().map(stack).collect(),
+        Some(FurnitureKind::Furnace) => FURNACE_RECIPES.iter().map(stack).collect(),
+        Some(FurnitureKind::Anvil) => ANVIL_RECIPES
+            .iter()
+            .map(stack)
+            .chain(ANVIL_TOOL_RECIPES.iter().map(tool))
+            .collect(),
+        Some(FurnitureKind::Enchanter) => ENCHANTER_RECIPES.iter().map(stack).collect(),
+        Some(FurnitureKind::Loom) => LOOM_RECIPES.iter().map(stack).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn render_costs(screen: &mut Screen, assets: &Assets, costs: &[ItemStack], x: i32, y: i32) {
+    let text = costs
+        .iter()
+        .map(|cost| format!("{} {}", cost.item, cost.count))
+        .collect::<Vec<_>>()
+        .join("+");
+    screen.text(&assets.font, &text, x, y);
+}
+
+fn render_entity(
+    screen: &mut Screen,
+    assets: &Assets,
+    entity: &entity::Entity,
+    camera_x: i32,
+    camera_y: i32,
+    tick: u64,
+) {
+    match &entity.kind {
+        EntityKind::Item(stack) => {
+            let image = assets.item(stack.item);
+            let bounce = if (tick / 12 + entity.id).is_multiple_of(2) {
+                0
+            } else {
+                -1
+            };
+            screen.blit(
+                image,
+                entity.x - image.width as i32 / 2 - camera_x,
+                entity.y - image.height as i32 / 2 - camera_y + bounce,
+            );
+        }
+        EntityKind::Mob(mob) => {
+            if mob.hurt_time > 0 && tick.is_multiple_of(2) {
+                return;
+            }
+            let image = assets.mob(mob.species);
+            let frame = mob.walk_distance as usize / 8 % 2;
+            let (source_x, flip) = if image.width >= 64 {
+                if mob.y_move < 0 {
+                    (16, frame == 1)
+                } else if mob.x_move < 0 {
+                    (32 + frame * 16, true)
+                } else if mob.x_move > 0 {
+                    (32 + frame * 16, false)
+                } else {
+                    (0, frame == 1)
+                }
+            } else {
+                (frame * 16, false)
+            };
+            let source_y = if mob.species == spawn::NaturalMob::Sheep && mob.sheared {
+                32
+            } else {
+                0
+            };
+            let jump = if mob.species == spawn::NaturalMob::Slime && entity.age % 20 < 10 {
+                -4
+            } else {
+                0
+            };
+            screen.blit_region(
+                image,
+                entity.x - 8 - camera_x,
+                entity.y - 11 - camera_y + jump,
+                source_x,
+                source_y,
+                16,
+                16,
+                flip,
+            );
+            if mob.health < mob.max_health {
+                screen.rect(
+                    entity.x - 7 - camera_x,
+                    entity.y - 14 - camera_y,
+                    14,
+                    2,
+                    0x3A1010,
+                );
+                screen.rect(
+                    entity.x - 7 - camera_x,
+                    entity.y - 14 - camera_y,
+                    14 * i32::from(mob.health) / i32::from(mob.max_health),
+                    2,
+                    0xD84848,
+                );
+            }
+            if matches!(
+                mob.species,
+                spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
+            ) {
+                let percent = (mob.health.saturating_mul(100) / mob.max_health).max(1);
+                screen.text(
+                    &assets.font,
+                    &format!("{percent}%"),
+                    entity.x - 12 - camera_x,
+                    entity.y - 23 - camera_y,
+                );
+            }
+        }
+        EntityKind::Furniture(kind) => {
+            screen.blit(
+                assets.furniture(*kind),
+                entity.x - 8 - camera_x,
+                entity.y - 8 - camera_y,
+            );
+        }
+        EntityKind::Projectile(projectile) => {
+            let color = match projectile.kind {
+                entity::ProjectileKind::Arrow => 0xD8C48A,
+                entity::ProjectileKind::Spark => 0xC8E8FF,
+                entity::ProjectileKind::FireSpark => 0xFF6A24,
+            };
+            screen.rect(
+                entity.x - 2 - camera_x,
+                entity.y - 2 - camera_y,
+                4,
+                4,
+                color,
+            );
+        }
+        EntityKind::Particle(kind) => {
+            let color = match kind {
+                entity::ParticleKind::Smash => 0xE8E8E8,
+                entity::ParticleKind::Fire => 0xFF8A30,
+            };
+            screen.rect(entity.x - camera_x, entity.y - camera_y, 2, 2, color);
+        }
+    }
 }
 
 fn render_pause(screen: &mut Screen, assets: &Assets, selection: usize) {
@@ -1237,9 +3103,264 @@ fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -
 #[cfg(test)]
 mod registry_tests {
     use super::{
-        DAY_LENGTH, Level, Tile, World, random::JavaRandom, surface_darkness, time_name,
+        ActiveItem, DAY_LENGTH, Direction, FurnitureKind, HUNGER_STAMINA_STEPS, Level,
+        MAX_HUNGER_TICKS, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
+        entity::EntityArena, random::JavaRandom, spawn, surface_darkness, time_name,
         try_queue_natural_spawn,
     };
+    use crate::{
+        input::Input,
+        item::{
+            ArmorKind, Inventory, ItemId, PotionKind, ToolItem, ToolKind, ToolTier,
+            WORKBENCH_STATION_RECIPES,
+        },
+    };
+
+    fn tiny_world() -> World {
+        World {
+            width: 16,
+            height: 16,
+            levels: vec![Level {
+                depth: 0,
+                tiles: vec![Tile::Grass; 16 * 16],
+                data: vec![0; 16 * 16],
+                max_mob_count: 100,
+                pending_spawns: Vec::new(),
+                entities: EntityArena::default(),
+            }],
+            current_level: 0,
+            player: Player {
+                x: 8 * 16 + 8,
+                y: 8 * 16 + 8,
+                direction: Direction::Right,
+                walk_distance: 0,
+                attack_time: 0,
+                health: 10,
+                max_health: 10,
+                stamina: 10,
+                hunger: 10,
+                armor: 0,
+                armor_kind: None,
+                armor_damage_buffer: 0,
+                hurt_time: 0,
+                stamina_recharge: 0,
+                stamina_recharge_delay: 0,
+                hunger_stamina_count: HUNGER_STAMINA_STEPS[1],
+                hunger_ticks: MAX_HUNGER_TICKS,
+                step_count: 0,
+                hunger_charge_delay: 0,
+                hunger_starve_delay: 0,
+                potion_effects: [0; PotionKind::ALL.len()],
+                regen_tick: 0,
+                fishing_level: None,
+                fishing_ticks: 0,
+                watering_content: 0,
+                clothing: ItemId::RegularClothes,
+                inventory: Inventory::new(32),
+                active_item: None,
+            },
+            seed: 1,
+            tick: 0,
+            day_tick: 0,
+            days: 1,
+            difficulty: 1,
+            paused: false,
+            pause_selection: 0,
+            inventory_open: false,
+            inventory_selection: 0,
+            inventory_item_selection: 0,
+            inventory_pane: 0,
+            crafting_station: None,
+            notification: None,
+            air_wizard_defeated: false,
+            obsidian_knight_defeated: false,
+            random: JavaRandom::new(1),
+        }
+    }
+
+    #[test]
+    fn workbench_placement_and_tool_use_are_in_the_normal_world_path() {
+        let mut world = tiny_world();
+        world.player.inventory.add(ItemId::Workbench, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::Workbench));
+        world.attack();
+        assert_eq!(world.player.inventory.count(ItemId::Workbench), 0);
+        assert_eq!(
+            world.levels[0].entities.furniture_near(152, 136, 1),
+            Some(FurnitureKind::Workbench)
+        );
+
+        world.use_target();
+        assert!(world.inventory_open);
+        assert_eq!(world.crafting_station, Some(FurnitureKind::Workbench));
+
+        world.player.inventory.add(ItemId::Wood, 5);
+        world.inventory_selection = WORKBENCH_STATION_RECIPES.len() + 1;
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        let Some(ActiveItem::Tool(tool_index)) = world.player.active_item else {
+            panic!("crafted axe was not equipped");
+        };
+        assert_eq!(
+            world.player.inventory.tools()[tool_index].kind,
+            ToolKind::Axe
+        );
+        let damage = world.pay_tool_terrain_damage(ToolKind::Axe, 4).unwrap();
+        assert!((10..=14).contains(&damage));
+        assert_eq!(world.player.inventory.tools()[tool_index].durability, 33);
+        assert_eq!(world.player.stamina, 6);
+    }
+
+    #[test]
+    fn ore_requires_a_pickaxe_and_consumes_its_durability() {
+        let mut world = tiny_world();
+        let ore_index = 9 + 8 * 16;
+        world.levels[0].tiles[ore_index] = Tile::IronOre;
+        world.attack();
+        assert_eq!(world.levels[0].data[ore_index], 0);
+
+        let index = world
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Pickaxe, ToolTier::Wood))
+            .unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(index));
+        world.attack();
+        assert!(world.levels[0].data[ore_index] > 0);
+        assert_eq!(world.player.inventory.tools()[index].durability, 37);
+    }
+
+    #[test]
+    fn furnace_placement_smelts_ore_through_the_station_menu() {
+        let mut world = tiny_world();
+        world.player.inventory.add(ItemId::Furnace, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::Furnace));
+        world.attack();
+        assert_eq!(
+            world.levels[0].entities.furniture_near(152, 136, 1),
+            Some(FurnitureKind::Furnace)
+        );
+        world.use_target();
+        assert_eq!(world.crafting_station, Some(FurnitureKind::Furnace));
+
+        world.player.inventory.add(ItemId::IronOre, 3);
+        world.player.inventory.add(ItemId::Coal, 1);
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.inventory.count(ItemId::IronOre), 0);
+        assert_eq!(world.player.inventory.count(ItemId::Coal), 0);
+        assert_eq!(world.player.inventory.count(ItemId::IronIngot), 1);
+    }
+
+    #[test]
+    fn equipped_food_consumes_stamina_and_restores_hunger() {
+        let mut world = tiny_world();
+        world.player.hunger = 5;
+        world.player.inventory.add(ItemId::CookedPork, 2);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::CookedPork));
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.hunger, 8);
+        assert_eq!(world.player.stamina, 8);
+        assert_eq!(world.player.inventory.count(ItemId::CookedPork), 1);
+    }
+
+    #[test]
+    fn food_uses_java_partial_stamina_payment_and_never_attacks() {
+        let mut world = tiny_world();
+        let target = 9 + 8 * 16;
+        world.levels[0].tiles[target] = Tile::Rock;
+        world.player.hunger = 5;
+        world.player.stamina = 1;
+        world.player.inventory.add(ItemId::Apple, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::Apple));
+
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+
+        assert_eq!(world.player.hunger, 6);
+        assert_eq!(world.player.stamina, 0);
+        assert_eq!(world.player.inventory.count(ItemId::Apple), 0);
+        assert_eq!(world.levels[0].data[target], 0);
+    }
+
+    #[test]
+    fn starvation_respects_the_difficulty_health_floor() {
+        let mut world = tiny_world();
+        world.player.hunger = 0;
+        world.player.health = 10;
+        world.player.hunger_starve_delay = 1;
+        world.tick_survival_stats();
+        assert_eq!(world.player.health, 9);
+
+        world.player.health = STARVATION_HEALTH_FLOORS[world.difficulty];
+        world.player.hunger_starve_delay = 1;
+        world.tick_survival_stats();
+        assert_eq!(world.player.health, 3);
+    }
+
+    #[test]
+    fn armor_and_potions_run_through_the_equipped_item_path() {
+        let mut world = tiny_world();
+        world.player.inventory.add(ItemId::LeatherArmor, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::LeatherArmor));
+        assert!(world.use_active_self_item());
+        assert_eq!(world.player.armor_kind, Some(ArmorKind::Leather));
+        assert_eq!(world.player.armor, 30);
+        assert_eq!(world.player.stamina, 1);
+        assert!(world.hurt_player(4, false));
+        assert_eq!(world.player.armor, 26);
+        assert_eq!(world.player.health, 8);
+
+        world.player.inventory.add(ItemId::SpeedPotion, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::SpeedPotion));
+        assert!(world.use_active_self_item());
+        assert_eq!(
+            world.player.potion_effects[PotionKind::Speed.id()],
+            PotionKind::Speed.duration()
+        );
+        assert_eq!(world.player.inventory.count(ItemId::GlassBottle), 1);
+    }
+
+    #[test]
+    fn hoe_plant_growth_and_harvest_form_a_playable_farm_loop() {
+        let mut world = tiny_world();
+        let target = 9 + 8 * 16;
+        world.levels[0].tiles[target] = Tile::Dirt;
+        let hoe = world
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Hoe, ToolTier::Wood))
+            .unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(hoe));
+        world.attack();
+        assert_eq!(world.levels[0].tiles[target], Tile::Farmland);
+        assert_eq!(world.player.inventory.tools()[hoe].durability, 29);
+
+        world.player.inventory.add(ItemId::WheatSeeds, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::WheatSeeds));
+        world.attack();
+        assert_eq!(world.levels[0].tiles[target], Tile::Wheat);
+        world.levels[0].data[target] = 7 << 3;
+        world.player.active_item = None;
+        world.attack();
+        assert_eq!(world.levels[0].tiles[target], Tile::Farmland);
+        world.levels[0].entities.collect_near(
+            9 * TILE_SIZE + 8,
+            8 * TILE_SIZE + 8,
+            &mut world.player.inventory,
+        );
+        assert!(world.player.inventory.count(ItemId::Wheat) >= 2);
+        assert_eq!(world.player.inventory.count(ItemId::WheatSeeds), 1);
+    }
 
     #[test]
     fn all_2_2_4_tile_ids_round_trip() {
@@ -1308,6 +3429,24 @@ mod registry_tests {
         );
         assert!(world.levels[5].tiles.contains(&Tile::BossFloor));
         assert!(world.levels[5].tiles.contains(&Tile::OrnateObsidian));
+        assert!(
+            world.levels[0]
+                .entities
+                .has_mob(spawn::NaturalMob::AirWizard)
+        );
+        assert!(
+            world.levels[5]
+                .entities
+                .has_furniture(FurnitureKind::KnightStatue)
+        );
+        assert!(world.levels[2..=5].iter().any(|level| {
+            level.entities.entities().iter().any(|entity| {
+                matches!(
+                    entity.kind,
+                    super::EntityKind::Furniture(kind) if kind.spawner_mob().is_some()
+                )
+            })
+        }));
     }
 
     #[test]
@@ -1330,6 +3469,7 @@ mod registry_tests {
             data: vec![0; 128 * 128],
             max_mob_count: 1,
             pending_spawns: Vec::new(),
+            entities: crate::world::entity::EntityArena::default(),
         };
         let mut random = JavaRandom::new(7);
         try_queue_natural_spawn(&mut level, 128, 128, 8, 8, 0, 1, &mut random);

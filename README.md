@@ -21,9 +21,31 @@ pixel canvas and copied 2.2.4 artwork. It includes:
 - the original 64,800-tick morning/day/evening/night clock with multi-source
   player/lava/torch lighting above and below ground;
 - player movement, tile-aware collision, water slowdown, stamina, progressive
-  tile damage, doors, stairs, and a minimal inventory/HUD;
-- difficulty/depth/time/light-aware natural-spawn intents and original mob caps,
-  ready for the complete entity arena in phase 5;
+  tile damage, doors, stairs, health/contact damage, death, and surface respawn;
+- Java-compatible hunger decay from time, movement, low stamina, and healing;
+  food consumption, passive high-hunger healing, difficulty-specific starvation
+  floors, and separate health/stamina/hunger HUD meters;
+- per-level entity arenas with stable IDs, lifecycle/despawn, collision, Y-sorted
+  rendering, difficulty/depth/time/light-aware natural spawning, and original
+  mob caps;
+- nine naturally spawning species plus the Air Wizard and Obsidian Knight, with
+  copied local sprites, drops, species state machines, arrows, boss projectiles,
+  creeper explosions, sheep shearing, and phase-aware boss combat;
+- the complete 141 Java non-tool identities plus its recipe-only Arcane
+  Fertilizer output, eight tool kinds and
+  all applicable tiers, with copied item/tool sprites, Java durability/damage
+  formulas, armor, twelve potions, four fishing rods, buckets, clothing,
+  fertilizing, watering, planting, and harvesting;
+- every Java 2.2.4 recipe group through scrollable hand/workbench/oven/furnace/
+  anvil/enchanter/loom menus, including transactional tool and claymore costs;
+- placeable crafting furniture, lanterns, beds, TNT, composters, ordinary and
+  locked dungeon chests, nine spawner kinds, and the dungeon boss statue;
+- populated sky/village/cave/dungeon structures and a connected survival
+  gather → craft → mine → boss progression, including both boss drops and
+  resummoning items;
+- pickaxe-gated iron/gold/gem/lapis/cloud ore damage and collectible ore drops,
+  plus axe/shovel/hoe ground work, crop loops, sand/cloud gathering, and
+  gem-pickaxe hard rock;
 - all 16 bundled localization files with English fallback;
 - persistent FPS, difficulty, sound, autosave, locale, skin, and active world
   size/theme/terrain settings, including `--savedir` support;
@@ -58,6 +80,10 @@ For renderer diagnostics without opening a window:
 cargo run --release -- --render-preview title.png --savedir .\test-data
 cargo run --release -- --render-world-preview world.png --savedir .\test-data
 cargo run --release -- --render-world-preview cave.png --depth -2 --savedir .\test-data
+cargo run --release -- --render-world-preview entities.png --entities --savedir .\test-data
+cargo run --release -- --render-world-preview workbench.png --workbench-ui --savedir .\test-data
+cargo run --release -- --render-world-preview food.png --food-ui --savedir .\test-data
+cargo run --release -- --render-world-preview stations.png --stations --savedir .\test-data
 cargo run --release -- --render-ui-preview achievements achievements.png --savedir .\test-data
 cargo run --release -- --render-ui-preview controls controls.png --savedir .\test-data
 ```
@@ -67,9 +93,12 @@ cargo run --release -- --render-ui-preview controls controls.png --savedir .\tes
 | Action | Keys |
 | --- | --- |
 | Move/menu | Arrow keys or W/A/S/D |
-| Select | Enter |
-| Attack/harvest | C |
+| Select / craft | Enter |
+| Attack / harvest / eat | C |
 | Inventory | X |
+| Equip inventory item/tool | C while inventory is open |
+| Place equipped crafting station | C |
+| Use placed crafting station | Enter while facing it |
 | Pause/back | Escape |
 
 The primary keys can be changed from **Options → Key Bindings**. Arrow keys

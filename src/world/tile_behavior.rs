@@ -265,6 +265,7 @@ mod tests {
             data: vec![0; 9],
             max_mob_count: 200,
             pending_spawns: Vec::new(),
+            entities: crate::world::entity::EntityArena::default(),
         };
         level.tiles[4] = Tile::Water;
         level.tiles[5] = Tile::Lava;
@@ -280,6 +281,7 @@ mod tests {
             data: vec![110],
             max_mob_count: 200,
             pending_spawns: Vec::new(),
+            entities: crate::world::entity::EntityArena::default(),
         };
         tick(&mut level, 1, 1, 0, 0, &mut JavaRandom::new(1));
         assert_eq!(level.tiles[0], Tile::Tree);
@@ -294,6 +296,7 @@ mod tests {
             data: vec![(7 << 3) | (2 << 7)],
             max_mob_count: 200,
             pending_spawns: Vec::new(),
+            entities: crate::world::entity::EntityArena::default(),
         };
         tick(&mut level, 1, 1, 0, 0, &mut JavaRandom::new(1));
         assert_eq!(level.data[0] & 7, 0);

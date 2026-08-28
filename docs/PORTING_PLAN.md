@@ -22,8 +22,8 @@
 | `screen/*` | state-specific UI modules | Front-end hierarchy and gameplay overlays complete |
 | `level/LevelGen`, `Structure` | `world/generation`, `world/structure` | Phase 4 terrain, validation, structures, and stair linking complete |
 | `level/tile/*` | `world`, `world/tile_behavior` | Phase 4 registry, data, ticks, collision, rendering, and legacy IDs complete |
-| `entity/*` | entity arena and typed components | Player slice and natural-spawn intents complete; full entities are phase 5 |
-| `item/*` | item registry, inventory, recipes | Pending |
+| `entity/*` | `world/entity` arena and typed entities | Phase 5 complete: natural mobs, bosses, combat, projectiles, drops, furniture, and occupants |
+| `item/*` | `item` registry, inventory, recipes | Phase 5 complete: full catalog, tools, stations, armor, potions, fishing, containers, and placement |
 | `saveload/*` | versioned serde save layer | Pending |
 | `network/*`, server | protocol/client/server crates | Pending |
 
@@ -86,21 +86,44 @@ evidence is recorded in [PHASE4_REPORT.md](PHASE4_REPORT.md).
 
 ### 5. Entity, combat, item, and crafting loop
 
-- Entity storage/lifecycle, collision, sorting, particles, projectiles, drops.
-- Player health/stamina/hunger/armor/effects/death/respawn.
-- Every passive/hostile/boss mob and furniture entity.
-- Full item registry, stack limits, tools, durability, potions, fishing,
-  inventory containers, recipes, and crafting stations.
+- [x] Add stable entity IDs, per-level storage, deferred natural-spawn
+  materialization, lifecycle/despawn, tile collision, Y sorting, and item drops.
+- [x] Add the nine naturally spawned 2.2.4 species with local copied sprites,
+  passive wandering, hostile pursuit/contact damage, health, melee damage, and
+  Java drop categories.
+- [x] Add stack inventory semantics, transactional costs, pickup entities, all
+  Java hand recipes, and an interactive crafting pane.
+- [x] Port all Java tool kinds/tiers, sprites, durability/damage formulas, and
+  recipes; make the workbench a placeable, colliding, usable furniture entity.
+- [x] Generalize crafting furniture to workbench, oven, furnace, anvil,
+  enchanter, and loom; add their local sprites and placement/use path; and
+  connect furnace ingots to iron/gold/gem sword, axe, and pickaxe recipes.
+- [x] Add player hurt cooldown, death, inventory drops, and surface respawn.
+- [x] Add the 2.2.4 hunger/food loop: difficulty-specific time, movement,
+  stamina, healing, and starvation behavior; all ten food values; oven food
+  recipes; golden apples; consumption costs; and a dedicated HUD meter.
+- [x] Add armor, all potion effects, particles, projectiles, and
+  species-specific AI/attacks.
+- [x] Add every passive/hostile/boss mob and furniture entity, including
+  structure occupants.
+- [x] Complete the item registry and tool recipes/sprites, expand the
+  six stations to every Java recipe, then
+  add fishing, containers, and placement for other furniture/tile items.
 
-Acceptance: a survival world supports the original gather → craft → mine →
-boss progression without debug intervention.
+Acceptance met: a survival world supports the original gather → craft → mine →
+boss progression without debug intervention. The 46-test suite, strict Clippy
+gate, release build, and visual diagnostics are recorded in
+[PHASE5_PROGRESS.md](PHASE5_PROGRESS.md).
+
+Phase 5 completion evidence is recorded in
+[PHASE5_PROGRESS.md](PHASE5_PROGRESS.md).
 
 ### 6. Modes and content systems
 
 - Survival, creative, hardcore, and score modes.
 - Farming, beds, signs, quests, tutorials, achievements, books, skins, and
   resource-pack UI.
-- Story progression and both bosses.
+- Story presentation and progression around the completed boss encounters.
 
 Acceptance: data-driven content counts and progression flags match 2.2.4.
 

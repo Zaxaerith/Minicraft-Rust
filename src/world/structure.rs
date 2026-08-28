@@ -1,4 +1,4 @@
-use super::{Level, Tile, random::JavaRandom};
+use super::{Level, Tile, entity::FurnitureKind, random::JavaRandom, spawn::NaturalMob};
 
 pub fn decorate(level: &mut Level, width: usize, height: usize, seed: i64) {
     let mut random = JavaRandom::new(seed);
@@ -28,6 +28,16 @@ pub fn link_from_parent(level: &mut Level, width: usize, height: usize, parent_s
             _ => {}
         }
         set(level, width, height, x as i32, y as i32, Tile::StairsUp);
+    }
+}
+
+pub fn finalize_entities(level: &mut Level, width: usize, height: usize) {
+    if level.depth == -4 {
+        level.entities.spawn_furniture(
+            FurnitureKind::KnightStatue,
+            width as i32 / 2 * 16 + 8,
+            height as i32 / 2 * 16 + 8,
+        );
     }
 }
 
@@ -137,6 +147,9 @@ fn place_air_wizard_house(level: &mut Level, width: usize, height: usize, random
                     _ => None,
                 },
             );
+            level
+                .entities
+                .spawn_mob(NaturalMob::AirWizard, x * 16 + 8, y * 16 + 8);
             return;
         }
     }
@@ -158,7 +171,7 @@ fn place_villages(level: &mut Level, width: usize, height: usize, random: &mut J
             last = (x, y);
             let houses = random.next_int(3) + 2;
             for house in 0..houses {
-                let _has_chest = random.next_bool();
+                let has_chest = random.next_bool();
                 let two_doors = random.next_bool();
                 let overlay = random.next_int(2);
                 let mut offset_x = if house == 0 || house == 3 { -4 } else { 4 };
@@ -181,6 +194,13 @@ fn place_villages(level: &mut Level, width: usize, height: usize, random: &mut J
                     (y + offset_y) as usize,
                     overlay,
                 );
+                if has_chest {
+                    level.entities.spawn_furniture(
+                        FurnitureKind::Chest,
+                        (x + offset_x) * 16 + 8,
+                        (y + offset_y) * 16 + 8,
+                    );
+                }
             }
             break;
         }
@@ -225,7 +245,7 @@ fn ruined_overlay(map: &mut [Tile], width: usize, height: usize, x: usize, y: us
 fn place_cave_dungeons(level: &mut Level, width: usize, height: usize, random: &mut JavaRandom) {
     let attempts = 18 / (-level.depth as usize) * (width / 128);
     for _ in 0..attempts {
-        let _mob_type = random.next_int(5);
+        let mob_type = random.next_int(5);
         let x3 = random.next_int((16 * width) as i32) as usize / 16;
         let y3 = random.next_int((16 * height) as i32) as usize / 16;
         let mut x = x3.saturating_sub(1);
@@ -279,15 +299,31 @@ fn place_cave_dungeons(level: &mut Level, width: usize, height: usize, random: &
         if level.tiles[x - 4 + y * width] == Tile::Dirt {
             cave_room(&mut level.tiles, width, height, x - 5, y, 4);
         }
-        for _ in 0..2 {
-            let _chest = random.next_int(2);
+        let spawner = match mob_type {
+            0 => FurnitureKind::SlimeSpawner,
+            1 => FurnitureKind::ZombieSpawner,
+            2 => FurnitureKind::SkeletonSpawner,
+            3 => FurnitureKind::CreeperSpawner,
+            _ => FurnitureKind::SnakeSpawner,
+        };
+        level
+            .entities
+            .spawn_furniture(spawner, x as i32 * 16 + 8, y as i32 * 16 + 8);
+        for offset in [-2_i32, 2] {
+            if random.next_int(2) == 0 {
+                level.entities.spawn_furniture(
+                    FurnitureKind::Chest,
+                    (x as i32 + offset) * 16 + 8,
+                    y as i32 * 16 + 8,
+                );
+            }
         }
     }
 }
 
 fn place_dungeon_spawners(level: &mut Level, width: usize, height: usize, random: &mut JavaRandom) {
     for _ in 0..18 * (width / 128) {
-        let _mob_type = random.next_int(2);
+        let mob_type = random.next_int(2);
         let x3 = random.next_int((16 * width) as i32) as usize / 16;
         let y3 = random.next_int((16 * height) as i32) as usize / 16;
         if level.tiles[x3 + y3 * width] != Tile::ObsidianFloor {
@@ -329,8 +365,23 @@ fn place_dungeon_spawners(level: &mut Level, width: usize, height: usize, random
             level.tiles[x + y * width] = Tile::Dirt;
         }
         dungeon_spawner(&mut level.tiles, width, height, x, y);
-        for _ in 0..2 {
-            let _chest = random.next_int(2);
+        level.entities.spawn_furniture(
+            if mob_type == 0 {
+                FurnitureKind::SnakeSpawner
+            } else {
+                FurnitureKind::KnightSpawner
+            },
+            x as i32 * 16 + 8,
+            y as i32 * 16 + 8,
+        );
+        for offset in [-2_i32, 2] {
+            if random.next_int(2) == 0 {
+                level.entities.spawn_furniture(
+                    FurnitureKind::DungeonChest,
+                    (x as i32 + offset) * 16 + 8,
+                    y as i32 * 16 + 8,
+                );
+            }
         }
     }
 }
@@ -507,6 +558,7 @@ mod tests {
             data: vec![0; 21 * 21],
             max_mob_count: 200,
             pending_spawns: Vec::new(),
+            entities: crate::world::entity::EntityArena::default(),
         };
         assert_eq!(level.tiles.len(), level.data.len());
     }

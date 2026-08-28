@@ -2,8 +2,9 @@ use std::{fs, path::Path};
 
 use crate::{
     gfx::{Image, Screen},
+    item::{ItemId, ToolItem, ToolKind, ToolTier},
     resource_pack::ResourcePack,
-    world::Tile,
+    world::{FurnitureKind, Tile, spawn::NaturalMob},
 };
 
 struct Connection {
@@ -19,6 +20,10 @@ pub struct Assets {
     pub skin_row: usize,
     tiles: Vec<Vec<Image>>,
     connections: Vec<Option<Connection>>,
+    mobs: Vec<Image>,
+    items: Vec<Image>,
+    tools: Vec<Image>,
+    furniture: Vec<Image>,
     pub warnings: Vec<String>,
 }
 
@@ -60,6 +65,23 @@ impl Assets {
                     }))
                 })
                 .collect::<Result<Vec<_>, String>>()?,
+            mobs: NaturalMob::ALL
+                .iter()
+                .map(|mob| entity(mob.asset_name()))
+                .collect::<Result<Vec<_>, _>>()?,
+            items: ItemId::ALL
+                .iter()
+                .map(|item| item_image(item.asset_name()))
+                .collect::<Result<Vec<_>, _>>()?,
+            tools: ToolKind::ALL
+                .into_iter()
+                .flat_map(|kind| ToolTier::ALL.into_iter().map(move |tier| (kind, tier)))
+                .map(|(kind, tier)| item_image(kind.asset_name(tier)))
+                .collect::<Result<Vec<_>, _>>()?,
+            furniture: FurnitureKind::ALL
+                .iter()
+                .map(|kind| entity(kind.asset_name()))
+                .collect::<Result<Vec<_>, _>>()?,
             warnings: Vec::new(),
         };
         for pack in packs {
@@ -103,6 +125,40 @@ impl Assets {
                     }
                 }
             }
+            for mob in NaturalMob::ALL {
+                override_image(
+                    pack,
+                    &format!("assets/textures/entity/{}.png", mob.asset_name()),
+                    &mut assets.mobs[mob.id()],
+                    &mut assets.warnings,
+                );
+            }
+            for (index, item) in ItemId::ALL.iter().enumerate() {
+                override_image(
+                    pack,
+                    &format!("assets/textures/item/{}.png", item.asset_name()),
+                    &mut assets.items[index],
+                    &mut assets.warnings,
+                );
+            }
+            for kind in ToolKind::ALL {
+                for tier in ToolTier::ALL {
+                    override_image(
+                        pack,
+                        &format!("assets/textures/item/{}.png", kind.asset_name(tier)),
+                        &mut assets.tools[kind.id() * ToolTier::ALL.len() + tier.level() as usize],
+                        &mut assets.warnings,
+                    );
+                }
+            }
+            for kind in FurnitureKind::ALL {
+                override_image(
+                    pack,
+                    &format!("assets/textures/entity/{}.png", kind.asset_name()),
+                    &mut assets.furniture[kind.id()],
+                    &mut assets.warnings,
+                );
+            }
         }
         Ok(assets)
     }
@@ -111,6 +167,25 @@ impl Assets {
         debug_assert_eq!(Tile::from_id(tile.id()), Some(tile));
         let variants = &self.tiles[tile.id() as usize];
         &variants[tile_variant_index(tile, data, variants.len())]
+    }
+
+    pub fn mob(&self, mob: NaturalMob) -> &Image {
+        &self.mobs[mob.id()]
+    }
+
+    pub fn item(&self, item: ItemId) -> &Image {
+        &self.items[ItemId::ALL
+            .iter()
+            .position(|candidate| *candidate == item)
+            .expect("registered item")]
+    }
+
+    pub fn tool(&self, tool: ToolItem) -> &Image {
+        &self.tools[tool.kind.id() * ToolTier::ALL.len() + tool.tier.level() as usize]
+    }
+
+    pub fn furniture(&self, kind: FurnitureKind) -> &Image {
+        &self.furniture[kind.id()]
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -486,6 +561,220 @@ fn tile(name: &str) -> Result<Image, String> {
         "torch" => bytes!("torch.png"),
         "sign" => bytes!("sign.png"),
         _ => return Err(format!("unknown built-in tile asset: {name}")),
+    };
+    png(bytes)
+}
+
+fn entity(name: &str) -> Result<Image, String> {
+    macro_rules! bytes {
+        ($file:literal) => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/assets/textures/entity/",
+                $file
+            ))
+        };
+    }
+    let bytes: &[u8] = match name {
+        "slime" => bytes!("slime.png"),
+        "zombie" => bytes!("zombie.png"),
+        "creeper" => bytes!("creeper.png"),
+        "skeleton" => bytes!("skeleton.png"),
+        "snake" => bytes!("snake.png"),
+        "knight" => bytes!("knight.png"),
+        "cow" => bytes!("cow.png"),
+        "pig" => bytes!("pig.png"),
+        "sheep" => bytes!("sheep.png"),
+        "air_wizard" => bytes!("air_wizard.png"),
+        "obsidian_knight" => bytes!("obsidian_knight_armored.png"),
+        "workbench" => bytes!("workbench.png"),
+        "oven" => bytes!("oven.png"),
+        "furnace" => bytes!("furnace.png"),
+        "anvil" => bytes!("anvil.png"),
+        "enchanter" => bytes!("enchanter.png"),
+        "loom" => bytes!("loom.png"),
+        "chest" => bytes!("chest.png"),
+        "dungeon_chest" => bytes!("dungeon_chest.png"),
+        "lantern" => bytes!("lantern.png"),
+        "iron_lantern" => bytes!("iron_lantern.png"),
+        "gold_lantern" => bytes!("gold_lantern.png"),
+        "tnt" => bytes!("tnt.png"),
+        "bed" => bytes!("bed.png"),
+        "composter" => bytes!("composter.png"),
+        "knight_statue" => bytes!("knight_statue.png"),
+        "spawner" => bytes!("spawner.png"),
+        _ => bytes!("missing_entity.png"),
+    };
+    png(bytes)
+}
+
+fn item_image(name: &str) -> Result<Image, String> {
+    macro_rules! bytes {
+        ($file:literal) => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/assets/textures/item/",
+                $file
+            ))
+        };
+    }
+    let bytes: &[u8] = match name {
+        "wood" => bytes!("wood.png"),
+        "stone" => bytes!("stone.png"),
+        "coal" => bytes!("coal.png"),
+        "slime" => bytes!("slime.png"),
+        "cloth" => bytes!("cloth.png"),
+        "leather" => bytes!("leather.png"),
+        "beef" => bytes!("beef.png"),
+        "pork" => bytes!("pork.png"),
+        "wool" => bytes!("wool.png"),
+        "bone" => bytes!("bone.png"),
+        "arrow" => bytes!("arrow.png"),
+        "gunpowder" => bytes!("gunpowder.png"),
+        "scale" => bytes!("scale.png"),
+        "shard" => bytes!("shard.png"),
+        "plank" => bytes!("plank.png"),
+        "torch" => bytes!("torch.png"),
+        "workbench" => bytes!("workbench.png"),
+        "iron_ore" => bytes!("iron_ore.png"),
+        "gold_ore" => bytes!("gold_ore.png"),
+        "gem" => bytes!("gem.png"),
+        "lapis" => bytes!("lapis.png"),
+        "cloud_ore" => bytes!("cloud_ore.png"),
+        "iron_ingot" => bytes!("iron_ingot.png"),
+        "gold_ingot" => bytes!("gold_ingot.png"),
+        "oven" => bytes!("oven.png"),
+        "furnace" => bytes!("furnace.png"),
+        "anvil" => bytes!("anvil.png"),
+        "enchanter" => bytes!("enchanter.png"),
+        "loom" => bytes!("loom.png"),
+        "string" => bytes!("string.png"),
+        "cooked_pork" => bytes!("cooked_pork.png"),
+        "cooked_beef" => bytes!("cooked_beef.png"),
+        "arcane_fertilizer" => bytes!("arcane_fertilizer.png"),
+        "apple" => bytes!("apple.png"),
+        "fish" => bytes!("fish.png"),
+        "bread" => bytes!("bread.png"),
+        "cooked_fish" => bytes!("cooked_fish.png"),
+        "golden_apple" => bytes!("golden_apple.png"),
+        "potato" => bytes!("potato.png"),
+        "baked_potato" => bytes!("baked_potato.png"),
+        "wheat" => bytes!("wheat.png"),
+        "key" => bytes!("key.png"),
+        "red_flower" => bytes!("red_flower.png"),
+        "white_flower" => bytes!("white_flower.png"),
+        "cactus" => bytes!("cactus.png"),
+        "sand" => bytes!("sand.png"),
+        "glass" => bytes!("glass.png"),
+        "glass_bottle" => bytes!("glass_bottle.png"),
+        "fertilizer" => bytes!("fertilizer.png"),
+        "dirt" => bytes!("dirt.png"),
+        "cloud" => bytes!("cloud.png"),
+        "plank_wall" => bytes!("plank_wall.png"),
+        "wood_door" => bytes!("wood_door.png"),
+        "wood_fence" => bytes!("wood_fence.png"),
+        "stone_brick" => bytes!("stone_brick.png"),
+        "stone_wall" => bytes!("stone_wall.png"),
+        "stone_door" => bytes!("stone_door.png"),
+        "stone_fence" => bytes!("stone_fence.png"),
+        "obsidian" => bytes!("obsidian.png"),
+        "obsidian_brick" => bytes!("obsidian_brick.png"),
+        "obsidian_wall" => bytes!("obsidian_wall.png"),
+        "obsidian_door" => bytes!("obsidian_door.png"),
+        "obsidian_fence" => bytes!("obsidian_fence.png"),
+        "red_wool" => bytes!("red_wool.png"),
+        "blue_wool" => bytes!("blue_wool.png"),
+        "green_wool" => bytes!("green_wool.png"),
+        "yellow_wool" => bytes!("yellow_wool.png"),
+        "black_wool" => bytes!("black_wool.png"),
+        "red_clothes" => bytes!("red_clothes.png"),
+        "blue_clothes" => bytes!("blue_clothes.png"),
+        "green_clothes" => bytes!("green_clothes.png"),
+        "yellow_clothes" => bytes!("yellow_clothes.png"),
+        "black_clothes" => bytes!("black_clothes.png"),
+        "orange_clothes" => bytes!("orange_clothes.png"),
+        "purple_clothes" => bytes!("purple_clothes.png"),
+        "cyan_clothes" => bytes!("cyan_clothes.png"),
+        "reg_clothes" => bytes!("reg_clothes.png"),
+        "leather_armor" => bytes!("leather_armor.png"),
+        "snake_armor" => bytes!("snake_armor.png"),
+        "iron_armor" => bytes!("iron_armor.png"),
+        "gold_armor" => bytes!("gold_armor.png"),
+        "gem_armor" => bytes!("gem_armor.png"),
+        "bucket" => bytes!("bucket.png"),
+        "water_bucket" => bytes!("water_bucket.png"),
+        "lava_bucket" => bytes!("lava_bucket.png"),
+        "potion" => bytes!("potion.png"),
+        "air_totem" => bytes!("air_totem.png"),
+        "knight_statue" => bytes!("knight_statue.png"),
+        "obsidian_heart" => bytes!("obsidian_heart.png"),
+        "wooden_fishing_rod" => bytes!("wooden_fishing_rod.png"),
+        "iron_fishing_rod" => bytes!("iron_fishing_rod.png"),
+        "gold_fishing_rod" => bytes!("gold_fishing_rod.png"),
+        "gem_fishing_rod" => bytes!("gem_fishing_rod.png"),
+        "watering_can" => bytes!("watering_can.png"),
+        "seed" => bytes!("seed.png"),
+        "carrot" => bytes!("carrot.png"),
+        "tomato" => bytes!("tomato.png"),
+        "heavenly_berries" => bytes!("heavenly_berries.png"),
+        "hellish_berries" => bytes!("hellish_berries.png"),
+        "sign" => bytes!("sign.png"),
+        "chest" => bytes!("chest.png"),
+        "dungeon_chest" => bytes!("dungeon_chest.png"),
+        "tnt" => bytes!("tnt.png"),
+        "bed" => bytes!("bed.png"),
+        "composter" => bytes!("composter.png"),
+        "lantern" => bytes!("lantern.png"),
+        "iron_lantern" => bytes!("iron_lantern.png"),
+        "gold_lantern" => bytes!("gold_lantern.png"),
+        "cow_spawner" => bytes!("cow_spawner.png"),
+        "pig_spawner" => bytes!("pig_spawner.png"),
+        "sheep_spawner" => bytes!("sheep_spawner.png"),
+        "slime_spawner" => bytes!("slime_spawner.png"),
+        "zombie_spawner" => bytes!("zombie_spawner.png"),
+        "creeper_spawner" => bytes!("creeper_spawner.png"),
+        "skeleton_spawner" => bytes!("skeleton_spawner.png"),
+        "snake_spawner" => bytes!("snake_spawner.png"),
+        "knight_spawner" => bytes!("knight_spawner.png"),
+        "book" => bytes!("book.png"),
+        "antidious_book" => bytes!("antidious_book.png"),
+        "wooden_shovel" => bytes!("wooden_shovel.png"),
+        "stone_shovel" => bytes!("stone_shovel.png"),
+        "iron_shovel" => bytes!("iron_shovel.png"),
+        "gold_shovel" => bytes!("gold_shovel.png"),
+        "gem_shovel" => bytes!("gem_shovel.png"),
+        "wooden_hoe" => bytes!("wooden_hoe.png"),
+        "stone_hoe" => bytes!("stone_hoe.png"),
+        "iron_hoe" => bytes!("iron_hoe.png"),
+        "gold_hoe" => bytes!("gold_hoe.png"),
+        "gem_hoe" => bytes!("gem_hoe.png"),
+        "wooden_sword" => bytes!("wooden_sword.png"),
+        "stone_sword" => bytes!("stone_sword.png"),
+        "iron_sword" => bytes!("iron_sword.png"),
+        "gold_sword" => bytes!("gold_sword.png"),
+        "gem_sword" => bytes!("gem_sword.png"),
+        "wooden_pickaxe" => bytes!("wooden_pickaxe.png"),
+        "stone_pickaxe" => bytes!("stone_pickaxe.png"),
+        "iron_pickaxe" => bytes!("iron_pickaxe.png"),
+        "gold_pickaxe" => bytes!("gold_pickaxe.png"),
+        "gem_pickaxe" => bytes!("gem_pickaxe.png"),
+        "wooden_axe" => bytes!("wooden_axe.png"),
+        "stone_axe" => bytes!("stone_axe.png"),
+        "iron_axe" => bytes!("iron_axe.png"),
+        "gold_axe" => bytes!("gold_axe.png"),
+        "gem_axe" => bytes!("gem_axe.png"),
+        "wooden_bow" => bytes!("wooden_bow.png"),
+        "stone_bow" => bytes!("stone_bow.png"),
+        "iron_bow" => bytes!("iron_bow.png"),
+        "gold_bow" => bytes!("gold_bow.png"),
+        "gem_bow" => bytes!("gem_bow.png"),
+        "wooden_claymore" => bytes!("wooden_claymore.png"),
+        "stone_claymore" => bytes!("stone_claymore.png"),
+        "iron_claymore" => bytes!("iron_claymore.png"),
+        "gold_claymore" => bytes!("gold_claymore.png"),
+        "gem_claymore" => bytes!("gem_claymore.png"),
+        "shears" => bytes!("shears.png"),
+        _ => bytes!("missing_item.png"),
     };
     png(bytes)
 }

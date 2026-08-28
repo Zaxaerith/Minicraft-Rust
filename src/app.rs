@@ -64,7 +64,7 @@ enum State {
     ResourcePacks {
         selection: usize,
     },
-    Playing(World),
+    Playing(Box<World>),
 }
 
 enum Transition {
@@ -188,11 +188,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 );
                 create_world_record(&config.game_dir, seed, spec)?;
                 world_records = load_world_records(&config.game_dir)?;
-                state = State::Playing(World::new_with_options(
+                state = State::Playing(Box::new(World::new_with_options(
                     seed,
                     spec,
                     config.settings.difficulty,
-                ));
+                )));
             }
             Transition::Worlds => {
                 world_records = load_world_records(&config.game_dir)?;
@@ -200,11 +200,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             }
             Transition::LoadWorld(selection) => {
                 let record = &world_records[selection];
-                state = State::Playing(World::new_with_options(
+                state = State::Playing(Box::new(World::new_with_options(
                     record.seed,
                     record.spec,
                     config.settings.difficulty,
-                ));
+                )));
             }
             Transition::Options => state = State::Options { selection: 0 },
             Transition::Controls => {
@@ -403,7 +403,7 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
         })
         .transpose()?
         .unwrap_or(0);
-    let world = World::new_at_depth_with_options(
+    let mut world = World::new_at_depth_with_options(
         0x100,
         depth,
         WorldSpec::new(
@@ -413,6 +413,21 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
         ),
         config.settings.difficulty,
     )?;
+    if arguments.iter().any(|argument| argument == "--entities") {
+        world.populate_entity_preview();
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--workbench-ui")
+    {
+        world.populate_workbench_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--food-ui") {
+        world.populate_food_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--stations") {
+        world.populate_stations_preview();
+    }
     let mut screen = Screen::new();
     screen.clear(0);
     world.render(&mut screen, &assets);

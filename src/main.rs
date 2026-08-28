@@ -4,6 +4,7 @@ mod config;
 mod content;
 mod gfx;
 mod input;
+mod item;
 mod localization;
 mod resource_pack;
 mod world;

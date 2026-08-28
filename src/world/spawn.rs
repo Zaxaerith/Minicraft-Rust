@@ -13,6 +13,35 @@ pub enum NaturalMob {
     Cow,
     Pig,
     Sheep,
+    AirWizard,
+    ObsidianKnight,
+}
+
+impl NaturalMob {
+    pub const ALL: [Self; 11] = [
+        Self::Slime,
+        Self::Zombie,
+        Self::Creeper,
+        Self::Skeleton,
+        Self::Snake,
+        Self::Knight,
+        Self::Cow,
+        Self::Pig,
+        Self::Sheep,
+        Self::AirWizard,
+        Self::ObsidianKnight,
+    ];
+
+    pub fn id(self) -> usize {
+        self as usize
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpawnIntent {
+    pub kind: NaturalMob,
+    pub x: i32,
+    pub y: i32,
 }
 
 pub fn max_mob_count(depth: i8, difficulty: usize) -> usize {
