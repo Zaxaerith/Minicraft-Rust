@@ -1,6 +1,16 @@
 use std::{fs, path::Path};
 
-use crate::{gfx::Image, resource_pack::ResourcePack, world::Tile};
+use crate::{
+    gfx::{Image, Screen},
+    resource_pack::ResourcePack,
+    world::Tile,
+};
+
+struct Connection {
+    border: Image,
+    corner: Option<Image>,
+    singleton: bool,
+}
 
 pub struct Assets {
     pub font: Image,
@@ -8,6 +18,7 @@ pub struct Assets {
     pub skin: Image,
     pub skin_row: usize,
     tiles: Vec<Vec<Image>>,
+    connections: Vec<Option<Connection>>,
     pub warnings: Vec<String>,
 }
 
@@ -36,6 +47,19 @@ impl Assets {
                         .collect::<Result<Vec<_>, _>>()
                 })
                 .collect::<Result<Vec<_>, _>>()?,
+            connections: Tile::ALL
+                .iter()
+                .map(|tile_id| {
+                    let Some((border, corner, singleton)) = connection_names(*tile_id) else {
+                        return Ok(None);
+                    };
+                    Ok(Some(Connection {
+                        border: tile(border)?,
+                        corner: corner.map(tile).transpose()?,
+                        singleton,
+                    }))
+                })
+                .collect::<Result<Vec<_>, String>>()?,
             warnings: Vec::new(),
         };
         for pack in packs {
@@ -60,6 +84,24 @@ impl Assets {
                         &mut assets.warnings,
                     );
                 }
+                if let Some(connection) = &mut assets.connections[tile_id.id() as usize]
+                    && let Some((border, corner, _)) = connection_names(tile_id)
+                {
+                    override_image(
+                        pack,
+                        &format!("assets/textures/tile/{border}.png"),
+                        &mut connection.border,
+                        &mut assets.warnings,
+                    );
+                    if let (Some(name), Some(image)) = (corner, &mut connection.corner) {
+                        override_image(
+                            pack,
+                            &format!("assets/textures/tile/{name}.png"),
+                            image,
+                            &mut assets.warnings,
+                        );
+                    }
+                }
             }
         }
         Ok(assets)
@@ -69,6 +111,61 @@ impl Assets {
         debug_assert_eq!(Tile::from_id(tile.id()), Some(tile));
         let variants = &self.tiles[tile.id() as usize];
         &variants[tile_variant_index(tile, data, variants.len())]
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_tile(
+        &self,
+        screen: &mut Screen,
+        tile: Tile,
+        data: u16,
+        x: i32,
+        y: i32,
+        frame: usize,
+        connected: [bool; 8],
+    ) {
+        let image = self.tile(tile, data);
+        let Some(connection) = &self.connections[tile.id() as usize] else {
+            screen.blit_region(
+                image,
+                x,
+                y,
+                0,
+                frame * 16,
+                16.min(image.width),
+                16.min(image.height),
+                false,
+            );
+            return;
+        };
+        let [
+            up,
+            down,
+            left,
+            right,
+            up_left,
+            down_left,
+            up_right,
+            down_right,
+        ] = connected;
+        let pieces = [
+            quadrant(connection, image, frame, up, left, up_left, 0),
+            quadrant(connection, image, frame, up, right, up_right, 1),
+            quadrant(connection, image, frame, down, left, down_left, 2),
+            quadrant(connection, image, frame, down, right, down_right, 3),
+        ];
+        for (index, (source, source_x, source_y)) in pieces.into_iter().enumerate() {
+            screen.blit_region(
+                source,
+                x + (index % 2) as i32 * 8,
+                y + (index / 2) as i32 * 8,
+                source_x,
+                source_y,
+                8,
+                8,
+                false,
+            );
+        }
     }
 
     pub fn select_skin(&mut self, id: &str, game_dir: &Path) -> Result<(), String> {
@@ -162,22 +259,44 @@ fn tile_variants(tile: Tile) -> Vec<&'static str> {
         Tile::Flower => vec!["flower_shape0", "flower_shape1"],
         Tile::Farmland => vec!["farmland", "farmland_moist"],
         Tile::Wheat => vec![
-            "wheat_stage0", "wheat_stage1", "wheat_stage2", "wheat_stage3",
-            "wheat_stage4", "wheat_stage5",
+            "wheat_stage0",
+            "wheat_stage1",
+            "wheat_stage2",
+            "wheat_stage3",
+            "wheat_stage4",
+            "wheat_stage5",
         ],
         Tile::Potato => vec![
-            "potato_stage0", "potato_stage1", "potato_stage2", "potato_stage3",
-            "potato_stage4", "potato_stage5",
+            "potato_stage0",
+            "potato_stage1",
+            "potato_stage2",
+            "potato_stage3",
+            "potato_stage4",
+            "potato_stage5",
         ],
-        Tile::Tomato => vec!["tomato_stage0", "tomato_stage1", "tomato_stage2", "tomato_stage3"],
-        Tile::Carrot => vec!["carrot_stage0", "carrot_stage1", "carrot_stage2", "carrot_stage3"],
+        Tile::Tomato => vec![
+            "tomato_stage0",
+            "tomato_stage1",
+            "tomato_stage2",
+            "tomato_stage3",
+        ],
+        Tile::Carrot => vec![
+            "carrot_stage0",
+            "carrot_stage1",
+            "carrot_stage2",
+            "carrot_stage3",
+        ],
         Tile::HeavenlyBerries => vec![
-            "heavenly_berries_stage0", "heavenly_berries_stage1",
-            "heavenly_berries_stage2", "heavenly_berries_stage3",
+            "heavenly_berries_stage0",
+            "heavenly_berries_stage1",
+            "heavenly_berries_stage2",
+            "heavenly_berries_stage3",
         ],
         Tile::HellishBerries => vec![
-            "hellish_berries_stage0", "hellish_berries_stage1",
-            "hellish_berries_stage2", "hellish_berries_stage3",
+            "hellish_berries_stage0",
+            "hellish_berries_stage1",
+            "hellish_berries_stage2",
+            "hellish_berries_stage3",
         ],
         Tile::WoodDoor => vec!["wood_door", "wood_door_opened"],
         Tile::StoneDoor => vec!["stone_door", "stone_door_opened"],
@@ -197,12 +316,65 @@ fn tile_variant_index(tile: Tile, data: u16, count: usize) -> usize {
         | Tile::Tomato
         | Tile::Carrot
         | Tile::HeavenlyBerries
-        | Tile::HellishBerries => (((data >> 3) & 7) as usize * (count - 1) / 7),
+        | Tile::HellishBerries => ((data >> 3) & 7) as usize * (count - 1) / 7,
         Tile::WoodDoor | Tile::StoneDoor | Tile::ObsidianDoor | Tile::BossDoor => {
             usize::from(data & 1 != 0).min(count - 1)
         }
         _ => 0,
     }
+}
+
+fn connection_names(tile: Tile) -> Option<(&'static str, Option<&'static str>, bool)> {
+    Some(match tile {
+        Tile::Grass => ("grass_border", None, true),
+        Tile::Sand => ("sand_border", None, true),
+        Tile::Water => ("water_border", None, true),
+        Tile::Lava => ("lava_border", None, true),
+        Tile::Hole => ("hole_border", None, true),
+        Tile::Rock => ("rock_border", Some("rock_corner"), true),
+        Tile::HardRock => ("hardrock_border", Some("hardrock_corner"), true),
+        Tile::Cloud => ("cloud_border", Some("cloud_corner"), true),
+        Tile::Exploded => ("exploded_border", None, false),
+        Tile::WoodWall => ("wood_wall_border", None, false),
+        Tile::StoneWall => ("stone_wall_border", None, false),
+        Tile::ObsidianWall | Tile::BossWall => ("obsidian_wall_border", None, false),
+        _ => return None,
+    })
+}
+
+fn quadrant<'a>(
+    connection: &'a Connection,
+    full: &'a Image,
+    frame: usize,
+    vertical: bool,
+    horizontal: bool,
+    diagonal: bool,
+    corner: usize,
+) -> (&'a Image, usize, usize) {
+    if vertical && horizontal {
+        if !diagonal && let Some(sides) = &connection.corner {
+            return (sides, corner % 2 * 8, corner / 2 * 8);
+        }
+        if connection.singleton || !diagonal {
+            let source_x = if corner.is_multiple_of(2) { 8 } else { 0 };
+            let source_y = frame * 16 + if corner < 2 { 8 } else { 0 };
+            return (full, source_x, source_y);
+        }
+        return (&connection.border, 8, 8);
+    }
+    let source_x = match (corner % 2, horizontal) {
+        (0, false) => 0,
+        (0, true) => 8,
+        (1, true) => 8,
+        _ => 16,
+    };
+    let source_y = match (corner / 2, vertical) {
+        (0, false) => 0,
+        (0, true) => 8,
+        (1, true) => 8,
+        _ => 16,
+    };
+    (&connection.border, source_x, source_y)
 }
 
 fn tile(name: &str) -> Result<Image, String> {
@@ -217,26 +389,34 @@ fn tile(name: &str) -> Result<Image, String> {
     }
     let bytes: &[u8] = match name {
         "grass" => bytes!("grass.png"),
+        "grass_border" => bytes!("grass_border.png"),
         "dirt" => bytes!("dirt.png"),
         "flower_shape0" => bytes!("flower_shape0.png"),
         "flower_shape1" => bytes!("flower_shape1.png"),
         "hole" => bytes!("hole.png"),
+        "hole_border" => bytes!("hole_border.png"),
         "stairs_up" => bytes!("stairs_up.png"),
         "stairs_down" => bytes!("stairs_down.png"),
         "water" => bytes!("water.png"),
+        "water_border" => bytes!("water_border.png"),
         "rock" => bytes!("rock.png"),
+        "rock_border" => bytes!("rock_border.png"),
+        "rock_corner" => bytes!("rock_corner.png"),
         "oak" => bytes!("oak.png"),
         "sapling" => bytes!("sapling.png"),
         "sand" => bytes!("sand.png"),
+        "sand_border" => bytes!("sand_border.png"),
         "cactus" => bytes!("cactus.png"),
         "iron_ore" => bytes!("iron_ore.png"),
         "gold_ore" => bytes!("gold_ore.png"),
         "gem_ore" => bytes!("gem_ore.png"),
         "lapis_ore" => bytes!("lapis_ore.png"),
         "lava" => bytes!("lava.png"),
+        "lava_border" => bytes!("lava_border.png"),
         "missing_tile" => bytes!("missing_tile.png"),
         "stone" => bytes!("stone.png"),
         "exploded" => bytes!("exploded.png"),
+        "exploded_border" => bytes!("exploded_border.png"),
         "farmland" => bytes!("farmland.png"),
         "farmland_moist" => bytes!("farmland_moist.png"),
         "wheat_stage0" => bytes!("wheat_stage0.png"),
@@ -246,8 +426,12 @@ fn tile(name: &str) -> Result<Image, String> {
         "wheat_stage4" => bytes!("wheat_stage4.png"),
         "wheat_stage5" => bytes!("wheat_stage5.png"),
         "hardrock" => bytes!("hardrock.png"),
+        "hardrock_border" => bytes!("hardrock_border.png"),
+        "hardrock_corner" => bytes!("hardrock_corner.png"),
         "cloud_background" => bytes!("cloud_background.png"),
         "cloud" => bytes!("cloud.png"),
+        "cloud_border" => bytes!("cloud_border.png"),
+        "cloud_corner" => bytes!("cloud_corner.png"),
         "cloud_ore" => bytes!("cloud_ore.png"),
         "wood_door" => bytes!("wood_door.png"),
         "wood_door_opened" => bytes!("wood_door_opened.png"),
@@ -259,8 +443,11 @@ fn tile(name: &str) -> Result<Image, String> {
         "stone_floor" => bytes!("stone_floor.png"),
         "obsidian_floor" => bytes!("obsidian_floor.png"),
         "wood_wall" => bytes!("wood_wall.png"),
+        "wood_wall_border" => bytes!("wood_wall_border.png"),
         "stone_wall" => bytes!("stone_wall.png"),
+        "stone_wall_border" => bytes!("stone_wall_border.png"),
         "obsidian_wall" => bytes!("obsidian_wall.png"),
+        "obsidian_wall_border" => bytes!("obsidian_wall_border.png"),
         "white_wool" => bytes!("white_wool.png"),
         "path" => bytes!("path.png"),
         "red_wool" => bytes!("red_wool.png"),

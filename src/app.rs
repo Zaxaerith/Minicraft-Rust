@@ -35,6 +35,9 @@ enum State {
     PlayMenu {
         selection: usize,
     },
+    NewWorld {
+        selection: usize,
+    },
     Worlds {
         selection: usize,
     },
@@ -68,6 +71,7 @@ enum Transition {
     None,
     Title,
     PlayMenu,
+    NewWorld,
     CreateWorld,
     Worlds,
     LoadWorld(usize),
@@ -136,6 +140,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 result.0
             }
             State::PlayMenu { selection } => tick_play_menu(selection, &input),
+            State::NewWorld { selection } => {
+                let result = tick_new_world(selection, &input, &mut config.settings);
+                settings_changed = result.1;
+                result.0
+            }
             State::Worlds { selection } => tick_worlds(selection, &input, world_records.len()),
             State::Help { selection } => tick_help(selection, &input),
             State::Book { page, book } => tick_book(*book, page, &input),
@@ -169,6 +178,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 };
             }
             Transition::PlayMenu => state = State::PlayMenu { selection: 0 },
+            Transition::NewWorld => state = State::NewWorld { selection: 0 },
             Transition::CreateWorld => {
                 let seed = random_seed();
                 let spec = WorldSpec::new(
@@ -178,7 +188,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 );
                 create_world_record(&config.game_dir, seed, spec)?;
                 world_records = load_world_records(&config.game_dir)?;
-                state = State::Playing(World::new_with_spec(seed, spec));
+                state = State::Playing(World::new_with_options(
+                    seed,
+                    spec,
+                    config.settings.difficulty,
+                ));
             }
             Transition::Worlds => {
                 world_records = load_world_records(&config.game_dir)?;
@@ -186,7 +200,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             }
             Transition::LoadWorld(selection) => {
                 let record = &world_records[selection];
-                state = State::Playing(World::new_with_spec(record.seed, record.spec));
+                state = State::Playing(World::new_with_options(
+                    record.seed,
+                    record.spec,
+                    config.settings.difficulty,
+                ));
             }
             Transition::Options => state = State::Options { selection: 0 },
             Transition::Controls => {
@@ -309,6 +327,13 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             State::PlayMenu { selection } => {
                 render_play_menu(&mut screen, &assets, world_records.len(), *selection)
             }
+            State::NewWorld { selection } => render_new_world(
+                &mut screen,
+                &assets,
+                &localization,
+                &config.settings,
+                *selection,
+            ),
             State::Worlds { selection } => {
                 render_worlds(&mut screen, &assets, &world_records, *selection)
             }
@@ -378,7 +403,16 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
         })
         .transpose()?
         .unwrap_or(0);
-    let world = World::new_at_depth(0x100, depth)?;
+    let world = World::new_at_depth_with_options(
+        0x100,
+        depth,
+        WorldSpec::new(
+            config.settings.world_size,
+            config.settings.theme,
+            config.settings.terrain_type,
+        ),
+        config.settings.difficulty,
+    )?;
     let mut screen = Screen::new();
     screen.clear(0);
     world.render(&mut screen, &assets);
@@ -397,6 +431,7 @@ pub fn render_ui_preview(arguments: &[String], name: &str, output: &Path) -> Res
     screen.clear(0x08080C);
     match name {
         "play" => render_play_menu(&mut screen, &assets, worlds.len(), 0),
+        "new-world" => render_new_world(&mut screen, &assets, &localization, &config.settings, 0),
         "worlds" => render_worlds(&mut screen, &assets, &worlds, 0),
         "help" => render_help(&mut screen, &assets, 0),
         "book" => render_book(&mut screen, &assets, Book::Instructions, 0),
@@ -406,7 +441,7 @@ pub fn render_ui_preview(arguments: &[String], name: &str, output: &Path) -> Res
         "controls" => render_controls(&mut screen, &assets, &config.settings.key_bindings, 0, None),
         _ => {
             return Err(format!(
-                "unknown UI preview {name}; use play, worlds, help, book, achievements, or controls"
+                "unknown UI preview {name}; use play, new-world, worlds, help, book, achievements, or controls"
             ));
         }
     }
@@ -445,12 +480,57 @@ fn tick_play_menu(selection: &mut usize, input: &Input) -> Transition {
     navigate(selection, input, COUNT);
     if input.select {
         match *selection {
-            0 => Transition::CreateWorld,
+            0 => Transition::NewWorld,
             1 => Transition::Worlds,
             _ => Transition::Title,
         }
     } else {
         Transition::None
+    }
+}
+
+fn tick_new_world(
+    selection: &mut usize,
+    input: &Input,
+    settings: &mut Settings,
+) -> (Transition, bool) {
+    const COUNT: usize = 5;
+    if input.exit {
+        return (Transition::PlayMenu, false);
+    }
+    navigate(selection, input, COUNT);
+    let direction = i32::from(input.right_pressed) - i32::from(input.left_pressed);
+    let mut changed = false;
+    if direction != 0 {
+        match *selection {
+            0 => {
+                let sizes = [128, 256, 512];
+                let current = sizes
+                    .iter()
+                    .position(|size| *size == settings.world_size)
+                    .unwrap_or(0);
+                settings.world_size = sizes[wrap(current, direction, sizes.len())];
+                changed = true;
+            }
+            1 => {
+                settings.theme = wrap(settings.theme, direction, 5);
+                changed = true;
+            }
+            2 => {
+                settings.terrain_type = wrap(settings.terrain_type, direction, 4);
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+    if input.select {
+        match *selection {
+            3 => (Transition::CreateWorld, changed),
+            4 => (Transition::PlayMenu, changed),
+            _ => (Transition::None, changed),
+        }
+    } else {
+        (Transition::None, changed)
     }
 }
 
@@ -460,7 +540,7 @@ fn tick_worlds(selection: &mut usize, input: &Input, count: usize) -> Transition
     }
     if count == 0 {
         return if input.select {
-            Transition::CreateWorld
+            Transition::NewWorld
         } else {
             Transition::None
         };
@@ -785,6 +865,52 @@ fn render_play_menu(screen: &mut Screen, assets: &Assets, world_count: usize, se
     screen.centered_text(&assets.font, "WORLD STATE SAVING: PHASE 7", 155);
 }
 
+fn render_new_world(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    settings: &Settings,
+    selection: usize,
+) {
+    const THEME_KEYS: [&str; 5] = [
+        "minicraft.settings.theme.normal",
+        "minicraft.settings.theme.forest",
+        "minicraft.settings.theme.desert",
+        "minicraft.settings.theme.plain",
+        "minicraft.settings.theme.hell",
+    ];
+    const TYPE_KEYS: [&str; 4] = [
+        "minicraft.settings.type.island",
+        "minicraft.settings.type.box",
+        "minicraft.settings.type.mountain",
+        "minicraft.settings.type.irregular",
+    ];
+    screen.centered_text(&assets.font, "NEW WORLD", 18);
+    let labels = ["SIZE", "THEME", "TERRAIN", "CREATE", "BACK"];
+    let values = [
+        settings.world_size.to_string(),
+        localization.text(THEME_KEYS[settings.theme]).to_owned(),
+        localization
+            .text(TYPE_KEYS[settings.terrain_type])
+            .to_owned(),
+        String::new(),
+        String::new(),
+    ];
+    for index in 0..labels.len() {
+        let y = 48 + index as i32 * 22;
+        if index == selection {
+            screen.rect(18, y - 2, WIDTH as i32 - 36, 11, 0x27334D);
+            screen.text(&assets.font, ">", 22, y);
+        }
+        screen.text(&assets.font, labels[index], 38, y);
+        if !values[index].is_empty() {
+            let x = WIDTH as i32 - 24 - values[index].chars().count() as i32 * 8;
+            screen.text(&assets.font, &values[index], x, y);
+        }
+    }
+    screen.centered_text(&assets.font, "LEFT RIGHT TO CHANGE", HEIGHT as i32 - 12);
+}
+
 fn render_worlds(screen: &mut Screen, assets: &Assets, worlds: &[WorldRecord], selection: usize) {
     screen.centered_text(&assets.font, "SELECT WORLD", 13);
     if worlds.is_empty() {
@@ -802,9 +928,9 @@ fn render_worlds(screen: &mut Screen, assets: &Assets, worlds: &[WorldRecord], s
                 screen.text(&assets.font, ">", 29, y);
             }
             screen.text(&assets.font, &world.name, 41, y);
-            let seed = format!("{}", world.seed);
-            let x = WIDTH as i32 - 29 - seed.chars().count() as i32 * 8;
-            screen.text(&assets.font, &seed, x, y);
+            let summary = format!("{} T{}", world.spec.size, world.spec.theme.index());
+            let x = WIDTH as i32 - 29 - summary.chars().count() as i32 * 8;
+            screen.text(&assets.font, &summary, x, y);
         }
     }
     screen.centered_text(&assets.font, "SEED-BASED WORLD RECORDS", HEIGHT as i32 - 12);

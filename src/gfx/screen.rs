@@ -118,26 +118,34 @@ impl Screen {
         self.text(font, message, x, y);
     }
 
-    pub fn darken_outside(&mut self, center_x: i32, center_y: i32, radius: i32, alpha: u8) {
-        if alpha == 0 || radius <= 0 {
+    pub fn darken_with_lights(&mut self, lights: &[(i32, i32, i32)], alpha: u8) {
+        if alpha == 0 || lights.is_empty() {
             return;
         }
-        let inner = radius / 2;
-        let inner_squared = inner * inner;
-        let outer_squared = radius * radius;
-        let span = (outer_squared - inner_squared).max(1);
         for y in 0..HEIGHT as i32 {
             for x in 0..WIDTH as i32 {
-                let dx = x - center_x;
-                let dy = y - center_y;
-                let distance = dx * dx + dy * dy;
-                let local_alpha = if distance <= inner_squared {
-                    0
-                } else if distance >= outer_squared {
-                    alpha as i32
-                } else {
-                    alpha as i32 * (distance - inner_squared) / span
-                } as u32;
+                let mut local_alpha = alpha as i32;
+                for &(center_x, center_y, radius) in lights {
+                    if radius <= 0 {
+                        continue;
+                    }
+                    let inner = radius / 2;
+                    let inner_squared = inner * inner;
+                    let outer_squared = radius * radius;
+                    let dx = x - center_x;
+                    let dy = y - center_y;
+                    let distance = dx * dx + dy * dy;
+                    let candidate = if distance <= inner_squared {
+                        0
+                    } else if distance >= outer_squared {
+                        alpha as i32
+                    } else {
+                        alpha as i32 * (distance - inner_squared)
+                            / (outer_squared - inner_squared).max(1)
+                    };
+                    local_alpha = local_alpha.min(candidate);
+                }
+                let local_alpha = local_alpha as u32;
                 if local_alpha == 0 {
                     continue;
                 }
@@ -176,4 +184,19 @@ fn blend(background: u32, foreground: u32, alpha: u8) -> u32 {
     let green = (((foreground >> 8) & 255) * alpha + ((background >> 8) & 255) * inverse) / 255;
     let blue = ((foreground & 255) * alpha + (background & 255) * inverse) / 255;
     (red << 16) | (green << 8) | blue
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HEIGHT, Screen, WIDTH};
+
+    #[test]
+    fn multiple_light_sources_preserve_each_lit_center() {
+        let mut screen = Screen::new();
+        screen.clear(0xFF_FF_FF);
+        screen.darken_with_lights(&[(40, 40, 24), (240, 140, 32)], 200);
+        assert_eq!(screen.pixels[40 + 40 * WIDTH], 0xFF_FF_FF);
+        assert_eq!(screen.pixels[240 + 140 * WIDTH], 0xFF_FF_FF);
+        assert!(screen.pixels[(WIDTH / 2) + (HEIGHT / 2) * WIDTH] < 0x80_80_80);
+    }
 }

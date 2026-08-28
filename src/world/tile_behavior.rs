@@ -1,11 +1,6 @@
 use super::{Level, Tile, random::JavaRandom};
 
-pub fn tick_random_tiles(
-    level: &mut Level,
-    width: usize,
-    height: usize,
-    random: &mut JavaRandom,
-) {
+pub fn tick_random_tiles(level: &mut Level, width: usize, height: usize, random: &mut JavaRandom) {
     for _ in 0..width * height / 50 {
         let x = random.next_int(width as i32) as usize;
         let y = random.next_int(height as i32) as usize;
@@ -68,6 +63,7 @@ fn tick(
         | Tile::HeavenlyBerries
         | Tile::HellishBerries => tick_crop(level, width, height, x, y, random),
         Tile::Rock
+        | Tile::Tree
         | Tile::HardRock
         | Tile::Cactus
         | Tile::WoodWall
@@ -110,30 +106,102 @@ fn tick_crop(
 ) {
     let index = x + y * width;
     let mut data = level.data[index];
-    let mut moisture = data & 7;
+    let moisture = data & 7;
     if has_water(level, width, height, x, y, 4) {
         if moisture < 7 && random.next_int(10) == 0 {
-            moisture += 1;
+            // 2.2.4 assigns the value of moisture++ (the old value).
             data = (data & !7) | moisture;
         }
     } else if moisture > 0 && random.next_int(10) == 0 {
-        moisture -= 1;
+        // Likewise, moisture-- stores the old value in the Java baseline.
         data = (data & !7) | moisture;
     }
 
     let stage = (data >> 3) & 7;
     let fertilization = data >> 7;
     if stage < 7 {
-        let points = if moisture > 0 { 4 } else { 2 };
-        let bound = 100 / points + 1;
+        let mut points = if moisture > 0 { 4.0 } else { 2.0 };
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let Some(adjacent) = at(width, height, x, y, dx, dy) else {
+                    continue;
+                };
+                if is_farm(level.tiles[adjacent]) {
+                    points += if level.data[adjacent] & 7 > 0 {
+                        0.75
+                    } else {
+                        0.25
+                    };
+                }
+            }
+        }
+
+        let same = |dx, dy| {
+            at(width, height, x, y, dx, dy)
+                .is_some_and(|adjacent| level.tiles[adjacent] == level.tiles[index])
+        };
+        let up = same(0, -1);
+        let down = same(0, 1);
+        let left = same(-1, 0);
+        let right = same(1, 0);
+        let up_left = same(-1, -1);
+        let down_left = same(-1, 1);
+        let up_right = same(1, -1);
+        let down_right = same(1, 1);
+        if up && down && left && right && up_left && down_left && up_right && down_right {
+            points /= 2.0;
+        } else {
+            if up && down && left && right {
+                points *= 0.75;
+            }
+            if (up && down && (left || right)) || (up && left && right) || (down && left && right) {
+                points *= 0.85;
+            }
+            if (up_left && (down_right || down_left || up_right))
+                || (down_left && (up_right || down_right))
+                || (up_right && down_right)
+            {
+                points *= 0.9;
+            }
+            for diagonal in [up_left, down_left, up_right, down_right] {
+                if diagonal {
+                    points *= 0.98125;
+                }
+            }
+        }
+
+        let bound = (100.0 / points) as i32 + 1;
         if random.next_int(bound) < (fertilization / 30 + 1) as i32 {
             data = (data & !(7 << 3)) | ((stage + 1) << 3);
         }
     }
     if fertilization > 0 {
-        data = (data & 0x7f) | ((fertilization - 1) << 7);
+        data = (data & 0x3f) | ((fertilization - 1) << 7);
     }
     level.data[index] = data;
+}
+
+fn is_farm(tile: Tile) -> bool {
+    matches!(
+        tile,
+        Tile::Farmland
+            | Tile::Wheat
+            | Tile::Potato
+            | Tile::Tomato
+            | Tile::Carrot
+            | Tile::HeavenlyBerries
+            | Tile::HellishBerries
+    )
+}
+
+fn at(width: usize, height: usize, x: usize, y: usize, dx: i32, dy: i32) -> Option<usize> {
+    let xx = x as i32 + dx;
+    let yy = y as i32 + dy;
+    (xx >= 0 && yy >= 0 && xx < width as i32 && yy < height as i32)
+        .then_some(xx as usize + yy as usize * width)
 }
 
 fn has_water(
@@ -148,9 +216,7 @@ fn has_water(
     let right = (x + radius).min(width - 1);
     let top = y.saturating_sub(radius);
     let bottom = (y + radius).min(height - 1);
-    (top..=bottom).any(|yy| {
-        (left..=right).any(|xx| level.tiles[xx + yy * width] == Tile::Water)
-    })
+    (top..=bottom).any(|yy| (left..=right).any(|xx| level.tiles[xx + yy * width] == Tile::Water))
 }
 
 fn random_adjacent(
@@ -197,6 +263,8 @@ mod tests {
             depth: 0,
             tiles: vec![Tile::Grass; 9],
             data: vec![0; 9],
+            max_mob_count: 200,
+            pending_spawns: Vec::new(),
         };
         level.tiles[4] = Tile::Water;
         level.tiles[5] = Tile::Lava;
@@ -210,9 +278,26 @@ mod tests {
             depth: 0,
             tiles: vec![Tile::TreeSapling],
             data: vec![110],
+            max_mob_count: 200,
+            pending_spawns: Vec::new(),
         };
         tick(&mut level, 1, 1, 0, 0, &mut JavaRandom::new(1));
         assert_eq!(level.tiles[0], Tile::Tree);
         assert_eq!(level.data[0], 0);
+    }
+
+    #[test]
+    fn crop_data_keeps_java_stage_and_fertilizer_bit_layout() {
+        let mut level = Level {
+            depth: 0,
+            tiles: vec![Tile::Wheat],
+            data: vec![(7 << 3) | (2 << 7)],
+            max_mob_count: 200,
+            pending_spawns: Vec::new(),
+        };
+        tick(&mut level, 1, 1, 0, 0, &mut JavaRandom::new(1));
+        assert_eq!(level.data[0] & 7, 0);
+        assert_eq!((level.data[0] >> 3) & 7, 7);
+        assert_eq!(level.data[0] >> 7, 1);
     }
 }

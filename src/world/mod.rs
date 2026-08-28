@@ -1,5 +1,7 @@
 mod generation;
 mod random;
+pub mod spawn;
+mod structure;
 mod tile_behavior;
 
 use crate::{
@@ -226,6 +228,67 @@ impl Tile {
         Self::ALL.get(id as usize).copied()
     }
 
+    #[allow(dead_code)] // Consumed by the Java-save importer scheduled for phase 7.
+    pub fn from_legacy_id(id: u16) -> Option<(Self, u16)> {
+        let plain = |tile| Some((tile, 0));
+        match id {
+            0 | 100 => plain(Self::Grass),
+            1 => plain(Self::Rock),
+            2 | 104 => plain(Self::Water),
+            3 | 107 => plain(Self::Flower),
+            4 | 102 => plain(Self::Tree),
+            5 | 105 => plain(Self::Dirt),
+            6 | 101 => plain(Self::Sand),
+            7 | 103 => plain(Self::Cactus),
+            8 | 119 => plain(Self::Hole),
+            9 | 64 => plain(Self::TreeSapling),
+            10 | 65 => plain(Self::CactusSapling),
+            11 => plain(Self::Farmland),
+            12 => plain(Self::Wheat),
+            13 => plain(Self::Lava),
+            14 | 109 => plain(Self::StairsDown),
+            15 | 108 => plain(Self::StairsUp),
+            16 => plain(Self::InfiniteFall),
+            17 => plain(Self::Cloud),
+            18 => plain(Self::HardRock),
+            19 => plain(Self::IronOre),
+            20 => plain(Self::GoldOre),
+            21 => plain(Self::GemOre),
+            22 => plain(Self::CloudOre),
+            24 => plain(Self::LapisOre),
+            30 => plain(Self::Exploded),
+            31 | 110 => plain(Self::WoodFloor),
+            32 | 111 => plain(Self::StoneFloor),
+            33 => plain(Self::WoodWall),
+            34 => plain(Self::StoneWall),
+            35 | 36 | 112 | 113 => plain(Self::WoodDoor),
+            37 | 38 | 114 | 115 => plain(Self::StoneDoor),
+            39 => plain(Self::LavaBrick),
+            41 | 57 => plain(Self::WhiteWool),
+            42 | 58 => plain(Self::RedWool),
+            43 | 59 => plain(Self::BlueWool),
+            45 | 60 => plain(Self::GreenWool),
+            56 | 62 => plain(Self::BlackWool),
+            61 | 127 => plain(Self::YellowWool),
+            63 | 120 => plain(Self::ObsidianFloor),
+            121 => plain(Self::ObsidianWall),
+            122 | 123 | 116 | 117 => plain(Self::ObsidianDoor),
+            40 => Some((Self::Torch, Self::Sand.id() as u16)),
+            44 => Some((Self::Torch, Self::Grass.id() as u16)),
+            46 => Some((Self::Torch, Self::Dirt.id() as u16)),
+            47 => Some((Self::Torch, Self::WoodFloor.id() as u16)),
+            48 => Some((Self::Torch, Self::StoneFloor.id() as u16)),
+            49 => Some((Self::Torch, Self::ObsidianFloor.id() as u16)),
+            50 => Some((Self::Torch, Self::WhiteWool.id() as u16)),
+            51 => Some((Self::Torch, Self::RedWool.id() as u16)),
+            52 => Some((Self::Torch, Self::BlueWool.id() as u16)),
+            53 => Some((Self::Torch, Self::GreenWool.id() as u16)),
+            54 => Some((Self::Torch, Self::YellowWool.id() as u16)),
+            55 => Some((Self::Torch, Self::BlackWool.id() as u16)),
+            _ => None,
+        }
+    }
+
     pub fn asset_name(self) -> &'static str {
         const ASSETS: [&str; 59] = [
             "grass",
@@ -291,7 +354,13 @@ impl Tile {
         ASSETS[self.id() as usize]
     }
 
-    fn solid(self) -> bool {
+    fn solid(self, data: u16) -> bool {
+        if matches!(
+            self,
+            Self::WoodDoor | Self::StoneDoor | Self::ObsidianDoor | Self::BossDoor
+        ) {
+            return data == 0;
+        }
         matches!(
             self,
             Self::Rock
@@ -302,25 +371,24 @@ impl Tile {
                 | Self::CloudOre
                 | Self::Tree
                 | Self::Cactus
-                | Self::LavaBrick
                 | Self::HardRock
                 | Self::InfiniteFall
-                | Self::RawStone
-                | Self::RawObsidian
-                | Self::OrnateStone
-                | Self::OrnateObsidian
                 | Self::WoodWall
                 | Self::StoneWall
                 | Self::ObsidianWall
                 | Self::BossWall
-                | Self::WoodDoor
-                | Self::StoneDoor
-                | Self::ObsidianDoor
-                | Self::BossDoor
                 | Self::WoodFence
                 | Self::StoneFence
                 | Self::ObsidianFence
         )
+    }
+
+    fn light_radius(self) -> i32 {
+        match self {
+            Self::Lava => 6,
+            Self::Torch => 5,
+            _ => 0,
+        }
     }
 }
 
@@ -346,6 +414,8 @@ struct Level {
     depth: i8,
     tiles: Vec<Tile>,
     data: Vec<u16>,
+    max_mob_count: usize,
+    pending_spawns: Vec<spawn::NaturalMob>,
 }
 
 pub enum WorldAction {
@@ -371,20 +441,29 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(seed: i64) -> Self {
-        Self::new_with_spec(seed, WorldSpec::default())
-    }
-
-    pub fn new_with_spec(seed: i64, spec: WorldSpec) -> Self {
+    pub fn new_with_options(seed: i64, spec: WorldSpec, difficulty: usize) -> Self {
         let size = spec.size;
         let mut levels: Vec<Level> = [1, 0, -1, -2, -3, -4]
             .into_iter()
-            .map(|depth| Level {
-                depth,
-                tiles: generation::level(size, size, depth, seed, spec),
-                data: vec![0; size * size],
+            .map(|depth| {
+                let generated = generation::level(size, size, depth, seed, spec);
+                Level {
+                    depth,
+                    tiles: generated.tiles,
+                    data: generated.data,
+                    max_mob_count: spawn::max_mob_count(depth, difficulty),
+                    pending_spawns: Vec::new(),
+                }
             })
             .collect();
+        for level in &mut levels {
+            structure::decorate(level, size, size, seed);
+            for (tile, data) in level.tiles.iter().zip(&mut level.data) {
+                if *tile != Tile::Flower {
+                    *data = 0;
+                }
+            }
+        }
         let mut down_stairs: Vec<Vec<usize>> = levels
             .iter()
             .map(|level| {
@@ -398,7 +477,7 @@ impl World {
             .collect();
         for upper in 0..levels.len() - 1 {
             let stairs = down_stairs[upper].clone();
-            for index in stairs {
+            for &index in &stairs {
                 if levels[upper + 1].tiles[index] == Tile::StairsDown
                     && let Some(replacement) =
                         find_stair_site(&levels[upper + 1].tiles, size, size, index)
@@ -411,7 +490,17 @@ impl World {
                         *saved = replacement;
                     }
                 }
-                levels[upper + 1].tiles[index] = Tile::StairsUp;
+            }
+            structure::link_from_parent(&mut levels[upper + 1], size, size, &stairs);
+            for saved in &mut down_stairs[upper + 1] {
+                if levels[upper + 1].tiles[*saved] != Tile::StairsDown
+                    && let Some(replacement) =
+                        find_stair_site(&levels[upper + 1].tiles, size, size, *saved)
+                {
+                    levels[upper + 1].tiles[replacement] = Tile::StairsDown;
+                    levels[upper + 1].data[replacement] = 0;
+                    *saved = replacement;
+                }
             }
         }
         let current_level = 1;
@@ -438,12 +527,17 @@ impl World {
             pause_selection: 0,
             inventory_open: false,
             notification: Some(("A NEW WORLD AWAKENS".to_owned(), 150)),
-            random: random::JavaRandom::new(seed ^ 0x5EED_224),
+            random: random::JavaRandom::new(seed ^ 0x05EE_D224),
         }
     }
 
-    pub fn new_at_depth(seed: i64, depth: i8) -> Result<Self, String> {
-        let mut world = Self::new(seed);
+    pub fn new_at_depth_with_options(
+        seed: i64,
+        depth: i8,
+        spec: WorldSpec,
+        difficulty: usize,
+    ) -> Result<Self, String> {
+        let mut world = Self::new_with_options(seed, spec, difficulty);
         let index = world
             .levels
             .iter()
@@ -501,6 +595,16 @@ impl World {
             self.height,
             &mut self.random,
         );
+        try_queue_natural_spawn(
+            &mut self.levels[self.current_level],
+            self.width,
+            self.height,
+            self.player.x,
+            self.player.y,
+            self.day_tick,
+            self.days,
+            &mut self.random,
+        );
         if let Some((_, remaining)) = &mut self.notification {
             *remaining = remaining.saturating_sub(1);
             if *remaining == 0 {
@@ -543,6 +647,12 @@ impl World {
         if self.tick.is_multiple_of(90) && self.player.stamina < 10 {
             self.player.stamina += 1;
         }
+        if self.tile_at_pixel(self.player.x, self.player.y) == Tile::Lava
+            && self.tick.is_multiple_of(30)
+        {
+            self.player.health = self.player.health.saturating_sub(1);
+            self.notification = Some(("THE LAVA BURNS".to_owned(), 45));
+        }
         WorldAction::None
     }
 
@@ -560,20 +670,27 @@ impl World {
     fn can_stand(&self, x: i32, y: i32) -> bool {
         [(-4, -3), (4, -3), (-4, 4), (4, 4)]
             .into_iter()
-            .all(|(offset_x, offset_y)| !self.tile_at_pixel(x + offset_x, y + offset_y).solid())
+            .all(|(offset_x, offset_y)| {
+                let (tile, data) = self.tile_and_data_at_pixel(x + offset_x, y + offset_y);
+                !tile.solid(data)
+            })
     }
 
     fn tile_at_pixel(&self, x: i32, y: i32) -> Tile {
+        self.tile_and_data_at_pixel(x, y).0
+    }
+
+    fn tile_and_data_at_pixel(&self, x: i32, y: i32) -> (Tile, u16) {
         let tile_x = (x / TILE_SIZE).clamp(0, self.width as i32 - 1) as usize;
         let tile_y = (y / TILE_SIZE).clamp(0, self.height as i32 - 1) as usize;
-        self.levels[self.current_level].tiles[tile_x + tile_y * self.width]
+        let index = tile_x + tile_y * self.width;
+        (
+            self.levels[self.current_level].tiles[index],
+            self.levels[self.current_level].data[index],
+        )
     }
 
     fn attack(&mut self) {
-        if self.player.stamina == 0 {
-            self.notification = Some(("TOO EXHAUSTED".to_owned(), 60));
-            return;
-        }
         let (offset_x, offset_y) = match self.player.direction {
             Direction::Down => (0, 12),
             Direction::Up => (0, -12),
@@ -586,11 +703,84 @@ impl World {
             return;
         }
         let index = tile_x as usize + tile_y as usize * self.width;
-        if self.levels[self.current_level].tiles[index] == Tile::Tree {
-            self.levels[self.current_level].tiles[index] = Tile::Grass;
-            self.player.wood += 1;
-            self.player.stamina -= 1;
-            self.notification = Some(("WOOD +1".to_owned(), 60));
+        let damage = (self.random.next_int(3) + 1) as u16;
+        match self.levels[self.current_level].tiles[index] {
+            Tile::Tree => {
+                let total = self.levels[self.current_level].data[index] + damage;
+                if total >= 20 {
+                    self.levels[self.current_level].tiles[index] = Tile::Grass;
+                    self.levels[self.current_level].data[index] = 0;
+                    let wood = (self.random.next_int(3) + 1) as u16;
+                    self.player.wood += wood;
+                    self.notification = Some((format!("WOOD +{wood}"), 60));
+                } else {
+                    self.levels[self.current_level].data[index] = total;
+                    self.notification = Some((format!("TREE {total}/20"), 30));
+                }
+            }
+            Tile::WoodDoor | Tile::StoneDoor | Tile::ObsidianDoor => {
+                self.levels[self.current_level].data[index] ^= 1;
+                self.notification = Some(("DOOR TOGGLED".to_owned(), 30));
+            }
+            Tile::Cactus => {
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    10,
+                    Tile::Sand,
+                );
+            }
+            Tile::Rock => {
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    50,
+                    Tile::Dirt,
+                );
+            }
+            Tile::HardRock => {
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    200,
+                    Tile::Dirt,
+                );
+            }
+            Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => {
+                let replacement = match self.levels[self.current_level].tiles[index] {
+                    Tile::WoodWall => Tile::WoodFloor,
+                    Tile::StoneWall => Tile::StoneFloor,
+                    _ => Tile::ObsidianFloor,
+                };
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    100,
+                    replacement,
+                );
+            }
+            Tile::IronOre | Tile::GoldOre | Tile::GemOre | Tile::LapisOre | Tile::CloudOre => {
+                let replacement = if self.levels[self.current_level].tiles[index] == Tile::CloudOre
+                {
+                    Tile::Cloud
+                } else {
+                    Tile::Dirt
+                };
+                let health = (self.random.next_int(10) * 4 + 20) as u16;
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    health,
+                    replacement,
+                );
+                let _drop_count_roll = self.random.next_int(2);
+            }
+            _ => {}
         }
     }
 
@@ -619,6 +809,7 @@ impl World {
         let first_y = camera_y / TILE_SIZE;
         let last_x = ((camera_x + WIDTH as i32) / TILE_SIZE + 1).min(self.width as i32);
         let last_y = ((camera_y + HEIGHT as i32) / TILE_SIZE + 1).min(self.height as i32);
+        let mut lights = vec![(self.player.x - camera_x, self.player.y - camera_y, 5 * 8)];
 
         for tile_y in first_y..last_y {
             for tile_x in first_x..last_x {
@@ -629,16 +820,54 @@ impl World {
                 let image = assets.tile(tile, data);
                 let frame_count = (image.height / 16).max(1);
                 let frame = (self.tick as usize / 12) % frame_count;
-                screen.blit_region(
-                    image,
+                for underlay in underlay_layers(tile, data, self.levels[self.current_level].depth)
+                    .into_iter()
+                    .flatten()
+                {
+                    let underlay_image = assets.tile(underlay, 0);
+                    let underlay_frames = (underlay_image.height / 16).max(1);
+                    assets.render_tile(
+                        screen,
+                        underlay,
+                        0,
+                        tile_x * TILE_SIZE - camera_x,
+                        tile_y * TILE_SIZE - camera_y,
+                        (self.tick as usize / 12) % underlay_frames,
+                        connection_mask(
+                            &self.levels[self.current_level].tiles,
+                            self.width,
+                            self.height,
+                            tile_x as usize,
+                            tile_y as usize,
+                            underlay,
+                        ),
+                    );
+                }
+                let connected = connection_mask(
+                    &self.levels[self.current_level].tiles,
+                    self.width,
+                    self.height,
+                    tile_x as usize,
+                    tile_y as usize,
+                    tile,
+                );
+                assets.render_tile(
+                    screen,
+                    tile,
+                    data,
                     tile_x * TILE_SIZE - camera_x,
                     tile_y * TILE_SIZE - camera_y,
-                    0,
-                    frame * 16,
-                    16.min(image.width),
-                    16.min(image.height),
-                    false,
+                    frame,
+                    connected,
                 );
+                let light_radius = tile.light_radius();
+                if light_radius > 0 {
+                    lights.push((
+                        tile_x * TILE_SIZE + 8 - camera_x,
+                        tile_y * TILE_SIZE + 8 - camera_y,
+                        light_radius * 8,
+                    ));
+                }
             }
         }
 
@@ -668,12 +897,7 @@ impl World {
         } else {
             176
         };
-        screen.darken_outside(
-            self.player.x - camera_x,
-            self.player.y - camera_y,
-            if depth == 0 { 72 } else { 58 },
-            darkness,
-        );
+        screen.darken_with_lights(&lights, darkness);
 
         render_hud(
             screen,
@@ -696,6 +920,70 @@ impl World {
             render_pause(screen, assets, self.pause_selection);
         }
     }
+}
+
+fn damage_tile(level: &mut Level, index: usize, damage: u16, health: u16, replacement: Tile) {
+    let total = level.data[index].saturating_add(damage);
+    if total >= health {
+        level.tiles[index] = replacement;
+        level.data[index] = 0;
+    } else {
+        level.data[index] = total;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_queue_natural_spawn(
+    level: &mut Level,
+    width: usize,
+    height: usize,
+    player_x: i32,
+    player_y: i32,
+    day_tick: u32,
+    days: u32,
+    random: &mut random::JavaRandom,
+) {
+    if level.pending_spawns.len() >= level.max_mob_count {
+        return;
+    }
+    let skip = spawn::spawn_skip_chance(level.pending_spawns.len(), level.max_mob_count);
+    if skip > 0 && random.next_int(skip.min(i32::MAX as usize) as i32) != 0 {
+        return;
+    }
+    for _ in 0..30 {
+        let roll = random.next_int(100);
+        let x = random.next_int(width as i32) as usize;
+        let y = random.next_int(height as i32) as usize;
+        let pixel_x = x as i32 * TILE_SIZE + 8;
+        let pixel_y = y as i32 * TILE_SIZE + 8;
+        let dx = pixel_x - player_x;
+        let dy = pixel_y - player_y;
+        if dx * dx + dy * dy < 160 * 160 {
+            continue;
+        }
+        let tile = level.tiles[x + y * width];
+        let lit = torch_lit(&level.tiles, width, height, x, y);
+        if spawn::hostile_allowed(level.depth, day_tick, days, tile, lit) {
+            level
+                .pending_spawns
+                .push(spawn::choose_hostile(level.depth, roll));
+            return;
+        }
+        if spawn::passive_allowed(level.depth, tile) {
+            level
+                .pending_spawns
+                .push(spawn::choose_passive(day_tick >= 48_600, roll));
+            return;
+        }
+    }
+}
+
+fn torch_lit(tiles: &[Tile], width: usize, height: usize, x: usize, y: usize) -> bool {
+    let left = x.saturating_sub(3);
+    let right = (x + 3).min(width - 1);
+    let top = y.saturating_sub(3);
+    let bottom = (y + 3).min(height - 1);
+    (top..=bottom).any(|yy| (left..=right).any(|xx| tiles[xx + yy * width] == Tile::Torch))
 }
 
 fn render_hud(
@@ -830,6 +1118,94 @@ fn find_spawn(tiles: &[Tile], width: usize, height: usize) -> (i32, i32) {
     (center_x, center_y)
 }
 
+fn connection_mask(
+    tiles: &[Tile],
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+    tile: Tile,
+) -> [bool; 8] {
+    [
+        (0, -1),
+        (0, 1),
+        (-1, 0),
+        (1, 0),
+        (-1, -1),
+        (-1, 1),
+        (1, -1),
+        (1, 1),
+    ]
+    .map(|(dx, dy)| {
+        let xx = x as i32 + dx;
+        let yy = y as i32 + dy;
+        if xx < 0 || yy < 0 || xx >= width as i32 || yy >= height as i32 {
+            return false;
+        }
+        connects(tile, tiles[xx as usize + yy as usize * width])
+    })
+}
+
+fn connects(tile: Tile, neighbor: Tile) -> bool {
+    match tile {
+        Tile::Grass => matches!(
+            neighbor,
+            Tile::Grass | Tile::Flower | Tile::Tree | Tile::TreeSapling | Tile::Path
+        ),
+        Tile::Sand => matches!(
+            neighbor,
+            Tile::Sand
+                | Tile::Cactus
+                | Tile::CactusSapling
+                | Tile::Hole
+                | Tile::Lava
+                | Tile::Exploded
+        ),
+        Tile::Water | Tile::Lava | Tile::Hole => {
+            matches!(
+                neighbor,
+                Tile::Water | Tile::Lava | Tile::Hole | Tile::Exploded
+            )
+        }
+        Tile::Rock => neighbor == Tile::Rock,
+        Tile::HardRock => neighbor == Tile::HardRock,
+        Tile::Cloud => neighbor != Tile::InfiniteFall,
+        Tile::Exploded => neighbor == Tile::Exploded,
+        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall | Tile::BossWall => matches!(
+            neighbor,
+            Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall | Tile::BossWall
+        ),
+        _ => false,
+    }
+}
+
+fn underlay_layers(tile: Tile, data: u16, depth: i8) -> [Option<Tile>; 2] {
+    match tile {
+        Tile::Grass => [Some(Tile::Dirt), None],
+        Tile::Flower | Tile::Tree | Tile::TreeSapling | Tile::Path => {
+            [Some(Tile::Dirt), Some(Tile::Grass)]
+        }
+        Tile::Sand => [Some(Tile::Dirt), None],
+        Tile::Cactus | Tile::CactusSapling => [Some(Tile::Dirt), Some(Tile::Sand)],
+        Tile::Water | Tile::Lava | Tile::Hole | Tile::Rock | Tile::HardRock => {
+            [Some(Tile::Dirt), None]
+        }
+        Tile::StairsUp | Tile::StairsDown => [
+            Some(if depth == 1 { Tile::Cloud } else { Tile::Dirt }),
+            None,
+        ],
+        Tile::Torch | Tile::Sign | Tile::WoodFence | Tile::StoneFence | Tile::ObsidianFence => {
+            let base = u8::try_from(data).ok().and_then(Tile::from_id);
+            if matches!(base, Some(Tile::Grass | Tile::Sand)) {
+                [Some(Tile::Dirt), base]
+            } else {
+                [base, None]
+            }
+        }
+        _ => [None, None],
+    }
+}
+
 fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -> Option<usize> {
     let origin_x = origin % width;
     let origin_y = origin / width;
@@ -860,7 +1236,10 @@ fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -
 
 #[cfg(test)]
 mod registry_tests {
-    use super::{DAY_LENGTH, Tile, World, surface_darkness, time_name};
+    use super::{
+        DAY_LENGTH, Level, Tile, World, random::JavaRandom, surface_darkness, time_name,
+        try_queue_natural_spawn,
+    };
 
     #[test]
     fn all_2_2_4_tile_ids_round_trip() {
@@ -871,11 +1250,33 @@ mod registry_tests {
         }
         assert_eq!(Tile::from_id(59), None);
         assert_eq!(Tile::Sign.id(), 58);
+        assert_eq!(Tile::from_legacy_id(1), Some((Tile::Rock, 0)));
+        assert_eq!(
+            Tile::from_legacy_id(44),
+            Some((Tile::Torch, Tile::Grass.id() as u16))
+        );
+        assert_eq!(Tile::from_legacy_id(123), Some((Tile::ObsidianDoor, 0)));
+        assert_eq!(Tile::from_legacy_id(999), None);
+        for legacy_id in [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24,
+            30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+            52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 100, 101, 102, 103, 104, 105,
+            107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 119, 120, 121, 122, 123, 127,
+        ] {
+            assert!(
+                Tile::from_legacy_id(legacy_id).is_some(),
+                "missing legacy tile ID {legacy_id}"
+            );
+        }
+        assert!(Tile::WoodDoor.solid(0));
+        assert!(!Tile::WoodDoor.solid(1));
+        assert_eq!(Tile::Lava.light_radius(), 6);
+        assert_eq!(Tile::Torch.light_radius(), 5);
     }
 
     #[test]
     fn six_levels_are_linked_by_matching_stairs() {
-        let world = World::new(0x100);
+        let world = World::new_with_options(0x100, super::WorldSpec::default(), 1);
         assert_eq!(
             world
                 .levels
@@ -898,6 +1299,15 @@ mod registry_tests {
                 world.levels[upper].depth
             );
         }
+        assert!(world.levels[0].tiles.contains(&Tile::WoodFloor));
+        assert!(world.levels[1].tiles.contains(&Tile::WoodWall));
+        assert!(
+            world.levels[2..5]
+                .iter()
+                .any(|level| level.tiles.contains(&Tile::StoneFloor))
+        );
+        assert!(world.levels[5].tiles.contains(&Tile::BossFloor));
+        assert!(world.levels[5].tiles.contains(&Tile::OrnateObsidian));
     }
 
     #[test]
@@ -910,5 +1320,21 @@ mod registry_tests {
         assert!(surface_darkness(0) > surface_darkness(8_100));
         assert_eq!(surface_darkness(16_200), 0);
         assert!(surface_darkness(48_600) > 0);
+    }
+
+    #[test]
+    fn natural_spawn_pipeline_queues_eligible_requests() {
+        let mut level = Level {
+            depth: -1,
+            tiles: vec![Tile::Dirt; 128 * 128],
+            data: vec![0; 128 * 128],
+            max_mob_count: 1,
+            pending_spawns: Vec::new(),
+        };
+        let mut random = JavaRandom::new(7);
+        try_queue_natural_spawn(&mut level, 128, 128, 8, 8, 0, 1, &mut random);
+        assert_eq!(level.pending_spawns.len(), 1);
+        try_queue_natural_spawn(&mut level, 128, 128, 8, 8, 0, 1, &mut random);
+        assert_eq!(level.pending_spawns.len(), 1);
     }
 }

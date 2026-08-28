@@ -12,17 +12,21 @@ pixel canvas and copied 2.2.4 artwork. It includes:
 - the original title and bitmap font assets;
 - keyboard-driven title, play/world selection, options, help books,
   achievements, pause, and inventory screens;
-- deterministic six-depth (`-4..1`) 128×128 generation based on the 2.2.4
-  `LevelGen` noise implementation and a compatible `java.util.Random`;
-- stair-linked level transitions and the complete tile ID 0–58 texture
-  registry using copied local assets;
-- the original 64,800-tick morning/day/evening/night clock with surface and
-  underground player-centered darkness;
-- player movement, collision, water slowdown, stamina, tree harvesting, and a
-  minimal inventory/HUD.
+- deterministic six-depth (`-4..1`) 128/256/512 generation based on the 2.2.4
+  `LevelGen` noise implementation and a compatible `java.util.Random`, with all
+  five themes, four terrain types, continuous validation, and tile structures;
+- stair-linked level transitions and the complete tile ID 0–58 registry using
+  copied local assets, legacy ID mappings, tile data/ticks, data-driven variants,
+  and connective textures;
+- the original 64,800-tick morning/day/evening/night clock with multi-source
+  player/lava/torch lighting above and below ground;
+- player movement, tile-aware collision, water slowdown, stamina, progressive
+  tile damage, doors, stairs, and a minimal inventory/HUD;
+- difficulty/depth/time/light-aware natural-spawn intents and original mob caps,
+  ready for the complete entity arena in phase 5;
 - all 16 bundled localization files with English fallback;
-- persistent FPS, difficulty, sound, autosave, locale, skin, and future world
-  settings, including `--savedir` support;
+- persistent FPS, difficulty, sound, autosave, locale, skin, and active world
+  size/theme/terrain settings, including `--savedir` support;
 - folder and ZIP resource-pack discovery, validation, enable/disable, priority
   ordering, texture/localization overrides, and malformed-pack isolation;
 - the four bundled skins plus validated custom PNG skins from the local game

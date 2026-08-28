@@ -2,6 +2,19 @@ use super::{TerrainType, Theme, Tile, WorldSpec, random::JavaRandom};
 
 const STAIR_RADIUS: i32 = 15;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedLevel {
+    pub tiles: Vec<Tile>,
+    pub data: Vec<u16>,
+}
+
+impl GeneratedLevel {
+    fn plain(tiles: Vec<Tile>) -> Self {
+        let data = vec![0; tiles.len()];
+        Self { tiles, data }
+    }
+}
+
 struct Noise {
     width: usize,
     height: usize,
@@ -80,28 +93,27 @@ impl Noise {
     }
 }
 
-pub fn surface(width: usize, height: usize, seed: i64) -> Vec<Tile> {
-    surface_with_spec(width, height, seed, WorldSpec::default())
-}
-
-pub fn surface_with_spec(width: usize, height: usize, seed: i64, spec: WorldSpec) -> Vec<Tile> {
+pub fn surface_with_spec(
+    width: usize,
+    height: usize,
+    seed: i64,
+    spec: WorldSpec,
+) -> GeneratedLevel {
     let mut random = JavaRandom::new(seed);
-    for _ in 0..100 {
+    loop {
         let map = create_surface(width, height, spec, &mut random);
-        let rock = count(&map, Tile::Rock);
-        let sand = count(&map, Tile::Sand);
-        let grass = count(&map, Tile::Grass);
-        let trees = count(&map, Tile::Tree);
-        let stairs = count(&map, Tile::StairsDown);
+        let rock = count(&map.tiles, Tile::Rock);
+        let sand = count(&map.tiles, Tile::Sand);
+        let grass = count(&map.tiles, Tile::Grass);
+        let trees = count(&map.tiles, Tile::Tree);
+        let stairs = count(&map.tiles, Tile::StairsDown);
         if rock >= 100 && sand >= 100 && grass >= 100 && trees >= 100 && stairs >= width / 21 {
             return map;
         }
     }
-    // A guard absent from the Java loop: malformed settings can no longer hang startup forever.
-    create_surface(width, height, spec, &mut random)
 }
 
-pub fn level(width: usize, height: usize, depth: i8, seed: i64, spec: WorldSpec) -> Vec<Tile> {
+pub fn level(width: usize, height: usize, depth: i8, seed: i64, spec: WorldSpec) -> GeneratedLevel {
     match depth {
         1 => sky(width, height, seed),
         0 => surface_with_spec(width, height, seed, spec),
@@ -111,9 +123,9 @@ pub fn level(width: usize, height: usize, depth: i8, seed: i64, spec: WorldSpec)
     }
 }
 
-fn underground(width: usize, height: usize, depth: usize, seed: i64) -> Vec<Tile> {
+fn underground(width: usize, height: usize, depth: usize, seed: i64) -> GeneratedLevel {
     let mut random = JavaRandom::new(seed);
-    for _ in 0..100 {
+    loop {
         let map = create_underground(width, height, depth, &mut random);
         let ore = [Tile::IronOre, Tile::GoldOre, Tile::GemOre][depth - 1];
         let enough_stairs = depth == 3 || count(&map, Tile::StairsDown) >= width / 32;
@@ -122,10 +134,9 @@ fn underground(width: usize, height: usize, depth: usize, seed: i64) -> Vec<Tile
             && count(&map, ore) >= 20
             && enough_stairs
         {
-            return map;
+            return GeneratedLevel::plain(map);
         }
     }
-    create_underground(width, height, depth, &mut random)
 }
 
 fn create_underground(
@@ -204,20 +215,34 @@ fn create_underground(
     if depth < 3 {
         place_stairs(&mut map, width, height, width / 32, 10, Tile::Rock, random);
     } else {
-        place_stairs(&mut map, width, height, 1, 10, Tile::Rock, random);
+        let edge = width / 20;
+        for _ in 0..width * height {
+            let x = random.next_int(width as i32) as usize;
+            let y = random.next_int(height as i32) as usize;
+            let outside_boss_room = x.abs_diff(width / 2) > 13 || y.abs_diff(height / 2) > 13;
+            if x > edge + 3
+                && y > edge + 3
+                && x + edge + 3 < width
+                && y + edge + 3 < height
+                && outside_boss_room
+            {
+                super::structure::dungeon_lock(&mut map, width, height, x, y);
+                map[x + y * width] = Tile::StairsDown;
+                break;
+            }
+        }
     }
     map
 }
 
-fn sky(width: usize, height: usize, seed: i64) -> Vec<Tile> {
+fn sky(width: usize, height: usize, seed: i64) -> GeneratedLevel {
     let mut random = JavaRandom::new(seed);
-    for _ in 0..100 {
+    loop {
         let map = create_sky(width, height, &mut random);
         if count(&map, Tile::Cloud) >= 2000 && count(&map, Tile::StairsDown) >= width / 64 {
-            return map;
+            return GeneratedLevel::plain(map);
         }
     }
-    create_sky(width, height, &mut random)
 }
 
 fn create_sky(width: usize, height: usize, random: &mut JavaRandom) -> Vec<Tile> {
@@ -250,17 +275,16 @@ fn create_sky(width: usize, height: usize, random: &mut JavaRandom) -> Vec<Tile>
     map
 }
 
-fn dungeon(width: usize, height: usize, seed: i64) -> Vec<Tile> {
+fn dungeon(width: usize, height: usize, seed: i64) -> GeneratedLevel {
     let mut random = JavaRandom::new(seed);
-    for _ in 0..100 {
+    loop {
         let map = create_dungeon(width, height, &mut random);
         if count(&map, Tile::ObsidianWall) >= 100
             && count(&map, Tile::ObsidianFloor) + count(&map, Tile::Dirt) >= 100
         {
-            return map;
+            return GeneratedLevel::plain(map);
         }
     }
-    create_dungeon(width, height, &mut random)
 }
 
 fn create_dungeon(width: usize, height: usize, random: &mut JavaRandom) -> Vec<Tile> {
@@ -288,6 +312,20 @@ fn create_dungeon(width: usize, height: usize, random: &mut JavaRandom) -> Vec<T
             } else {
                 Tile::Dirt
             };
+        }
+    }
+    'pool: for _ in 0..width * height / 450 {
+        let x = random.next_int(width as i32 - 2) as usize + 1;
+        let y = random.next_int(height as i32 - 2) as usize + 1;
+        for yy in y - 1..=y + 1 {
+            for xx in x - 1..=x + 1 {
+                if map[xx + yy * width] != Tile::ObsidianFloor {
+                    continue 'pool;
+                }
+            }
+        }
+        if x > 8 && y > 8 && x + 8 < width && y + 8 < height && random.next_bool() {
+            super::structure::ornate_lava_pool(&mut map, width, height, x, y);
         }
     }
     map
@@ -328,13 +366,14 @@ fn create_surface(
     height: usize,
     spec: WorldSpec,
     random: &mut JavaRandom,
-) -> Vec<Tile> {
+) -> GeneratedLevel {
     let moisture_1 = Noise::new(width, height, 16, random);
     let moisture_2 = Noise::new(width, height, 16, random);
     let moisture_3 = Noise::new(width, height, 16, random);
     let noise_1 = Noise::new(width, height, 32, random);
     let noise_2 = Noise::new(width, height, 32, random);
     let mut map = vec![Tile::Grass; width * height];
+    let mut data = vec![0; width * height];
 
     for y in 0..height {
         for x in 0..width {
@@ -441,12 +480,13 @@ fn create_surface(
     for _ in 0..width * height / 400 {
         let x = random.next_int(width as i32);
         let y = random.next_int(height as i32);
-        let _flower_variant = random.next_int(4);
+        let flower_variant = random.next_int(4) as u16;
         for _ in 0..30 {
             let xx = x + random.next_int(5) - random.next_int(5);
             let yy = y + random.next_int(5) - random.next_int(5);
             if replace_if(&mut map, width, height, xx, yy, Tile::Grass, Tile::Flower) {
-                let _rotation = random.next_int(4);
+                let rotation = random.next_int(4) as u16;
+                data[xx as usize + yy as usize * width] = flower_variant + rotation * 16;
             }
         }
     }
@@ -473,7 +513,7 @@ fn create_surface(
             break;
         }
     }
-    map
+    GeneratedLevel { tiles: map, data }
 }
 
 fn add_tree_clusters(
@@ -541,12 +581,12 @@ fn count(map: &[Tile], target: Tile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{level, surface};
+    use super::{level, surface_with_spec};
     use crate::world::{Theme, Tile, WorldSpec};
 
     #[test]
     fn surface_contains_required_biomes_and_stairs() {
-        let map = surface(128, 128, 0x100);
+        let map = surface_with_spec(128, 128, 0x100, WorldSpec::default());
         for tile in [
             Tile::Water,
             Tile::Grass,
@@ -555,13 +595,16 @@ mod tests {
             Tile::Tree,
             Tile::StairsDown,
         ] {
-            assert!(map.contains(&tile), "generated map lacks {tile:?}");
+            assert!(map.tiles.contains(&tile), "generated map lacks {tile:?}");
         }
     }
 
     #[test]
     fn generation_is_seed_deterministic() {
-        assert_eq!(surface(128, 128, 42), surface(128, 128, 42));
+        assert_eq!(
+            surface_with_spec(128, 128, 0x100, WorldSpec::default()),
+            surface_with_spec(128, 128, 0x100, WorldSpec::default())
+        );
     }
 
     #[test]
@@ -569,21 +612,21 @@ mod tests {
         let seed = 0x100;
         let spec = WorldSpec::default();
         let sky = level(128, 128, 1, seed, spec);
-        assert!(sky.contains(&Tile::Cloud));
-        assert!(sky.contains(&Tile::InfiniteFall));
-        assert!(sky.contains(&Tile::StairsDown));
+        assert!(sky.tiles.contains(&Tile::Cloud));
+        assert!(sky.tiles.contains(&Tile::InfiniteFall));
+        assert!(sky.tiles.contains(&Tile::StairsDown));
 
         for (depth, ore) in [(-1, Tile::IronOre), (-2, Tile::GoldOre), (-3, Tile::GemOre)] {
             let cave = level(128, 128, depth, seed, spec);
-            assert!(cave.contains(&Tile::Rock));
-            assert!(cave.contains(&Tile::Dirt));
-            assert!(cave.contains(&ore));
-            assert!(cave.contains(&Tile::StairsDown));
+            assert!(cave.tiles.contains(&Tile::Rock));
+            assert!(cave.tiles.contains(&Tile::Dirt));
+            assert!(cave.tiles.contains(&ore));
+            assert!(cave.tiles.contains(&Tile::StairsDown));
         }
 
         let dungeon = level(128, 128, -4, seed, spec);
-        assert!(dungeon.contains(&Tile::ObsidianWall));
-        assert!(dungeon.contains(&Tile::ObsidianFloor));
+        assert!(dungeon.tiles.contains(&Tile::ObsidianWall));
+        assert!(dungeon.tiles.contains(&Tile::ObsidianFloor));
     }
 
     #[test]
@@ -609,10 +652,89 @@ mod tests {
         );
         assert_ne!(normal, desert);
         assert!(
-            desert.iter().filter(|tile| **tile == Tile::Sand).count()
-                > normal.iter().filter(|tile| **tile == Tile::Sand).count()
+            desert
+                .tiles
+                .iter()
+                .filter(|tile| **tile == Tile::Sand)
+                .count()
+                > normal
+                    .tiles
+                    .iter()
+                    .filter(|tile| **tile == Tile::Sand)
+                    .count()
         );
-        assert!(hell.contains(&Tile::Lava));
-        assert!(!hell.contains(&Tile::Water));
+        assert!(hell.tiles.contains(&Tile::Lava));
+        assert!(!hell.tiles.contains(&Tile::Water));
+    }
+
+    #[test]
+    fn surface_generation_preserves_flower_variant_and_rotation_data() {
+        let map = surface_with_spec(128, 128, 0x100, WorldSpec::default());
+        let flower_data: Vec<u16> = map
+            .tiles
+            .iter()
+            .zip(&map.data)
+            .filter_map(|(tile, data)| (*tile == Tile::Flower).then_some(*data))
+            .collect();
+        assert!(!flower_data.is_empty());
+        assert!(
+            flower_data
+                .iter()
+                .all(|data| data % 16 < 4 && data / 16 < 4)
+        );
+        assert!(flower_data.iter().any(|data| *data != 0));
+    }
+
+    #[test]
+    fn every_supported_world_size_generates_complete_surface_storage() {
+        for size in [128, 256, 512] {
+            let map = surface_with_spec(
+                size,
+                size,
+                0x100,
+                WorldSpec {
+                    size,
+                    ..WorldSpec::default()
+                },
+            );
+            assert_eq!(map.tiles.len(), size * size);
+            assert_eq!(map.data.len(), size * size);
+            let stairs = map
+                .tiles
+                .iter()
+                .filter(|tile| **tile == Tile::StairsDown)
+                .count();
+            assert!(stairs >= size / 21, "size {size} produced {stairs} stairs");
+        }
+    }
+
+    fn map_hash(map: &[Tile]) -> u64 {
+        map.iter().fold(0xcbf29ce484222325_u64, |hash, tile| {
+            (hash ^ (tile.id() as u64 + 1)).wrapping_mul(0x100000001b3)
+        })
+    }
+
+    #[test]
+    fn fixed_seed_depth_hashes_match_the_port_baseline() {
+        let hashes: Vec<(i8, u64)> = [1, 0, -1, -2, -3, -4]
+            .into_iter()
+            .map(|depth| {
+                (
+                    depth,
+                    map_hash(&level(128, 128, depth, 0x100, WorldSpec::default()).tiles),
+                )
+            })
+            .collect();
+        assert_eq!(
+            hashes,
+            vec![
+                (1, 7_154_681_311_718_389_008),
+                (0, 12_325_979_341_810_308_935),
+                (-1, 8_395_888_054_144_659_002),
+                (-2, 8_288_556_604_293_262_057),
+                (-3, 8_195_112_541_469_861_296),
+                (-4, 7_899_870_023_324_037_551),
+            ]
+        );
     }
 }

@@ -85,5 +85,11 @@ mod tests {
         assert_eq!(world.name, "WORLD 1");
         assert_eq!(world.seed, 42);
         assert_eq!(world.spec, crate::world::WorldSpec::default());
+
+        let configured =
+            parse(r#"{"name":"WORLD 2","seed":9,"size":512,"theme":4,"terrain_type":3}"#).unwrap();
+        assert_eq!(configured.spec.size, 512);
+        assert_eq!(configured.spec.theme.index(), 4);
+        assert_eq!(configured.spec.terrain.index(), 3);
     }
 }

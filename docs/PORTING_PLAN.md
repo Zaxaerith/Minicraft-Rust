@@ -20,9 +20,9 @@
 | `core/io/InputHandler` | `input` | Remappable keyboard input complete |
 | `gfx/*` | `gfx`, `assets` | Pixel/image/font foundation complete |
 | `screen/*` | state-specific UI modules | Front-end hierarchy and gameplay overlays complete |
-| `level/LevelGen` | `world/generation` | Six-depth base terrain and stair linking complete |
-| `level/tile/*` | `world/tile` and behavior modules | IDs 0–58 and textures complete; behaviors in progress |
-| `entity/*` | entity arena and typed components | Player slice started |
+| `level/LevelGen`, `Structure` | `world/generation`, `world/structure` | Phase 4 terrain, validation, structures, and stair linking complete |
+| `level/tile/*` | `world`, `world/tile_behavior` | Phase 4 registry, data, ticks, collision, rendering, and legacy IDs complete |
+| `entity/*` | entity arena and typed components | Player slice and natural-spawn intents complete; full entities are phase 5 |
 | `item/*` | item registry, inventory, recipes | Pending |
 | `saveload/*` | versioned serde save layer | Pending |
 | `network/*`, server | protocol/client/server crates | Pending |
@@ -61,20 +61,28 @@
 Acceptance: every front-end screen is reachable and a malformed pack is
 reported and skipped without terminating the game.
 
-### 4. Complete world, tiles, time, and lighting
+### 4. Complete world, tiles, time, and lighting — complete
 
 - [x] Port base terrain for all six depths (`-4..1`), Java-compatible seed
-  behavior, validation guards, stairs linking, spawning, and level transitions.
-- [ ] Port every 2.2.4 structure and finish exact per-depth validation parity.
+  behavior, exact continuous validation, stairs linking, natural-spawn intents,
+  and level transitions for 128/256/512 worlds and all themes/terrain types.
+- [x] Port every 2.2.4 tile structure, including villages, cave spawner rooms,
+  dungeon rooms/gates/lock/boss room/lava pools, and the Air Wizard house.
+  Their furniture/entity occupants are created by the phase 5 entity layer.
 - [x] Register all tile IDs 0–58 and load their local copied textures.
-- [ ] Port legacy compatibility ID mappings and every tile interaction.
+- [x] Port every 2.2.4 legacy compatibility ID mapping and tile-side collision,
+  bare damage, doors, fluid, sapling, farm, crop, and damage-decay behavior.
+  Tool/item costs, drops, and recipes remain together with items in phase 5.
 - [x] Port the 64,800-tick four-quarter day clock and depth-aware player light
   mask.
-- [ ] Port tile ticking/data, full multi-source light maps, connective texture
-  composition, and difficulty-aware spawning.
+- [x] Port random tile ticking/data, data-driven variants, multi-source player/
+  lava/torch light maps, connective 8×8 texture composition, and the original
+  difficulty/depth/time/light-aware natural-spawn rules and mob caps.
 
-Acceptance: fixed seeds satisfy per-depth snapshot/hash fixtures and all tiles
-pass interaction/serialization tests.
+Acceptance met: fixed seeds satisfy six per-depth hash fixtures; all 59 current
+IDs and every legacy ID round-trip through registry tests; tile data and core
+interactions are exercised; six depth previews pass visual inspection. Detailed
+evidence is recorded in [PHASE4_REPORT.md](PHASE4_REPORT.md).
 
 ### 5. Entity, combat, item, and crafting loop
 
