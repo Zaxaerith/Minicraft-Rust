@@ -5,15 +5,57 @@ use minifb::{Key, KeyRepeat, Scale, Window, WindowOptions};
 
 use crate::{
     assets::{Assets, skin_options},
+    audio::{Audio, SoundEffect, validate_embedded_assets},
     config::{Config, KeyBindings, Settings},
     content::{Achievement, Book, achievements},
     gfx::{HEIGHT, Screen, WIDTH},
-    input::{Input, key_name},
+    input::{Gamepad, Input, key_name},
     localization::{LOCALES, Localization},
     resource_pack::{ResourcePack, discover},
-    world::{World, WorldAction, WorldSpec},
-    worlds::{WorldRecord, create as create_world_record, load as load_world_records},
+    world::{GameMode, PlayOptions, World, WorldAction, WorldSpec},
+    worlds::{
+        WorldRecord, create as create_world_record, load as load_world_records, load_state,
+        save_state,
+    },
 };
+
+pub fn self_check(arguments: &[String]) -> Result<(), String> {
+    let config = Config::load(arguments)?;
+    let assets = Assets::load(&[])?;
+    if !assets.warnings.is_empty() {
+        return Err(format!(
+            "embedded asset validation produced warnings: {}",
+            assets.warnings.join("; ")
+        ));
+    }
+    for (locale, _) in LOCALES {
+        let localization = Localization::load(locale, &[]);
+        if localization.text("minicraft.displays.title.play") == "minicraft.displays.title.play" {
+            return Err(format!("bundled locale {locale} has no title fallback"));
+        }
+    }
+    for book in Book::ALL.into_iter().chain([Book::Antidious]) {
+        if book.pages().is_empty() {
+            return Err(format!("embedded book {} has no pages", book.title()));
+        }
+    }
+    if crate::content::tutorials()?.len() != 5
+        || crate::content::quests()?
+            .iter()
+            .map(|group| group.quests.len())
+            .sum::<usize>()
+            != 14
+        || achievements()?.len() != 17
+    {
+        return Err("embedded progression counts do not match 2.2.4".to_owned());
+    }
+    validate_embedded_assets()?;
+    println!(
+        "Minicraft+ Rust self-check passed (savedir {})",
+        config.game_dir.display()
+    );
+    Ok(())
+}
 
 const TITLE_KEYS: [&str; 6] = [
     "minicraft.displays.title.play",
@@ -64,7 +106,11 @@ enum State {
     ResourcePacks {
         selection: usize,
     },
-    Playing(Box<World>),
+    Playing {
+        world: Box<World>,
+        record: WorldRecord,
+        last_autosave_tick: u64,
+    },
 }
 
 enum Transition {
@@ -127,10 +173,18 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
         selection: 0,
         ticks: 0,
     };
+    let audio = Audio::default();
+    let mut gamepad = Gamepad::default();
 
     while window.is_open() {
         let raw_keys = window.get_keys_pressed(KeyRepeat::No);
-        let input = Input::poll(&window, &config.settings.key_bindings);
+        let input = Input::poll(
+            &window,
+            &config.settings.key_bindings,
+            &raw_keys,
+            &mut gamepad,
+        );
+        let was_playing = matches!(state, State::Playing { .. });
         let mut settings_changed = false;
         let transition = match &mut state {
             State::Title { selection, ticks } => tick_title(selection, ticks, &input),
@@ -159,11 +213,43 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             State::ResourcePacks { selection } => {
                 tick_resource_packs(selection, &input, &packs, &config.settings.resource_packs)
             }
-            State::Playing(world) => match world.tick(&input) {
-                WorldAction::None => Transition::None,
-                WorldAction::ReturnToTitle => Transition::Title,
-            },
+            State::Playing {
+                world,
+                record,
+                last_autosave_tick,
+            } => {
+                let action = world.tick(&input);
+                for effect in world.take_sound_events() {
+                    audio.play(effect, config.settings.sound);
+                }
+                if config.settings.autosave
+                    && world.autosave_due()
+                    && *last_autosave_tick != world.save_tick()
+                {
+                    save_state(record, world)?;
+                    *last_autosave_tick = world.save_tick();
+                }
+                match action {
+                    WorldAction::None => Transition::None,
+                    WorldAction::ReturnToTitle => {
+                        save_state(record, world)?;
+                        Transition::Title
+                    }
+                }
+            }
         };
+
+        if !was_playing {
+            if input.select {
+                audio.play(SoundEffect::Confirm, config.settings.sound);
+            } else if input.up_pressed
+                || input.down_pressed
+                || input.left_pressed
+                || input.right_pressed
+            {
+                audio.play(SoundEffect::Select, config.settings.sound);
+            }
+        }
 
         if settings_changed {
             config.save()?;
@@ -186,25 +272,46 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     config.settings.theme,
                     config.settings.terrain_type,
                 );
-                create_world_record(&config.game_dir, seed, spec)?;
-                world_records = load_world_records(&config.game_dir)?;
-                state = State::Playing(Box::new(World::new_with_options(
+                let mode = GameMode::from_index(config.settings.game_mode);
+                let record = create_world_record(
+                    &config.game_dir,
                     seed,
                     spec,
-                    config.settings.difficulty,
-                )));
+                    mode,
+                    config.settings.score_minutes,
+                )?;
+                world_records = load_world_records(&config.game_dir)?;
+                let world = World::new_with_play_options(
+                    seed,
+                    spec,
+                    play_options(&config.settings, mode, config.settings.score_minutes),
+                );
+                save_state(&record, &world)?;
+                state = State::Playing {
+                    world: Box::new(world),
+                    record,
+                    last_autosave_tick: 0,
+                };
             }
             Transition::Worlds => {
                 world_records = load_world_records(&config.game_dir)?;
                 state = State::Worlds { selection: 0 };
             }
             Transition::LoadWorld(selection) => {
-                let record = &world_records[selection];
-                state = State::Playing(Box::new(World::new_with_options(
-                    record.seed,
-                    record.spec,
-                    config.settings.difficulty,
-                )));
+                let record = world_records[selection].clone();
+                let world = load_state(&record)?.unwrap_or_else(|| {
+                    World::new_with_play_options(
+                        record.seed,
+                        record.spec,
+                        play_options(&config.settings, record.mode, record.score_minutes),
+                    )
+                });
+                let last_autosave_tick = world.save_tick();
+                state = State::Playing {
+                    world: Box::new(world),
+                    record,
+                    last_autosave_tick,
+                };
             }
             Transition::Options => state = State::Options { selection: 0 },
             Transition::Controls => {
@@ -365,11 +472,14 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 &pack_warnings,
                 *selection,
             ),
-            State::Playing(world) => world.render(&mut screen, &assets),
+            State::Playing { world, .. } => world.render(&mut screen, &assets),
         }
         window
             .update_with_buffer(screen.pixels(), WIDTH, HEIGHT)
             .map_err(|error| error.to_string())?;
+    }
+    if let State::Playing { world, record, .. } = &state {
+        save_state(record, world)?;
     }
     Ok(())
 }
@@ -411,7 +521,11 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
             config.settings.theme,
             config.settings.terrain_type,
         ),
-        config.settings.difficulty,
+        play_options(
+            &config.settings,
+            GameMode::from_index(config.settings.game_mode),
+            config.settings.score_minutes,
+        ),
     )?;
     if arguments.iter().any(|argument| argument == "--entities") {
         world.populate_entity_preview();
@@ -427,6 +541,18 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
     }
     if arguments.iter().any(|argument| argument == "--stations") {
         world.populate_stations_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--score-ui") {
+        world.populate_score_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--book-ui") {
+        world.populate_book_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--sign-ui") {
+        world.populate_sign_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--progress-ui") {
+        world.populate_progress_preview();
     }
     let mut screen = Screen::new();
     screen.clear(0);
@@ -445,6 +571,7 @@ pub fn render_ui_preview(arguments: &[String], name: &str, output: &Path) -> Res
     let mut screen = Screen::new();
     screen.clear(0x08080C);
     match name {
+        "options" => render_options(&mut screen, &assets, &localization, &config.settings, 5),
         "play" => render_play_menu(&mut screen, &assets, worlds.len(), 0),
         "new-world" => render_new_world(&mut screen, &assets, &localization, &config.settings, 0),
         "worlds" => render_worlds(&mut screen, &assets, &worlds, 0),
@@ -456,7 +583,7 @@ pub fn render_ui_preview(arguments: &[String], name: &str, output: &Path) -> Res
         "controls" => render_controls(&mut screen, &assets, &config.settings.key_bindings, 0, None),
         _ => {
             return Err(format!(
-                "unknown UI preview {name}; use play, new-world, worlds, help, book, achievements, or controls"
+                "unknown UI preview {name}; use options, play, new-world, worlds, help, book, achievements, or controls"
             ));
         }
     }
@@ -509,7 +636,7 @@ fn tick_new_world(
     input: &Input,
     settings: &mut Settings,
 ) -> (Transition, bool) {
-    const COUNT: usize = 5;
+    const COUNT: usize = 7;
     if input.exit {
         return (Transition::PlayMenu, false);
     }
@@ -535,13 +662,26 @@ fn tick_new_world(
                 settings.terrain_type = wrap(settings.terrain_type, direction, 4);
                 changed = true;
             }
+            3 => {
+                settings.game_mode = wrap(settings.game_mode, direction, GameMode::ALL.len());
+                changed = true;
+            }
+            4 => {
+                let times = [10, 20, 40, 60, 120];
+                let current = times
+                    .iter()
+                    .position(|time| *time == settings.score_minutes)
+                    .unwrap_or(1);
+                settings.score_minutes = times[wrap(current, direction, times.len())];
+                changed = true;
+            }
             _ => {}
         }
     }
     if input.select {
         match *selection {
-            3 => (Transition::CreateWorld, changed),
-            4 => (Transition::PlayMenu, changed),
+            5 => (Transition::CreateWorld, changed),
+            6 => (Transition::PlayMenu, changed),
             _ => (Transition::None, changed),
         }
     } else {
@@ -621,15 +761,15 @@ fn tick_controls(
         }
         return Transition::None;
     }
-    const COUNT: usize = 10;
+    const COUNT: usize = 11;
     if input.exit {
         return Transition::Options;
     }
     navigate(selection, input, COUNT);
     if input.select {
         match *selection {
-            0..=7 => Transition::CaptureBinding(*selection),
-            8 => Transition::ResetBindings,
+            0..=8 => Transition::CaptureBinding(*selection),
+            9 => Transition::ResetBindings,
             _ => Transition::Options,
         }
     } else {
@@ -642,7 +782,7 @@ fn tick_options(
     input: &Input,
     settings: &mut Settings,
 ) -> (Transition, bool) {
-    const COUNT: usize = 8;
+    const COUNT: usize = 11;
     if input.exit {
         return (Transition::Title, false);
     }
@@ -672,6 +812,18 @@ fn tick_options(
                 settings.autosave = !settings.autosave;
                 changed = true;
             }
+            5 => {
+                settings.tutorials = !settings.tutorials;
+                changed = true;
+            }
+            6 => {
+                settings.quests = !settings.quests;
+                changed = true;
+            }
+            7 => {
+                settings.show_quests = !settings.show_quests;
+                changed = true;
+            }
             _ => {}
         }
     }
@@ -686,9 +838,21 @@ fn tick_options(
                 settings.autosave = !settings.autosave;
                 (Transition::None, true)
             }
-            5 => (Transition::Controls, changed),
-            6 => (Transition::ResourcePacks, changed),
-            7 => (Transition::Title, changed),
+            5 => {
+                settings.tutorials = !settings.tutorials;
+                (Transition::None, true)
+            }
+            6 => {
+                settings.quests = !settings.quests;
+                (Transition::None, true)
+            }
+            7 => {
+                settings.show_quests = !settings.show_quests;
+                (Transition::None, true)
+            }
+            8 => (Transition::Controls, changed),
+            9 => (Transition::ResourcePacks, changed),
+            10 => (Transition::Title, changed),
             _ => (Transition::None, changed),
         };
     }
@@ -840,6 +1004,9 @@ fn render_options(
             .to_owned(),
         if settings.sound { on } else { off }.to_owned(),
         if settings.autosave { on } else { off }.to_owned(),
+        if settings.tutorials { on } else { off }.to_owned(),
+        if settings.quests { on } else { off }.to_owned(),
+        if settings.show_quests { on } else { off }.to_owned(),
         String::new(),
         String::new(),
         String::new(),
@@ -850,12 +1017,15 @@ fn render_options(
         localization.text("minicraft.settings.difficulty"),
         localization.text("minicraft.settings.sound"),
         localization.text("minicraft.settings.autosave"),
+        "TUTORIALS",
+        "QUESTS",
+        "SHOW QUEST HUD",
         "KEY BINDINGS",
         localization.text("minicraft.display.options_display.resource_packs"),
         "BACK",
     ];
     for index in 0..labels.len() {
-        let y = 41 + index as i32 * 17;
+        let y = 29 + index as i32 * 14;
         if index == selection {
             screen.rect(14, y - 2, WIDTH as i32 - 28, 11, 0x27334D);
             screen.text(&assets.font, ">", 17, y);
@@ -877,7 +1047,7 @@ fn render_play_menu(screen: &mut Screen, assets: &Assets, world_count: usize, se
         "BACK".to_owned(),
     ];
     render_centered_menu(screen, assets, &labels, selection, 65, 22);
-    screen.centered_text(&assets.font, "WORLD STATE SAVING: PHASE 7", 155);
+    screen.centered_text(&assets.font, "VERSIONED SAVES + BACKUPS", 155);
 }
 
 fn render_new_world(
@@ -901,18 +1071,30 @@ fn render_new_world(
         "minicraft.settings.type.irregular",
     ];
     screen.centered_text(&assets.font, "NEW WORLD", 18);
-    let labels = ["SIZE", "THEME", "TERRAIN", "CREATE", "BACK"];
+    let labels = [
+        "SIZE",
+        "THEME",
+        "TERRAIN",
+        "MODE",
+        "SCORE TIME",
+        "CREATE",
+        "BACK",
+    ];
     let values = [
         settings.world_size.to_string(),
         localization.text(THEME_KEYS[settings.theme]).to_owned(),
         localization
             .text(TYPE_KEYS[settings.terrain_type])
             .to_owned(),
+        GameMode::from_index(settings.game_mode)
+            .display_name()
+            .to_owned(),
+        format!("{} MIN", settings.score_minutes),
         String::new(),
         String::new(),
     ];
     for index in 0..labels.len() {
-        let y = 48 + index as i32 * 22;
+        let y = 34 + index as i32 * 20;
         if index == selection {
             screen.rect(18, y - 2, WIDTH as i32 - 36, 11, 0x27334D);
             screen.text(&assets.font, ">", 22, y);
@@ -943,7 +1125,7 @@ fn render_worlds(screen: &mut Screen, assets: &Assets, worlds: &[WorldRecord], s
                 screen.text(&assets.font, ">", 29, y);
             }
             screen.text(&assets.font, &world.name, 41, y);
-            let summary = format!("{} T{}", world.spec.size, world.spec.theme.index());
+            let summary = format!("{} {}", world.spec.size, world.mode.display_name());
             let x = WIDTH as i32 - 29 - summary.chars().count() as i32 * 8;
             screen.text(&assets.font, &summary, x, y);
         }
@@ -1023,7 +1205,7 @@ fn render_controls(
 ) {
     screen.centered_text(&assets.font, "KEY BINDINGS", 8);
     for (index, label) in KeyBindings::LABELS.iter().enumerate() {
-        let y = 25 + index as i32 * 15;
+        let y = 21 + index as i32 * 13;
         if index == selection {
             screen.rect(11, y - 1, WIDTH as i32 - 22, 10, 0x27334D);
             screen.text(&assets.font, ">", 14, y);
@@ -1038,8 +1220,8 @@ fn render_controls(
         screen.text(&assets.font, value, x, y);
     }
     for (offset, label) in ["RESET DEFAULTS", "BACK"].iter().enumerate() {
-        let index = 8 + offset;
-        let y = 148 + offset as i32 * 14;
+        let index = 9 + offset;
+        let y = 143 + offset as i32 * 14;
         if index == selection {
             screen.rect(56, y - 1, 176, 10, 0x27334D);
             screen.text(&assets.font, ">", 60, y);
@@ -1186,6 +1368,18 @@ fn random_seed() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos() as i64)
         .unwrap_or(0x100)
+}
+
+fn play_options(settings: &Settings, mode: GameMode, score_minutes: usize) -> PlayOptions {
+    PlayOptions {
+        difficulty: settings.difficulty,
+        mode,
+        score_minutes,
+        tutorials: settings.tutorials,
+        quests: settings.quests,
+        show_quests: settings.show_quests,
+        custom_skin: settings.selected_skin != "minicraft.skin.paul",
+    }
 }
 
 fn wrap(value: usize, direction: i32, count: usize) -> usize {

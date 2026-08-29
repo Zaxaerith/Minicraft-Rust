@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x86_64
+            binary: target/release/minicraft-plus-rust.exe
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            binary: target/release/minicraft-plus-rust
+          - os: macos-latest
+            platform: macos-native
+            binary: target/release/minicraft-plus-rust
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - env:
+          BINARY: ${{ matrix.binary }}
+        run: >-
+          python -c "import os,subprocess,tempfile;
+          subprocess.check_call([os.environ['BINARY'],'--self-check','--savedir',tempfile.mkdtemp()])"
+      - run: >-
+          python scripts/package.py --platform ${{ matrix.platform }}
+          --binary ${{ matrix.binary }} --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*.zip
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber

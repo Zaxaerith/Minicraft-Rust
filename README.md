@@ -43,27 +43,63 @@ pixel canvas and copied 2.2.4 artwork. It includes:
 - populated sky/village/cave/dungeon structures and a connected survival
   gather → craft → mine → boss progression, including both boss drops and
   resummoning items;
+- survival, creative, hardcore, and timed score world modes, with creative
+  invulnerability/non-consumption, hardcore terminal death, and score timer,
+  multiplier, mob/crop/pickup scoring, and death penalty;
+- five data-driven tutorial steps, four quest groups containing fourteen
+  quests and rewards, all seventeen achievement flags, configurable progress
+  HUD visibility, and boss-linked story completion;
+- night-only surface sleeping, editable per-level signs, world-readable book
+  items (including the Antidious volume), and safe furniture pickup;
 - pickaxe-gated iron/gold/gem/lapis/cloud ore damage and collectible ore drops,
   plus axe/shovel/hoe ground work, crop loops, sand/cloud gathering, and
   gem-pickaxe hard rock;
 - all 16 bundled localization files with English fallback;
-- persistent FPS, difficulty, sound, autosave, locale, skin, and active world
-  size/theme/terrain settings, including `--savedir` support;
+- persistent FPS, difficulty, sound, autosave, locale, skin, tutorial/quest
+  flags, and active world size/theme/terrain/mode/score-time settings, including
+  `--savedir` support;
+- versioned full-world snapshots covering all six levels, entities, player,
+  inventory, mode, signs, progression, and deterministic RNG state, with
+  periodic autosave, atomic replacement, and automatic backup recovery;
+- first-load import of local Java 2.2.4 save directories, including named and
+  legacy tile mappings, items/tools, furniture/container contents, mobs,
+  potion effects, signs, and unlocked achievements; imported worlds are then
+  stored wholly inside the Rust save directory;
 - folder and ZIP resource-pack discovery, validation, enable/disable, priority
   ordering, texture/localization overrides, and malformed-pack isolation;
 - the four bundled skins plus validated custom PNG skins from the local game
   directory;
-- persistent remappable keyboard controls and reset-to-default support;
-- local seed-backed world records, ready for full state serialization in the
-  save/load phase.
+- persistent remappable keyboard controls and reset-to-default support, plus
+  controller direction/left-stick and action controls through XInput on Windows
+  and the embedded SDL mapping database on Linux/macOS;
+- all ten copied 2.2.4 WAV effects, connected to menus and gameplay and governed
+  by the persistent sound toggle;
+- a versioned JSON-lines TCP protocol on the original port 4225, a standalone
+  Rust relay server, login/presence/state/heartbeat handling, and a client
+  connectivity probe.
 
-This is not yet a feature-complete replacement for the Java game. The exact
-remaining work and acceptance gates live in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
+The eight-phase reconstruction plan is complete. Exact compatibility boundaries
+and deliberate format/protocol differences are documented in
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Build and run
 
 ```powershell
 cargo run --release
+```
+
+The release executable can validate all embedded runtime data without opening a
+window:
+
+```powershell
+cargo run --release -- --self-check --savedir .\test-data
+```
+
+To run the standalone multiplayer service and verify it from another process:
+
+```powershell
+cargo run --release -- --server 0.0.0.0:4225
+cargo run --release -- --multiplayer-probe 127.0.0.1:4225 PLAYER_NAME
 ```
 
 The dependency set is intentionally small. Tests and strict linting can be run
@@ -73,6 +109,18 @@ with:
 cargo test
 cargo clippy --all-targets -- -D warnings
 ```
+
+To audit a downloaded official 2.2.4 JAR and create a deterministic Windows
+archive:
+
+```powershell
+python scripts\audit_official.py .reference\official\minicraft-plus-2.2.4.jar
+cargo build --release --locked
+python scripts\package.py --platform windows-x86_64 --binary target\release\minicraft-plus-rust.exe
+```
+
+The GitHub workflows apply the locked test, lint, build, self-check, and package
+gates to Windows, Linux, and macOS.
 
 For renderer diagnostics without opening a window:
 
@@ -86,6 +134,10 @@ cargo run --release -- --render-world-preview food.png --food-ui --savedir .\tes
 cargo run --release -- --render-world-preview stations.png --stations --savedir .\test-data
 cargo run --release -- --render-ui-preview achievements achievements.png --savedir .\test-data
 cargo run --release -- --render-ui-preview controls controls.png --savedir .\test-data
+cargo run --release -- --render-ui-preview options options.png --savedir .\test-data
+cargo run --release -- --render-world-preview score.png --score-ui --progress-ui --savedir .\test-data
+cargo run --release -- --render-world-preview book.png --book-ui --savedir .\test-data
+cargo run --release -- --render-world-preview sign.png --sign-ui --savedir .\test-data
 ```
 
 ## Controls
@@ -99,7 +151,14 @@ cargo run --release -- --render-ui-preview controls controls.png --savedir .\tes
 | Equip inventory item/tool | C while inventory is open |
 | Place equipped crafting station | C |
 | Use placed crafting station | Enter while facing it |
+| Pick up furniture | V while facing it |
+| Read equipped book | C |
+| Edit a sign | Enter while facing it; type, Backspace, then Enter to save |
 | Pause/back | Escape |
+
+Controllers use the D-pad or left stick to move, A to select, B to pause/back,
+X to attack, Y or Start for inventory, and the left shoulder button to pick up
+furniture.
 
 The primary keys can be changed from **Options → Key Bindings**. Arrow keys
 remain available for menu navigation and movement.

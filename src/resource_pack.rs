@@ -6,6 +6,8 @@ use std::{
 
 use serde_json::Value;
 
+const MAX_PACK_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
+
 #[derive(Debug, Clone)]
 enum Source {
     Folder(PathBuf),
@@ -24,6 +26,19 @@ impl ResourcePack {
         match &self.source {
             Source::Folder(root) => {
                 let path = root.join(relative_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+                match fs::metadata(&path) {
+                    Ok(metadata) if metadata.len() > MAX_PACK_ENTRY_BYTES => {
+                        return Err(format!(
+                            "resource-pack entry {} exceeds 16 MiB",
+                            path.display()
+                        ));
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                    Err(error) => {
+                        return Err(format!("cannot inspect {}: {error}", path.display()));
+                    }
+                }
                 match fs::read(&path) {
                     Ok(bytes) => Ok(Some(bytes)),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -37,6 +52,12 @@ impl ResourcePack {
                     .map_err(|error| format!("invalid zip {}: {error}", path.display()))?;
                 match archive.by_name(relative_path) {
                     Ok(mut entry) => {
+                        if entry.size() > MAX_PACK_ENTRY_BYTES {
+                            return Err(format!(
+                                "resource-pack entry {relative_path} in {} exceeds 16 MiB",
+                                path.display()
+                            ));
+                        }
                         let mut bytes = Vec::new();
                         entry.read_to_end(&mut bytes).map_err(|error| {
                             format!("cannot read {relative_path} in {}: {error}", path.display())
@@ -187,6 +208,29 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(names, ["Folder", "Zip"]);
         assert_eq!(warnings.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oversized_resource_pack_metadata_is_rejected_before_allocation() {
+        let root = std::env::temp_dir().join(format!(
+            "minicraft-rust-large-pack-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let pack = root.join("resourcepacks").join("oversized");
+        fs::create_dir_all(&pack).unwrap();
+        File::create(pack.join("pack.json"))
+            .unwrap()
+            .set_len(super::MAX_PACK_ENTRY_BYTES + 1)
+            .unwrap();
+        let (loaded, warnings) = discover(&root);
+        assert!(loaded.is_empty());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("exceeds 16 MiB"));
         fs::remove_dir_all(root).unwrap();
     }
 }

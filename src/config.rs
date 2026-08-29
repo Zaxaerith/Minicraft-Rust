@@ -5,6 +5,8 @@ use std::{
 
 use serde_json::{Value, json};
 
+use crate::storage::{atomic_write, read_candidates_limited};
+
 #[derive(Debug, Clone)]
 pub struct KeyBindings {
     pub up: String,
@@ -15,6 +17,7 @@ pub struct KeyBindings {
     pub exit: String,
     pub attack: String,
     pub menu: String,
+    pub pickup: String,
 }
 
 impl Default for KeyBindings {
@@ -28,12 +31,13 @@ impl Default for KeyBindings {
             exit: "ESCAPE".to_owned(),
             attack: "C".to_owned(),
             menu: "X".to_owned(),
+            pickup: "V".to_owned(),
         }
     }
 }
 
 impl KeyBindings {
-    pub const LABELS: [&'static str; 8] = [
+    pub const LABELS: [&'static str; 9] = [
         "MOVE UP",
         "MOVE DOWN",
         "MOVE LEFT",
@@ -42,6 +46,7 @@ impl KeyBindings {
         "EXIT / PAUSE",
         "ATTACK",
         "INVENTORY",
+        "PICK UP",
     ];
 
     pub fn value(&self, index: usize) -> &str {
@@ -53,7 +58,8 @@ impl KeyBindings {
             4 => &self.select,
             5 => &self.exit,
             6 => &self.attack,
-            _ => &self.menu,
+            7 => &self.menu,
+            _ => &self.pickup,
         }
     }
 
@@ -66,7 +72,8 @@ impl KeyBindings {
             4 => self.select = value,
             5 => self.exit = value,
             6 => self.attack = value,
-            _ => self.menu = value,
+            7 => self.menu = value,
+            _ => self.pickup = value,
         }
     }
 }
@@ -81,8 +88,11 @@ pub struct Settings {
     pub world_size: usize,
     pub theme: usize,
     pub terrain_type: usize,
+    pub game_mode: usize,
+    pub score_minutes: usize,
     pub tutorials: bool,
     pub quests: bool,
+    pub show_quests: bool,
     pub selected_skin: String,
     pub resource_packs: Vec<String>,
     pub key_bindings: KeyBindings,
@@ -99,8 +109,11 @@ impl Default for Settings {
             world_size: 128,
             theme: 0,
             terrain_type: 0,
+            game_mode: 0,
+            score_minutes: 20,
             tutorials: false,
             quests: false,
+            show_quests: true,
             selected_skin: "minicraft.skin.paul".to_owned(),
             resource_packs: Vec::new(),
             key_bindings: KeyBindings::default(),
@@ -128,11 +141,10 @@ impl Config {
             .map_err(|error| format!("cannot create skin directory: {error}"))?;
 
         let path = game_dir.join("settings.json");
-        let settings = match fs::read_to_string(&path) {
-            Ok(text) => parse_settings(&text).unwrap_or_default(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Settings::default(),
-            Err(error) => return Err(format!("cannot read {}: {error}", path.display())),
-        };
+        let settings = read_candidates_limited(&path, 1024 * 1024)?
+            .into_iter()
+            .find_map(|(_, text)| parse_settings(&text))
+            .unwrap_or_default();
         Ok(Self { game_dir, settings })
     }
 
@@ -147,8 +159,11 @@ impl Config {
             "world_size": self.settings.world_size,
             "theme": self.settings.theme,
             "terrain_type": self.settings.terrain_type,
+            "game_mode": self.settings.game_mode,
+            "score_minutes": self.settings.score_minutes,
             "tutorials": self.settings.tutorials,
             "quests": self.settings.quests,
+            "show_quests": self.settings.show_quests,
             "selected_skin": self.settings.selected_skin,
             "resource_packs": self.settings.resource_packs,
             "key_bindings": {
@@ -160,11 +175,12 @@ impl Config {
                 "exit": self.settings.key_bindings.exit,
                 "attack": self.settings.key_bindings.attack,
                 "menu": self.settings.key_bindings.menu,
+                "pickup": self.settings.key_bindings.pickup,
             },
         });
         let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
         let path = self.game_dir.join("settings.json");
-        fs::write(&path, text).map_err(|error| format!("cannot write {}: {error}", path.display()))
+        atomic_write(&path, text.as_bytes())
     }
 }
 
@@ -220,8 +236,14 @@ fn parse_settings(text: &str) -> Option<Settings> {
     };
     settings.theme = integer(&value, "theme", settings.theme).min(4);
     settings.terrain_type = integer(&value, "terrain_type", settings.terrain_type).min(3);
+    settings.game_mode = integer(&value, "game_mode", settings.game_mode).min(3);
+    settings.score_minutes = match integer(&value, "score_minutes", settings.score_minutes) {
+        10 | 20 | 40 | 60 | 120 => integer(&value, "score_minutes", settings.score_minutes),
+        _ => 20,
+    };
     settings.tutorials = boolean(&value, "tutorials", settings.tutorials);
     settings.quests = boolean(&value, "quests", settings.quests);
+    settings.show_quests = boolean(&value, "show_quests", settings.show_quests);
     settings.selected_skin = string(&value, "selected_skin", &settings.selected_skin);
     settings.resource_packs = value["resource_packs"]
         .as_array()
@@ -241,6 +263,7 @@ fn parse_settings(text: &str) -> Option<Settings> {
     settings.key_bindings.exit = binding(bindings, "exit", &settings.key_bindings.exit);
     settings.key_bindings.attack = binding(bindings, "attack", &settings.key_bindings.attack);
     settings.key_bindings.menu = binding(bindings, "menu", &settings.key_bindings.menu);
+    settings.key_bindings.pickup = binding(bindings, "pickup", &settings.key_bindings.pickup);
     Some(settings)
 }
 
@@ -280,5 +303,15 @@ mod tests {
         assert_eq!(settings.fps, 300);
         assert_eq!(settings.difficulty, 2);
         assert_eq!(settings.world_size, 128);
+
+        let phase_six = parse_settings(
+            r#"{"game_mode":3,"score_minutes":60,"tutorials":true,"quests":true,"show_quests":false}"#,
+        )
+        .unwrap();
+        assert_eq!(phase_six.game_mode, 3);
+        assert_eq!(phase_six.score_minutes, 60);
+        assert!(phase_six.tutorials);
+        assert!(phase_six.quests);
+        assert!(!phase_six.show_quests);
     }
 }

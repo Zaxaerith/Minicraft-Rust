@@ -19,13 +19,13 @@
 | `core`, `Updater`, `Renderer` | `app`, `gfx`, fixed-step loop | Foundation complete |
 | `core/io/InputHandler` | `input` | Remappable keyboard input complete |
 | `gfx/*` | `gfx`, `assets` | Pixel/image/font foundation complete |
-| `screen/*` | state-specific UI modules | Front-end hierarchy and gameplay overlays complete |
+| `screen/*` | state-specific UI modules | Phase 6 complete: front end, gameplay, content, mode, and progression overlays |
 | `level/LevelGen`, `Structure` | `world/generation`, `world/structure` | Phase 4 terrain, validation, structures, and stair linking complete |
 | `level/tile/*` | `world`, `world/tile_behavior` | Phase 4 registry, data, ticks, collision, rendering, and legacy IDs complete |
 | `entity/*` | `world/entity` arena and typed entities | Phase 5 complete: natural mobs, bosses, combat, projectiles, drops, furniture, and occupants |
 | `item/*` | `item` registry, inventory, recipes | Phase 5 complete: full catalog, tools, stations, armor, potions, fishing, containers, and placement |
-| `saveload/*` | versioned serde save layer | Pending |
-| `network/*`, server | protocol/client/server crates | Pending |
+| `saveload/*` | versioned serde save layer | Phase 7 complete |
+| `network/*`, server | protocol/client/server modules | Phase 7 complete |
 
 ## Ordered phases
 
@@ -84,7 +84,7 @@ IDs and every legacy ID round-trip through registry tests; tile data and core
 interactions are exercised; six depth previews pass visual inspection. Detailed
 evidence is recorded in [PHASE4_REPORT.md](PHASE4_REPORT.md).
 
-### 5. Entity, combat, item, and crafting loop
+### 5. Entity, combat, item, and crafting loop — complete
 
 - [x] Add stable entity IDs, per-level storage, deferred natural-spawn
   materialization, lifecycle/despawn, tile collision, Y sorting, and item drops.
@@ -118,32 +118,70 @@ gate, release build, and visual diagnostics are recorded in
 Phase 5 completion evidence is recorded in
 [PHASE5_PROGRESS.md](PHASE5_PROGRESS.md).
 
-### 6. Modes and content systems
+### 6. Modes and content systems — complete
 
-- Survival, creative, hardcore, and score modes.
-- Farming, beds, signs, quests, tutorials, achievements, books, skins, and
-  resource-pack UI.
-- Story presentation and progression around the completed boss encounters.
+- [x] Add survival, creative, hardcore, and score world modes, including the
+  original score time choices, timer, multiplier, scoring events, death
+  penalty, creative inventory/invulnerability/non-consumption, and hardcore
+  terminal death.
+- [x] Complete farming interactions and add usable night-only surface beds,
+  editable per-level signs, furniture pickup, and world-readable regular and
+  Antidious books.
+- [x] Parse and execute the copied 2.2.4 tutorial and quest resources: five
+  tutorial steps and four groups containing fourteen quests, with parent/
+  unlocking criteria, event history, rewards, settings toggles, and HUD status.
+- [x] Connect all seventeen bundled achievements to runtime events and retain
+  the phase 3 skin/resource-pack interfaces.
+- [x] Present Air Wizard and Obsidian Knight victory state, gated obsidian/boss
+  construction, score rewards, achievements, and final story completion.
 
-Acceptance: data-driven content counts and progression flags match 2.2.4.
+Acceptance met: bundled counts are asserted as 5 tutorials, 4 quest groups,
+14 quests, and 17 achievements; progression events and all four mode branches
+are covered by the 50-test suite. Strict Clippy, release build, and local-asset
+visual evidence are recorded in [PHASE6_REPORT.md](PHASE6_REPORT.md). Runtime
+state persistence remains deliberately assigned to phase 7.
 
-### 7. Save/audio/network parity
+### 7. Save/audio/network parity — complete
 
-- Preferences/unlocks/world save and load with atomic writes and backups.
-- Read 2.2.4 Java saves; preserve documented legacy migrations.
-- All ten sound effects, volume toggle, and controller support.
-- Multiplayer protocol plus standalone Rust server corresponding to the Java
-  common/server modules.
+- [x] Persist preferences and complete world/unlock state through versioned
+  snapshots, atomic replacement, previous-file backups, autosave, exit save,
+  validation, and primary-to-backup recovery.
+- [x] Detect and import 2.2.4 Java saves on first load, including the Java
+  x/y serialization transpose, named/legacy/torch tiles, player statistics,
+  modes, inventory/tools, furniture/container contents, mobs, signs, potion
+  effects, and global achievement unlocks.
+- [x] Embed and connect all ten copied sound effects behind the persistent
+  sound toggle; add native Windows XInput D-pad/left-stick and action mappings
+  alongside the remappable keyboard path without an SDK-link dependency.
+- [x] Retain the complete Java 2.2.4 protocol registry and port 4225, then add a
+  bounded versioned JSON-lines transport, login validation, presence, latest
+  player-state replay/broadcast, heartbeat, disconnect cleanup, standalone
+  Rust server, and client probe.
 
-Acceptance: round-trip fixtures, Java-save imports, two-client multiplayer, and
-server soak tests pass.
+Acceptance met: native round trips and backup recovery, a complete Java 2.2.4
+import fixture, all ten WAV headers, controller edge semantics, two real TCP
+clients, and a 512-heartbeat server soak pass in the 59-test suite. Strict
+Clippy and release-build evidence is recorded in
+[PHASE7_REPORT.md](PHASE7_REPORT.md).
 
-### 8. Release parity and hardening
+### 8. Release parity and hardening — complete
 
-- Behavior checklist against the official 2.2.4 JAR.
-- Determinism, fuzz, malformed-resource/save, long-run, and performance tests.
-- Windows, Linux, and macOS release packaging with bundled local assets.
-- Final license/credits and reproducible build documentation.
+- [x] Pin and audit the official 2.2.4 JAR, verify all 403 copied resources,
+  and publish the behavior/intentional-difference checklist.
+- [x] Add deterministic save/resume, 512 malformed-snapshot mutations, bounded
+  malformed/oversized save/resource/protocol cases, and a 129,600-tick soak.
+- [x] Add SDL2 audio/controller backends for Linux and macOS while retaining
+  WinMM/XInput on Windows; embed all runtime assets on every target.
+- [x] Add Windows, Linux, and macOS locked CI/release matrices, headless
+  embedded-resource smoke checks, and deterministic self-contained ZIPs.
+- [x] Complete license/credits, compatibility boundaries, baseline identity,
+  and reproducible package metadata.
 
-Acceptance: no known phase checklist gaps, clean strict lint/test builds, and a
-documented compatibility report.
+Acceptance met locally: the official artifact and all 403 resources pass
+custody audit; 65 tests pass; formatting, strict Clippy, and release build are
+clean; a Windows archive reproduces byte-for-byte across successive builds;
+and its extracted executable passes `--self-check` from outside the source
+tree. The committed CI/release matrices apply the same gates to Windows, Linux,
+and macOS. Detailed evidence and compatibility boundaries are recorded in
+[PHASE8_REPORT.md](PHASE8_REPORT.md) and
+[COMPATIBILITY.md](COMPATIBILITY.md).

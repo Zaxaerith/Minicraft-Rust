@@ -213,9 +213,9 @@ fn has_water(
     radius: usize,
 ) -> bool {
     let left = x.saturating_sub(radius);
-    let right = (x + radius).min(width - 1);
+    let right = x.saturating_add(radius).min(width - 1);
     let top = y.saturating_sub(radius);
-    let bottom = (y + radius).min(height - 1);
+    let bottom = y.saturating_add(radius).min(height - 1);
     (top..=bottom).any(|yy| (left..=right).any(|xx| level.tiles[xx + yy * width] == Tile::Water))
 }
 
@@ -232,7 +232,7 @@ fn random_adjacent(
         (x as i32, y as i32 + if random.next_bool() { 1 } else { -1 })
     };
     (next_x >= 0 && next_y >= 0 && next_x < width as i32 && next_y < height as i32)
-        .then_some(next_x as usize + next_y as usize * width)
+        .then(|| next_x as usize + next_y as usize * width)
 }
 
 fn cardinal(width: usize, height: usize, x: usize, y: usize) -> Vec<usize> {
@@ -242,7 +242,7 @@ fn cardinal(width: usize, height: usize, x: usize, y: usize) -> Vec<usize> {
             let xx = x as i32 + dx;
             let yy = y as i32 + dy;
             (xx >= 0 && yy >= 0 && xx < width as i32 && yy < height as i32)
-                .then_some(xx as usize + yy as usize * width)
+                .then(|| xx as usize + yy as usize * width)
         })
         .collect()
 }

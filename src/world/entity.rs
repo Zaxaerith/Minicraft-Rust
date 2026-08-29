@@ -1,10 +1,11 @@
 use crate::item::{Inventory, ItemId, ItemStack};
+use serde::{Deserialize, Serialize};
 
 use super::{Tile, random::JavaRandom, spawn::NaturalMob};
 
 const DESPAWN_AGE: u32 = 18_000;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mob {
     pub species: NaturalMob,
     pub health: u16,
@@ -20,14 +21,14 @@ pub struct Mob {
     walk_time: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectileKind {
     Arrow,
     Spark,
     FireSpark,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Projectile {
     pub kind: ProjectileKind,
     pub velocity_x: i16,
@@ -37,13 +38,13 @@ pub struct Projectile {
     pub life: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParticleKind {
     Smash,
     Fire,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EntityKind {
     Mob(Mob),
     Item(ItemStack),
@@ -52,7 +53,7 @@ pub enum EntityKind {
     Particle(ParticleKind),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FurnitureKind {
     Workbench,
     Oven,
@@ -207,7 +208,7 @@ impl FurnitureKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub id: u64,
     pub x: i32,
@@ -230,11 +231,11 @@ pub struct HitResult {
 #[derive(Debug, Default)]
 pub struct TickOutcome {
     pub player_damage: u8,
-    pub explosions: Vec<(i32, i32, i32)>,
-    pub defeated_bosses: Vec<NaturalMob>,
+    pub explosions: Vec<(i32, i32, i32, bool)>,
+    pub defeated_mobs: Vec<NaturalMob>,
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct EntityArena {
     next_id: u64,
     entities: Vec<Entity>,
@@ -272,6 +273,48 @@ impl EntityArena {
                 walk_time: 0,
             }),
         )
+    }
+
+    pub(crate) fn import_mob(
+        &mut self,
+        species: NaturalMob,
+        x: i32,
+        y: i32,
+        health: Option<u16>,
+        sheared: bool,
+    ) {
+        let id = self.spawn_mob(species, x, y);
+        if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id)
+            && let EntityKind::Mob(mob) = &mut entity.kind
+        {
+            if let Some(health) = health {
+                mob.health = health.min(mob.max_health);
+            }
+            mob.sheared = sheared;
+        }
+    }
+
+    pub(crate) fn import_furniture(
+        &mut self,
+        kind: FurnitureKind,
+        x: i32,
+        y: i32,
+        state: u16,
+        contents: &[(ItemId, u16)],
+        tools: &[crate::item::ToolItem],
+    ) {
+        let id = self.spawn_furniture(kind, x, y);
+        if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id) {
+            entity.state = state;
+            if let Some(storage) = &mut entity.storage {
+                for (item, count) in contents {
+                    storage.add(*item, *count);
+                }
+                for tool in tools {
+                    let _ = storage.add_tool(*tool);
+                }
+            }
+        }
     }
 
     pub fn spawn_item(&mut self, stack: ItemStack, x: i32, y: i32) -> u64 {
@@ -372,6 +415,44 @@ impl EntityArena {
         })
     }
 
+    pub fn pickup_furniture_near(
+        &mut self,
+        x: i32,
+        y: i32,
+        radius: i32,
+        creative: bool,
+    ) -> Option<FurnitureKind> {
+        let entity = self.entities.iter_mut().find(|entity| {
+            if entity.removed || squared_distance(entity.x, entity.y, x, y) > radius * radius {
+                return false;
+            }
+            let EntityKind::Furniture(kind) = entity.kind else {
+                return false;
+            };
+            if kind == FurnitureKind::KnightStatue
+                || (kind == FurnitureKind::Tnt && entity.state > 0)
+            {
+                return false;
+            }
+            if !creative
+                && (kind.spawner_mob().is_some()
+                    || entity
+                        .storage
+                        .as_ref()
+                        .is_some_and(|storage| storage.used_slots() > 0))
+            {
+                return false;
+            }
+            true
+        })?;
+        let EntityKind::Furniture(kind) = entity.kind else {
+            unreachable!();
+        };
+        entity.removed = true;
+        self.entities.retain(|entity| !entity.removed);
+        Some(kind)
+    }
+
     pub fn furniture_blocks(&self, x: i32, y: i32) -> bool {
         self.entities.iter().any(|entity| {
             matches!(entity.kind, EntityKind::Furniture(_))
@@ -416,6 +497,7 @@ impl EntityArena {
         player_x: i32,
         player_y: i32,
         time_slowed: bool,
+        player_passive: bool,
         random: &mut JavaRandom,
     ) -> TickOutcome {
         let mut outcome = TickOutcome::default();
@@ -476,7 +558,7 @@ impl EntityArena {
                     if *kind == FurnitureKind::Tnt && entity.state > 0 {
                         entity.state -= 1;
                         if entity.state == 0 {
-                            outcome.explosions.push((entity.x, entity.y, 2));
+                            outcome.explosions.push((entity.x, entity.y, 2, true));
                             if squared_distance(entity.x, entity.y, player_x, player_y) <= 32 * 32 {
                                 outcome.player_damage = outcome.player_damage.max(4);
                             }
@@ -513,79 +595,86 @@ impl EntityArena {
                         }
                     }
 
-                    match mob.species {
-                        NaturalMob::Skeleton => {
-                            mob.attack_delay = mob.attack_delay.saturating_sub(1);
-                            if distance < 100 * 100 && mob.attack_delay == 0 {
-                                queued_projectiles.push((
-                                    ProjectileKind::Arrow,
-                                    entity.x,
-                                    entity.y,
-                                    player_x,
-                                    player_y,
-                                    1,
-                                ));
-                                mob.attack_delay = 83;
-                            }
-                        }
-                        NaturalMob::Creeper => {
-                            if distance <= 12 * 12 && mob.attack_time == 0 {
-                                mob.attack_time = 60;
-                            }
-                            if mob.attack_time > 0 {
-                                mob.attack_time -= 1;
-                                mob.x_move = 0;
-                                mob.y_move = 0;
-                                if mob.attack_time == 0 && distance < 64 * 64 {
-                                    outcome.explosions.push((entity.x, entity.y, 1));
-                                    outcome.player_damage = outcome.player_damage.max(3);
-                                    entity.removed = true;
-                                    continue;
-                                }
-                            }
-                        }
-                        NaturalMob::AirWizard | NaturalMob::ObsidianKnight => {
-                            mob.phase = u8::from(mob.health <= mob.max_health / 2);
-                            mob.attack_delay = mob.attack_delay.saturating_sub(1);
-                            if mob.attack_time > 0 {
-                                mob.attack_time -= 1;
-                                mob.x_move = 0;
-                                mob.y_move = 0;
-                                if mob.attack_time.is_multiple_of(5) {
-                                    let directions = [
-                                        (-2, 0),
-                                        (-1, -1),
-                                        (0, -2),
-                                        (1, -1),
-                                        (2, 0),
-                                        (1, 1),
-                                        (0, 2),
-                                        (-1, 1),
-                                    ];
-                                    let direction = directions
-                                        [(mob.attack_time as usize / 5 + mob.phase as usize) % 8];
+                    if !player_passive {
+                        match mob.species {
+                            NaturalMob::Skeleton => {
+                                mob.attack_delay = mob.attack_delay.saturating_sub(1);
+                                if distance < 100 * 100 && mob.attack_delay == 0 {
                                     queued_projectiles.push((
-                                        if mob.species == NaturalMob::ObsidianKnight {
-                                            ProjectileKind::FireSpark
-                                        } else {
-                                            ProjectileKind::Spark
-                                        },
+                                        ProjectileKind::Arrow,
                                         entity.x,
                                         entity.y,
-                                        entity.x + direction.0,
-                                        entity.y + direction.1,
-                                        1 + mob.phase,
+                                        player_x,
+                                        player_y,
+                                        1,
                                     ));
+                                    mob.attack_delay = 83;
                                 }
-                            } else if mob.attack_delay == 0 && distance < 50 * 50 {
-                                mob.attack_delay = 120;
-                                mob.attack_time = 120;
                             }
+                            NaturalMob::Creeper => {
+                                if distance <= 12 * 12 && mob.attack_time == 0 {
+                                    mob.attack_time = 60;
+                                }
+                                if mob.attack_time > 0 {
+                                    mob.attack_time -= 1;
+                                    mob.x_move = 0;
+                                    mob.y_move = 0;
+                                    if mob.attack_time == 0 && distance < 64 * 64 {
+                                        outcome.explosions.push((entity.x, entity.y, 1, false));
+                                        outcome.player_damage = outcome.player_damage.max(3);
+                                        entity.removed = true;
+                                        continue;
+                                    }
+                                }
+                            }
+                            NaturalMob::AirWizard | NaturalMob::ObsidianKnight => {
+                                mob.phase = u8::from(mob.health <= mob.max_health / 2);
+                                mob.attack_delay = mob.attack_delay.saturating_sub(1);
+                                if mob.attack_time > 0 {
+                                    mob.attack_time -= 1;
+                                    mob.x_move = 0;
+                                    mob.y_move = 0;
+                                    if mob.attack_time.is_multiple_of(5) {
+                                        let directions = [
+                                            (-2, 0),
+                                            (-1, -1),
+                                            (0, -2),
+                                            (1, -1),
+                                            (2, 0),
+                                            (1, 1),
+                                            (0, 2),
+                                            (-1, 1),
+                                        ];
+                                        let direction = directions[(mob.attack_time as usize / 5
+                                            + mob.phase as usize)
+                                            % 8];
+                                        queued_projectiles.push((
+                                            if mob.species == NaturalMob::ObsidianKnight {
+                                                ProjectileKind::FireSpark
+                                            } else {
+                                                ProjectileKind::Spark
+                                            },
+                                            entity.x,
+                                            entity.y,
+                                            entity.x + direction.0,
+                                            entity.y + direction.1,
+                                            1 + mob.phase,
+                                        ));
+                                    }
+                                } else if mob.attack_delay == 0 && distance < 50 * 50 {
+                                    mob.attack_delay = 120;
+                                    mob.attack_time = 120;
+                                }
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
 
-                    if mob.species.hostile() && distance < 80 * 80 && mob.attack_time == 0 {
+                    if !player_passive
+                        && mob.species.hostile()
+                        && distance < 80 * 80
+                        && mob.attack_time == 0
+                    {
                         mob.x_move = (player_x - entity.x).signum();
                         mob.y_move = (player_y - entity.y).signum();
                         mob.walk_time = 20;
@@ -626,7 +715,8 @@ impl EntityArena {
                             mob.walk_distance = mob.walk_distance.wrapping_add(1);
                         }
                     }
-                    if mob.species.hostile()
+                    if !player_passive
+                        && mob.species.hostile()
                         && squared_distance(entity.x, entity.y, player_x, player_y) <= 10 * 10
                     {
                         outcome.player_damage = outcome.player_damage.max(
@@ -666,7 +756,7 @@ impl EntityArena {
                     target,
                     u16::from(damage),
                     random,
-                    &mut outcome.defeated_bosses,
+                    &mut outcome.defeated_mobs,
                 );
             }
             self.entities[projectile_index].removed = true;
@@ -700,7 +790,7 @@ impl EntityArena {
         index: usize,
         damage: u16,
         random: &mut JavaRandom,
-        defeated_bosses: &mut Vec<NaturalMob>,
+        defeated_mobs: &mut Vec<NaturalMob>,
     ) -> HitResult {
         let (x, y, species, defeated, health) = {
             let entity = &mut self.entities[index];
@@ -716,9 +806,7 @@ impl EntityArena {
             (entity.x, entity.y, mob.species, defeated, mob.health)
         };
         if defeated {
-            if matches!(species, NaturalMob::AirWizard | NaturalMob::ObsidianKnight) {
-                defeated_bosses.push(species);
-            }
+            defeated_mobs.push(species);
             for stack in mob_drops(species, random) {
                 self.spawn_item(stack, x, y);
             }
@@ -1055,7 +1143,17 @@ mod tests {
         let data = vec![0; 16 * 16];
         arena.spawn_mob(NaturalMob::Skeleton, 80, 80);
         arena.spawn_mob(NaturalMob::Creeper, 145, 80);
-        arena.tick(&mut tiles, &data, 16, 16, 150, 80, false, &mut random);
+        arena.tick(
+            &mut tiles,
+            &data,
+            16,
+            16,
+            150,
+            80,
+            false,
+            false,
+            &mut random,
+        );
         assert!(
             arena
                 .entities()

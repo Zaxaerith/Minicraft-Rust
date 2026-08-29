@@ -1,10 +1,12 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 pub const MAX_STACK: u16 = 999;
 
 macro_rules! item_registry {
     ($( $variant:ident => ($asset:literal, $display:literal) ),+ $(,)?) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
         pub enum ItemId { $( $variant ),+ }
 
         impl ItemId {
@@ -219,7 +221,7 @@ impl ItemId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ArmorKind {
     Leather,
@@ -265,7 +267,7 @@ impl ArmorKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum PotionKind {
     Awkward,
@@ -339,13 +341,13 @@ impl fmt::Display for ItemId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemStack {
     pub item: ItemId,
     pub count: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[allow(dead_code)] // The remaining variants are registered before their station recipes land.
 pub enum ToolKind {
     Shovel,
@@ -441,7 +443,7 @@ impl ToolKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 #[allow(dead_code)] // Higher tiers are consumed by the upcoming anvil/enchanter lists.
 pub enum ToolTier {
@@ -470,7 +472,7 @@ impl ToolTier {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolItem {
     pub kind: ToolKind,
     pub tier: ToolTier,
@@ -538,7 +540,7 @@ impl ItemStack {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Inventory {
     slots: Vec<ItemStack>,
     tools: Vec<ToolItem>,

@@ -1,8 +1,9 @@
 use super::Tile;
+use serde::{Deserialize, Serialize};
 
 const MOB_SPAWN_FACTOR: usize = 100;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NaturalMob {
     Slime,
     Zombie,
@@ -37,7 +38,7 @@ impl NaturalMob {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpawnIntent {
     pub kind: NaturalMob,
     pub x: i32,

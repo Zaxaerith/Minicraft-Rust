@@ -1,23 +1,31 @@
 mod entity;
 mod generation;
+mod java_save;
 mod random;
 pub mod spawn;
 mod structure;
 mod tile_behavior;
 
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
 use crate::{
     assets::Assets,
+    audio::SoundEffect,
+    content::{Book, ProgressEvent, ProgressState},
     gfx::{HEIGHT, Screen, WIDTH},
     input::Input,
     item::{
         ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ArmorKind, ENCHANTER_RECIPES, FURNACE_RECIPES,
         HAND_RECIPES, Inventory, ItemId, ItemStack, LOOM_RECIPES, OVEN_RECIPES, PotionKind,
-        ToolKind, ToolTier, WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
+        ToolItem, ToolKind, ToolTier, WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
     },
 };
 
 pub use entity::FurnitureKind;
 use entity::{EntityArena, EntityKind};
+pub use java_save::{import_java_save, probe_java_save};
 
 const TILE_SIZE: i32 = 16;
 const DAY_LENGTH: u32 = 64_800;
@@ -85,6 +93,67 @@ pub struct WorldSpec {
     pub terrain: TerrainType,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum GameMode {
+    #[default]
+    Survival,
+    Creative,
+    Hardcore,
+    Score,
+}
+
+impl GameMode {
+    pub const ALL: [Self; 4] = [Self::Survival, Self::Creative, Self::Hardcore, Self::Score];
+
+    pub const fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Creative,
+            2 => Self::Hardcore,
+            3 => Self::Score,
+            _ => Self::Survival,
+        }
+    }
+
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Survival => "SURVIVAL",
+            Self::Creative => "CREATIVE",
+            Self::Hardcore => "HARDCORE",
+            Self::Score => "SCORE",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PlayOptions {
+    pub difficulty: usize,
+    pub mode: GameMode,
+    pub score_minutes: usize,
+    pub tutorials: bool,
+    pub quests: bool,
+    pub show_quests: bool,
+    pub custom_skin: bool,
+}
+
+impl PlayOptions {
+    #[cfg(test)]
+    pub const fn survival(difficulty: usize) -> Self {
+        Self {
+            difficulty,
+            mode: GameMode::Survival,
+            score_minutes: 20,
+            tutorials: false,
+            quests: false,
+            show_quests: true,
+            custom_skin: false,
+        }
+    }
+}
+
 impl Default for WorldSpec {
     fn default() -> Self {
         Self {
@@ -108,7 +177,7 @@ impl WorldSpec {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 #[allow(dead_code)] // Remaining 2.2.4 level types will construct every registered tile.
 pub enum Tile {
@@ -408,7 +477,7 @@ impl Tile {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum Direction {
     Down,
     Up,
@@ -416,12 +485,13 @@ enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ActiveItem {
     Stack(ItemId),
     Tool(usize),
 }
 
+#[derive(Serialize, Deserialize)]
 struct Player {
     x: i32,
     y: i32,
@@ -453,6 +523,7 @@ struct Player {
     active_item: Option<ActiveItem>,
 }
 
+#[derive(Serialize, Deserialize)]
 struct Level {
     depth: i8,
     tiles: Vec<Tile>,
@@ -462,11 +533,19 @@ struct Level {
     entities: EntityArena,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SignEditor {
+    level: usize,
+    tile: usize,
+    text: String,
+}
+
 pub enum WorldAction {
     None,
     ReturnToTitle,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct World {
     width: usize,
     height: usize,
@@ -478,6 +557,21 @@ pub struct World {
     day_tick: u32,
     days: u32,
     difficulty: usize,
+    mode: GameMode,
+    score: u32,
+    score_ticks: u32,
+    score_multiplier: u8,
+    multiplier_ticks: u16,
+    game_over: bool,
+    story_complete: bool,
+    sleeping: u16,
+    tutorials_enabled: bool,
+    quests_enabled: bool,
+    show_quests: bool,
+    progress: ProgressState,
+    signs: Vec<HashMap<usize, String>>,
+    sign_editor: Option<SignEditor>,
+    book_open: Option<(Book, usize)>,
     paused: bool,
     pause_selection: usize,
     inventory_open: bool,
@@ -489,10 +583,99 @@ pub struct World {
     air_wizard_defeated: bool,
     obsidian_knight_defeated: bool,
     random: random::JavaRandom,
+    #[serde(skip)]
+    sound_events: Vec<SoundEffect>,
+}
+
+#[derive(Serialize)]
+struct WorldSaveRef<'a> {
+    format: u32,
+    game_version: &'static str,
+    world: &'a World,
+}
+
+#[derive(Deserialize)]
+struct WorldSaveOwned {
+    format: u32,
+    game_version: String,
+    world: World,
 }
 
 impl World {
+    pub fn to_save_string(&self) -> Result<String, String> {
+        serde_json::to_string(&WorldSaveRef {
+            format: 2,
+            game_version: "2.2.4-rust",
+            world: self,
+        })
+        .map_err(|error| format!("cannot serialize world: {error}"))
+    }
+
+    pub fn from_save_string(text: &str) -> Result<Self, String> {
+        let save: WorldSaveOwned = serde_json::from_str(text)
+            .map_err(|error| format!("cannot parse world state: {error}"))?;
+        if save.format != 2 {
+            return Err(format!("unsupported Rust world format {}", save.format));
+        }
+        if save.game_version != "2.2.4-rust" {
+            return Err(format!(
+                "unsupported Rust game version {}",
+                save.game_version
+            ));
+        }
+        save.world.validate_save()?;
+        Ok(save.world)
+    }
+
+    pub fn autosave_due(&self) -> bool {
+        self.tick > 0 && self.tick.is_multiple_of(1_800)
+    }
+
+    pub fn save_tick(&self) -> u64 {
+        self.tick
+    }
+
+    pub fn take_sound_events(&mut self) -> Vec<SoundEffect> {
+        std::mem::take(&mut self.sound_events)
+    }
+
+    fn sound(&mut self, effect: SoundEffect) {
+        self.sound_events.push(effect);
+    }
+
+    fn validate_save(&self) -> Result<(), String> {
+        if self.width == 0 || self.height == 0 || self.width > 512 || self.height > 512 {
+            return Err(format!(
+                "invalid saved world dimensions {}x{}",
+                self.width, self.height
+            ));
+        }
+        if self.levels.is_empty() || self.current_level >= self.levels.len() {
+            return Err("saved world has no valid current level".to_owned());
+        }
+        let expected = self
+            .width
+            .checked_mul(self.height)
+            .ok_or_else(|| "saved world dimensions overflow".to_owned())?;
+        if self
+            .levels
+            .iter()
+            .any(|level| level.tiles.len() != expected || level.data.len() != expected)
+        {
+            return Err("saved level storage does not match world dimensions".to_owned());
+        }
+        if self.signs.len() != self.levels.len() {
+            return Err("saved sign storage does not match level count".to_owned());
+        }
+        Ok(())
+    }
+    #[cfg(test)]
     pub fn new_with_options(seed: i64, spec: WorldSpec, difficulty: usize) -> Self {
+        Self::new_with_play_options(seed, spec, PlayOptions::survival(difficulty))
+    }
+
+    pub fn new_with_play_options(seed: i64, spec: WorldSpec, options: PlayOptions) -> Self {
+        let difficulty = options.difficulty.min(2);
         let size = spec.size;
         let mut levels: Vec<Level> = [1, 0, -1, -2, -3, -4]
             .into_iter()
@@ -560,6 +743,32 @@ impl World {
         }
         let current_level = 1;
         let (spawn_x, spawn_y) = find_spawn(&levels[current_level].tiles, size, size);
+        let mut inventory = Inventory::new(if options.mode == GameMode::Creative {
+            256
+        } else {
+            32
+        });
+        if options.mode == GameMode::Creative {
+            for item in ItemId::ALL
+                .iter()
+                .copied()
+                .filter(|item| *item != ItemId::PowerGlove)
+            {
+                inventory.add(item, 1);
+            }
+            for kind in ToolKind::ALL {
+                for tier in ToolTier::ALL {
+                    if kind != ToolKind::Shears || tier == ToolTier::Wood {
+                        inventory.add_tool(ToolItem::new(kind, tier));
+                    }
+                }
+            }
+        }
+        let sign_levels = levels.len();
+        let mut progress = ProgressState::load().expect("bundled progression data must be valid");
+        if options.custom_skin {
+            progress.unlock_achievement("minicraft.achievement.skin");
+        }
         Self {
             width: size,
             height: size,
@@ -592,14 +801,33 @@ impl World {
                 fishing_ticks: 0,
                 watering_content: 0,
                 clothing: ItemId::RegularClothes,
-                inventory: Inventory::new(32),
+                inventory,
                 active_item: None,
             },
             seed,
             tick: 0,
             day_tick: 0,
             days: 1,
-            difficulty: difficulty.min(2),
+            difficulty,
+            mode: options.mode,
+            score: 0,
+            score_ticks: (match options.score_minutes {
+                10 | 20 | 40 | 60 | 120 => options.score_minutes,
+                _ => 20,
+            } * 60
+                * 60) as u32,
+            score_multiplier: 1,
+            multiplier_ticks: 300,
+            game_over: false,
+            story_complete: false,
+            sleeping: 0,
+            tutorials_enabled: options.tutorials,
+            quests_enabled: options.quests,
+            show_quests: options.show_quests,
+            progress,
+            signs: (0..sign_levels).map(|_| HashMap::new()).collect(),
+            sign_editor: None,
+            book_open: None,
             paused: false,
             pause_selection: 0,
             inventory_open: false,
@@ -611,6 +839,7 @@ impl World {
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
             random: random::JavaRandom::new(seed ^ 0x05EE_D224),
+            sound_events: Vec::new(),
         }
     }
 
@@ -618,9 +847,9 @@ impl World {
         seed: i64,
         depth: i8,
         spec: WorldSpec,
-        difficulty: usize,
+        options: PlayOptions,
     ) -> Result<Self, String> {
-        let mut world = Self::new_with_options(seed, spec, difficulty);
+        let mut world = Self::new_with_play_options(seed, spec, options);
         let index = world
             .levels
             .iter()
@@ -708,7 +937,60 @@ impl World {
         }
     }
 
+    pub fn populate_score_preview(&mut self) {
+        self.mode = GameMode::Score;
+        self.score = 12_450;
+        self.score_multiplier = 7;
+        self.score_ticks = 7 * 60 + 42;
+        self.notification = Some(("SCORE MODE PREVIEW".to_owned(), 150));
+    }
+
+    pub fn populate_book_preview(&mut self) {
+        self.book_open = Some((Book::Antidious, 0));
+    }
+
+    pub fn populate_sign_preview(&mut self) {
+        self.sign_editor = Some(SignEditor {
+            level: self.current_level,
+            tile: 0,
+            text: "WELCOME TO MINICRAFT".to_owned(),
+        });
+    }
+
+    pub fn populate_progress_preview(&mut self) {
+        self.tutorials_enabled = true;
+        self.quests_enabled = true;
+        self.show_quests = true;
+        self.player.inventory.add(ItemId::Wood, 1);
+        self.update_progress(ProgressEvent::InventoryChanged);
+        self.notification = Some(("DATA-DRIVEN PROGRESS ACTIVE".to_owned(), 150));
+    }
+
     pub fn tick(&mut self, input: &Input) -> WorldAction {
+        if self.tick_sign_editor(input) || self.tick_book(input) {
+            return WorldAction::None;
+        }
+        if self.game_over {
+            return if input.select || input.exit {
+                WorldAction::ReturnToTitle
+            } else {
+                WorldAction::None
+            };
+        }
+        if self.sleeping > 0 {
+            self.sleeping -= 1;
+            if self.sleeping == 0 {
+                self.day_tick = 0;
+                self.player.stamina = MAX_STAT;
+                self.player.health = self
+                    .player
+                    .health
+                    .saturating_add(2)
+                    .min(self.player.max_health);
+                self.notification = Some(("A NEW MORNING BEGINS".to_owned(), 90));
+            }
+            return WorldAction::None;
+        }
         if input.exit {
             if self.inventory_open {
                 self.inventory_open = false;
@@ -793,6 +1075,24 @@ impl World {
         }
 
         self.tick = self.tick.wrapping_add(1);
+        if self.mode == GameMode::Score {
+            if self.score_ticks == 0 {
+                self.game_over = true;
+                return WorldAction::None;
+            }
+            self.score_ticks -= 1;
+            if self.score_ticks == 0 {
+                self.game_over = true;
+                return WorldAction::None;
+            }
+            if self.score_multiplier > 1 {
+                self.multiplier_ticks = self.multiplier_ticks.saturating_sub(1);
+                if self.multiplier_ticks == 0 {
+                    self.score_multiplier = 1;
+                    self.multiplier_ticks = 300;
+                }
+            }
+        }
         self.day_tick += 1;
         if self.day_tick >= DAY_LENGTH {
             self.day_tick = 0;
@@ -828,6 +1128,7 @@ impl World {
                 self.player.x,
                 self.player.y,
                 time_slowed,
+                self.mode == GameMode::Creative,
                 &mut self.random,
             )
         };
@@ -836,15 +1137,11 @@ impl World {
         if outcome.player_damage > 0 && self.hurt_player(outcome.player_damage, false) {
             self.notification = Some(("A MONSTER HURTS YOU".to_owned(), 45));
         }
-        for (x, y, radius) in outcome.explosions {
-            self.apply_explosion(x, y, radius);
+        for (x, y, radius, player_tnt) in outcome.explosions {
+            self.apply_explosion(x, y, radius, player_tnt);
         }
-        for boss in outcome.defeated_bosses {
-            match boss {
-                spawn::NaturalMob::AirWizard => self.air_wizard_defeated = true,
-                spawn::NaturalMob::ObsidianKnight => self.obsidian_knight_defeated = true,
-                _ => {}
-            }
+        for mob in outcome.defeated_mobs {
+            self.handle_defeated_mob(mob);
         }
         if let Some((_, remaining)) = &mut self.notification {
             *remaining = remaining.saturating_sub(1);
@@ -892,8 +1189,15 @@ impl World {
             self.player.y,
             &mut self.player.inventory,
         );
+        for stack in &collected {
+            self.add_score(1, 0);
+            if stack.item == ItemId::Gem {
+                self.unlock_achievement("minicraft.achievement.find_gem");
+            }
+        }
         if let Some(stack) = collected.last() {
             self.notification = Some((format!("{} +{}", stack.item, stack.count), 45));
+            self.sound(SoundEffect::Pickup);
         }
         if input.attack && !self.use_active_self_item() {
             self.attack();
@@ -901,9 +1205,18 @@ impl World {
         if input.select {
             self.use_target();
         }
+        if input.pickup {
+            self.pickup_target();
+        }
         self.tick_potion_effects();
         self.tick_fishing();
-        self.tick_survival_stats();
+        if self.mode != GameMode::Creative {
+            self.tick_survival_stats();
+        } else {
+            self.player.health = self.player.max_health;
+            self.player.stamina = MAX_STAT;
+            self.player.hunger = MAX_STAT;
+        }
         if self.tile_at_pixel(self.player.x, self.player.y) == Tile::Lava
             && self.tick.is_multiple_of(30)
             && !self.effect_active(PotionKind::Lava)
@@ -912,8 +1225,14 @@ impl World {
             self.notification = Some(("THE LAVA BURNS".to_owned(), 45));
         }
         if self.player.health == 0 {
-            self.respawn();
+            self.sound(SoundEffect::Death);
+            if self.mode == GameMode::Hardcore {
+                self.game_over = true;
+            } else {
+                self.respawn();
+            }
         }
+        self.update_progress(ProgressEvent::InventoryChanged);
         WorldAction::None
     }
 
@@ -937,19 +1256,11 @@ impl World {
         let message = match self.crafting_station {
             None => {
                 let recipe = HAND_RECIPES[self.inventory_selection];
-                if recipe.craft(&mut self.player.inventory) {
-                    format!("CRAFTED {} x{}", recipe.output.item, recipe.output.count)
-                } else {
-                    missing
-                }
+                self.craft_stack(recipe, missing)
             }
             Some(FurnitureKind::Workbench) => {
                 if let Some(recipe) = WORKBENCH_STATION_RECIPES.get(self.inventory_selection) {
-                    if recipe.craft(&mut self.player.inventory) {
-                        format!("CRAFTED {}", recipe.output.item)
-                    } else {
-                        missing
-                    }
+                    self.craft_stack(*recipe, missing)
                 } else {
                     let index = self.inventory_selection - WORKBENCH_STATION_RECIPES.len();
                     self.craft_tool(WORKBENCH_TOOL_RECIPES[index], missing)
@@ -977,11 +1288,23 @@ impl World {
             }
             _ => return,
         };
+        if message.starts_with("CRAFTED ") {
+            self.sound(SoundEffect::Craft);
+        }
         self.notification = Some((message, 60));
     }
 
     fn craft_stack(&mut self, recipe: crate::item::Recipe, missing: String) -> String {
-        if recipe.craft(&mut self.player.inventory) {
+        let crafted = if self.mode == GameMode::Creative {
+            self.player
+                .inventory
+                .add(recipe.output.item, recipe.output.count)
+                == 0
+        } else {
+            recipe.craft(&mut self.player.inventory)
+        };
+        if crafted {
+            self.crafting_achievement(recipe.output.item);
             format!("CRAFTED {} x{}", recipe.output.item, recipe.output.count)
         } else {
             missing
@@ -989,8 +1312,19 @@ impl World {
     }
 
     fn craft_tool(&mut self, recipe: crate::item::ToolRecipe, missing: String) -> String {
-        if let Some(index) = recipe.craft(&mut self.player.inventory) {
+        let crafted = if self.mode == GameMode::Creative {
+            self.player.inventory.add_tool(recipe.output)
+        } else {
+            recipe.craft(&mut self.player.inventory)
+        };
+        if let Some(index) = crafted {
             self.player.active_item = Some(ActiveItem::Tool(index));
+            if recipe.output.tier != ToolTier::Wood {
+                self.unlock_achievement("minicraft.achievement.upgrade");
+            }
+            if recipe.output.kind == ToolKind::Bow {
+                self.unlock_achievement("minicraft.achievement.bow");
+            }
             format!("CRAFTED {}", recipe.output.display_name())
         } else {
             missing
@@ -1018,7 +1352,9 @@ impl World {
         if let Some(potion) = item.potion_kind() {
             if self.apply_potion(potion) {
                 self.consume_active_stack(item);
-                if self.player.inventory.add(ItemId::GlassBottle, 1) != 0 {
+                if self.mode != GameMode::Creative
+                    && self.player.inventory.add(ItemId::GlassBottle, 1) != 0
+                {
                     self.levels[self.current_level].entities.spawn_item(
                         ItemStack::new(ItemId::GlassBottle, 1),
                         self.player.x,
@@ -1100,16 +1436,246 @@ impl World {
             if self.player.clothing != item {
                 let previous = self.player.clothing;
                 self.consume_active_stack(item);
-                self.player.inventory.add(previous, 1);
+                if self.mode != GameMode::Creative {
+                    self.player.inventory.add(previous, 1);
+                }
                 self.player.clothing = item;
                 self.notification = Some((format!("WEARING {item}"), 60));
+                self.unlock_achievement("minicraft.achievement.clothes");
             }
+            return true;
+        }
+        if matches!(item, ItemId::Book | ItemId::AntidiousBook) {
+            self.book_open = Some((
+                if item == ItemId::AntidiousBook {
+                    Book::Antidious
+                } else {
+                    Book::GameGuide
+                },
+                0,
+            ));
             return true;
         }
         false
     }
 
+    fn tick_book(&mut self, input: &Input) -> bool {
+        let Some((book, page)) = self.book_open.as_mut() else {
+            return false;
+        };
+        let pages = book.pages();
+        if input.left_pressed {
+            *page = page.saturating_sub(1);
+        }
+        if input.right_pressed {
+            *page = (*page + 1).min(pages.len().saturating_sub(1));
+        }
+        if input.exit || input.select {
+            self.book_open = None;
+        }
+        true
+    }
+
+    fn tick_sign_editor(&mut self, input: &Input) -> bool {
+        let Some(editor) = self.sign_editor.as_mut() else {
+            return false;
+        };
+        if input.backspace {
+            editor.text.pop();
+        }
+        for character in &input.text {
+            if !character.is_control() && editor.text.chars().count() < 28 {
+                editor.text.push(*character);
+            }
+        }
+        if input.exit || input.select {
+            let editor = self.sign_editor.take().expect("sign editor is open");
+            if editor.text.trim().is_empty() {
+                self.signs[editor.level].remove(&editor.tile);
+            } else {
+                self.signs[editor.level].insert(editor.tile, editor.text.trim().to_owned());
+            }
+            self.notification = Some(("SIGN SAVED".to_owned(), 45));
+        }
+        true
+    }
+
+    fn add_score(&mut self, points: u32, multiplier_gain: u8) {
+        if self.mode != GameMode::Score {
+            return;
+        }
+        self.score = self
+            .score
+            .saturating_add(points.saturating_mul(u32::from(self.score_multiplier)));
+        if multiplier_gain > 0 {
+            self.score_multiplier = self
+                .score_multiplier
+                .saturating_add(multiplier_gain)
+                .min(50);
+            self.multiplier_ticks = 300;
+        }
+    }
+
+    fn handle_defeated_mob(&mut self, species: spawn::NaturalMob) {
+        let (score, multiplier) = match species {
+            spawn::NaturalMob::AirWizard => (100_000, 0),
+            spawn::NaturalMob::ObsidianKnight => (300_000, 0),
+            spawn::NaturalMob::Cow | spawn::NaturalMob::Pig | spawn::NaturalMob::Sheep => (15, 0),
+            _ => (50, 1),
+        };
+        self.add_score(score, multiplier);
+        match species {
+            spawn::NaturalMob::AirWizard => {
+                self.sound(SoundEffect::BossDeath);
+                self.air_wizard_defeated = true;
+                self.unlock_achievement("minicraft.achievement.airwizard");
+                self.notification = Some((
+                    "THE AIR WIZARD FALLS; THE OBSIDIAN DEPTHS OPEN".to_owned(),
+                    180,
+                ));
+            }
+            spawn::NaturalMob::ObsidianKnight => {
+                self.sound(SoundEffect::BossDeath);
+                self.obsidian_knight_defeated = true;
+                self.story_complete = true;
+                self.unlock_achievement("minicraft.achievement.obsidianknight");
+                self.notification = Some((
+                    "THE OBSIDIAN KNIGHT FALLS; MINICRAFT IS RESTORED".to_owned(),
+                    240,
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    fn unlock_achievement(&mut self, id: &str) {
+        if self.progress.unlock_achievement(id) {
+            let label = id.rsplit('.').next().unwrap_or(id).replace('_', " ");
+            self.notification = Some((format!("ACHIEVEMENT: {}", label.to_ascii_uppercase()), 90));
+        }
+    }
+
+    fn crafting_achievement(&mut self, item: ItemId) {
+        let achievement = match item {
+            ItemId::Workbench => Some("minicraft.achievement.benchmarking"),
+            ItemId::Plank => Some("minicraft.achievement.planks"),
+            ItemId::WoodDoor | ItemId::StoneDoor | ItemId::ObsidianDoor => {
+                Some("minicraft.achievement.doors")
+            }
+            _ => None,
+        };
+        if let Some(id) = achievement {
+            self.unlock_achievement(id);
+        }
+    }
+
+    fn inventory_progress(&self) -> HashMap<String, u16> {
+        let mut inventory = HashMap::new();
+        for stack in self.player.inventory.slots() {
+            *inventory
+                .entry(stack.item.display_name().to_ascii_lowercase())
+                .or_insert(0) += stack.count;
+        }
+        for tool in self.player.inventory.tools() {
+            let tier = if tool.tier == ToolTier::Rock {
+                "stone"
+            } else {
+                tool.tier.display_name()
+            };
+            let name = format!(
+                "{} {}",
+                tier.to_ascii_lowercase(),
+                tool.kind.display_name().to_ascii_lowercase()
+            );
+            *inventory.entry(name).or_insert(0) += 1;
+        }
+        inventory
+    }
+
+    fn update_progress(&mut self, event: ProgressEvent) {
+        if !self.tutorials_enabled && !self.quests_enabled {
+            return;
+        }
+        let inventory = self.inventory_progress();
+        let update = self.progress.update_filtered(
+            &event,
+            &inventory,
+            self.tutorials_enabled,
+            self.quests_enabled,
+        );
+        for reward in update.rewards {
+            self.grant_reward(&reward);
+        }
+        if let Some(id) = update.completed_quests.last() {
+            self.notification = Some((format!("QUEST COMPLETE: {}", id.to_ascii_uppercase()), 90));
+        } else if let Some(id) = update.completed_tutorials.last() {
+            self.notification = Some((
+                format!("TUTORIAL COMPLETE: {}", id.to_ascii_uppercase()),
+                75,
+            ));
+        }
+    }
+
+    fn grant_reward(&mut self, reward: &str) {
+        let (name, count) = reward
+            .rsplit_once('_')
+            .and_then(|(name, count)| count.parse::<u16>().ok().map(|count| (name, count)))
+            .unwrap_or((reward, 1));
+        let normalized = name.replace('_', " ").to_ascii_lowercase();
+        let Some(item) = ItemId::ALL.iter().copied().find(|item| {
+            item.display_name().to_ascii_lowercase() == normalized
+                || item.asset_name().replace('_', " ") == normalized
+        }) else {
+            return;
+        };
+        let remainder = self.player.inventory.add(item, count);
+        if remainder > 0 {
+            self.levels[self.current_level].entities.spawn_item(
+                ItemStack::new(item, remainder),
+                self.player.x,
+                self.player.y,
+            );
+        }
+    }
+
+    fn pickup_target(&mut self) {
+        let (offset_x, offset_y) = match self.player.direction {
+            Direction::Down => (0, 12),
+            Direction::Up => (0, -12),
+            Direction::Left => (-12, 0),
+            Direction::Right => (12, 0),
+        };
+        let creative = self.mode == GameMode::Creative;
+        let picked = self.levels[self.current_level]
+            .entities
+            .pickup_furniture_near(
+                self.player.x + offset_x,
+                self.player.y + offset_y,
+                14,
+                creative,
+            );
+        let Some(kind) = picked else {
+            self.notification = Some(("NOTHING CAN BE PICKED UP".to_owned(), 30));
+            return;
+        };
+        let Some(item) = item_for_furniture(kind) else {
+            return;
+        };
+        if !creative && self.player.inventory.add(item, 1) != 0 {
+            self.levels[self.current_level].entities.spawn_item(
+                ItemStack::new(item, 1),
+                self.player.x,
+                self.player.y,
+            );
+        }
+        self.notification = Some((format!("PICKED UP {}", kind.display_name()), 45));
+        self.sound(SoundEffect::Pickup);
+    }
+
     fn consume_active_stack(&mut self, item: ItemId) {
+        if self.mode == GameMode::Creative {
+            return;
+        }
         debug_assert!(self.player.inventory.remove(item, 1));
         if self.player.inventory.count(item) == 0 {
             self.player.active_item = None;
@@ -1117,7 +1683,7 @@ impl World {
     }
 
     fn pay_stamina(&mut self, cost: u8) -> bool {
-        if self.effect_active(PotionKind::Energy) {
+        if self.mode == GameMode::Creative || self.effect_active(PotionKind::Energy) {
             return true;
         }
         if self.player.stamina == 0 {
@@ -1231,6 +1797,7 @@ impl World {
                     self.player.y,
                 );
             }
+            self.unlock_achievement("minicraft.achievement.fish");
             self.notification = Some((format!("CAUGHT {item}"), 75));
         } else {
             let tiers = [
@@ -1257,6 +1824,9 @@ impl World {
     }
 
     fn hurt_player(&mut self, mut damage: u8, direct: bool) -> bool {
+        if self.mode == GameMode::Creative {
+            return false;
+        }
         if self.player.hurt_time > 0 && !direct {
             return false;
         }
@@ -1282,6 +1852,7 @@ impl World {
         }
         self.player.health = self.player.health.saturating_sub(health_damage);
         self.player.hurt_time = 30;
+        self.sound(SoundEffect::PlayerHurt);
         true
     }
 
@@ -1396,7 +1967,7 @@ impl World {
             .into_iter()
             .all(|(offset_x, offset_y)| {
                 let (tile, data) = self.tile_and_data_at_pixel(x + offset_x, y + offset_y);
-                !tile.solid(data)
+                (self.mode == GameMode::Creative && tile == Tile::InfiniteFall || !tile.solid(data))
                     && !self.levels[self.current_level]
                         .entities
                         .furniture_blocks(x + offset_x, y + offset_y)
@@ -1431,12 +2002,17 @@ impl World {
             && let Some(tool) = self.player.inventory.tools().get(index).copied()
         {
             if tool.kind == ToolKind::Bow {
-                if (self.player.stamina > 0 || self.effect_active(PotionKind::Energy))
-                    && self.player.inventory.count(ItemId::Arrow) > 0
+                if (self.mode == GameMode::Creative
+                    || self.player.stamina > 0
+                    || self.effect_active(PotionKind::Energy))
+                    && (self.mode == GameMode::Creative
+                        || self.player.inventory.count(ItemId::Arrow) > 0)
                     && !tool.is_depleted()
                 {
-                    self.player.inventory.remove(ItemId::Arrow, 1);
-                    self.player.inventory.tools_mut()[index].pay_durability();
+                    if self.mode != GameMode::Creative {
+                        self.player.inventory.remove(ItemId::Arrow, 1);
+                        self.player.inventory.tools_mut()[index].pay_durability();
+                    }
                     let (far_x, far_y) = match self.player.direction {
                         Direction::Down => (self.player.x, self.player.y + 160),
                         Direction::Up => (self.player.x, self.player.y - 160),
@@ -1461,7 +2037,9 @@ impl World {
                     target_y,
                     &mut self.random,
                 ) {
-                    self.player.inventory.tools_mut()[index].pay_durability();
+                    if self.mode != GameMode::Creative {
+                        self.player.inventory.tools_mut()[index].pay_durability();
+                    }
                     self.notification = Some(("SHEEP SHEARED".to_owned(), 45));
                 }
                 return;
@@ -1479,6 +2057,7 @@ impl World {
             .ignite_tnt_near(target_x, target_y)
         {
             self.notification = Some(("TNT FUSE LIT".to_owned(), 45));
+            self.sound(SoundEffect::Fuse);
             return;
         }
 
@@ -1506,12 +2085,16 @@ impl World {
                 format!("{} HP {}", hit.species.display_name(), hit.health)
             };
             self.notification = Some((message, 45));
+            if !hit.defeated
+                || !matches!(
+                    hit.species,
+                    spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
+                )
+            {
+                self.sound(SoundEffect::MonsterHurt);
+            }
             if hit.defeated {
-                match hit.species {
-                    spawn::NaturalMob::AirWizard => self.air_wizard_defeated = true,
-                    spawn::NaturalMob::ObsidianKnight => self.obsidian_knight_defeated = true,
-                    _ => {}
-                }
+                self.handle_defeated_mob(hit.species);
             }
             return;
         }
@@ -1601,9 +2184,27 @@ impl World {
                 self.levels[self.current_level].tiles[index] = placed;
                 self.levels[self.current_level].data[index] = data;
                 self.consume_active_stack(item);
+                self.update_progress(ProgressEvent::PlacedTile {
+                    tile: tile_progress_name(placed),
+                });
+                if matches!(
+                    placed,
+                    Tile::Wheat
+                        | Tile::Potato
+                        | Tile::Tomato
+                        | Tile::Carrot
+                        | Tile::HeavenlyBerries
+                        | Tile::HellishBerries
+                ) {
+                    self.unlock_achievement("minicraft.achievement.plant_seed");
+                }
                 self.notification = Some((format!("PLACED {item}"), 45));
                 return;
             }
+        }
+
+        if self.mode == GameMode::Creative && self.creative_break_tile(index) {
+            return;
         }
 
         if let Some(tool) = self.active_tool() {
@@ -1624,6 +2225,20 @@ impl World {
                 }
                 self.levels[self.current_level].tiles[index] = tile;
                 self.levels[self.current_level].data[index] = 0;
+                if tool.kind == ToolKind::Hoe {
+                    self.update_progress(ProgressEvent::ItemUsedOnTile {
+                        item: format!(
+                            "{} hoe",
+                            if tool.tier == ToolTier::Rock {
+                                "stone"
+                            } else {
+                                tool.tier.display_name()
+                            }
+                            .to_ascii_lowercase()
+                        ),
+                        tile: tile_progress_name(target),
+                    });
+                }
                 if let Some(item) = drop {
                     let count = if item == ItemId::Cloud {
                         (self.random.next_int(3) + 1) as u16
@@ -1680,6 +2295,7 @@ impl World {
                         );
                     }
                     self.notification = Some((format!("WOOD DROPPED {wood}"), 60));
+                    self.unlock_achievement("minicraft.achievement.woodcutter");
                 } else {
                     self.levels[self.current_level].data[index] = total;
                     self.notification = Some((format!("TREE {total}/20"), 30));
@@ -1688,6 +2304,14 @@ impl World {
             Tile::WoodDoor | Tile::StoneDoor | Tile::ObsidianDoor => {
                 self.levels[self.current_level].data[index] ^= 1;
                 self.notification = Some(("DOOR TOGGLED".to_owned(), 30));
+            }
+            Tile::BossDoor => {
+                if self.mode == GameMode::Creative || self.obsidian_knight_defeated {
+                    self.levels[self.current_level].data[index] ^= 1;
+                    self.notification = Some(("BOSS DOOR TOGGLED".to_owned(), 30));
+                } else {
+                    self.notification = Some(("DEFEAT THE OBSIDIAN KNIGHT FIRST".to_owned(), 75));
+                }
             }
             Tile::Cactus => {
                 if damage_tile(
@@ -1742,6 +2366,10 @@ impl World {
                         tile_x * TILE_SIZE + 8,
                         tile_y * TILE_SIZE + 8,
                     );
+                }
+                if mature {
+                    let crop_score = (self.random.next_int(5) + 1) as u32;
+                    self.add_score(crop_score, 0);
                 }
                 self.notification = Some(("CROP HARVESTED".to_owned(), 30));
             }
@@ -1804,6 +2432,14 @@ impl World {
                 }
             }
             Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => {
+                if self.levels[self.current_level].tiles[index] == Tile::ObsidianWall
+                    && self.levels[self.current_level].depth == -3
+                    && !self.air_wizard_defeated
+                    && self.mode != GameMode::Creative
+                {
+                    self.notification = Some(("DEFEAT THE AIR WIZARD FIRST".to_owned(), 75));
+                    return;
+                }
                 let required = if self.levels[self.current_level].tiles[index] == Tile::WoodWall {
                     ToolKind::Axe
                 } else {
@@ -1824,6 +2460,53 @@ impl World {
                     100,
                     replacement,
                 );
+            }
+            Tile::BossWall => {
+                if !self.obsidian_knight_defeated && self.mode != GameMode::Creative {
+                    self.notification = Some(("DEFEAT THE OBSIDIAN KNIGHT FIRST".to_owned(), 75));
+                    return;
+                }
+                let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 4) else {
+                    self.notification = Some(("PICKAXE REQUIRED".to_owned(), 45));
+                    return;
+                };
+                damage_tile(
+                    &mut self.levels[self.current_level],
+                    index,
+                    damage,
+                    100,
+                    Tile::BossFloor,
+                );
+            }
+            Tile::Sign => {
+                let axe = self
+                    .active_tool()
+                    .is_some_and(|tool| tool.kind == ToolKind::Axe);
+                if !axe {
+                    self.sign_editor = Some(SignEditor {
+                        level: self.current_level,
+                        tile: index,
+                        text: self.signs[self.current_level]
+                            .get(&index)
+                            .cloned()
+                            .unwrap_or_default(),
+                    });
+                    return;
+                }
+                if self.pay_tool_terrain_damage(ToolKind::Axe, 4).is_none() {
+                    return;
+                }
+                let underlying = Tile::from_id(self.levels[self.current_level].data[index] as u8)
+                    .unwrap_or(Tile::Dirt);
+                self.levels[self.current_level].tiles[index] = underlying;
+                self.levels[self.current_level].data[index] = 0;
+                self.signs[self.current_level].remove(&index);
+                self.levels[self.current_level].entities.spawn_item(
+                    ItemStack::new(ItemId::Sign, 1),
+                    tile_x * TILE_SIZE + 8,
+                    tile_y * TILE_SIZE + 8,
+                );
+                self.notification = Some(("SIGN REMOVED".to_owned(), 45));
             }
             Tile::IronOre | Tile::GoldOre | Tile::GemOre | Tile::LapisOre | Tile::CloudOre => {
                 let ore_tile = self.levels[self.current_level].tiles[index];
@@ -1865,6 +2548,45 @@ impl World {
         }
     }
 
+    fn creative_break_tile(&mut self, index: usize) -> bool {
+        let tile = self.levels[self.current_level].tiles[index];
+        let data = self.levels[self.current_level].data[index];
+        let replacement = match tile {
+            Tile::Tree | Tile::TreeSapling | Tile::Flower => Tile::Grass,
+            Tile::Cactus | Tile::CactusSapling => Tile::Sand,
+            Tile::Rock
+            | Tile::HardRock
+            | Tile::IronOre
+            | Tile::GoldOre
+            | Tile::GemOre
+            | Tile::LapisOre => Tile::Dirt,
+            Tile::CloudOre => Tile::Cloud,
+            Tile::Wheat
+            | Tile::Potato
+            | Tile::Tomato
+            | Tile::Carrot
+            | Tile::HeavenlyBerries
+            | Tile::HellishBerries => Tile::Farmland,
+            Tile::WoodWall => Tile::WoodFloor,
+            Tile::StoneWall => Tile::StoneFloor,
+            Tile::ObsidianWall => Tile::ObsidianFloor,
+            Tile::WoodDoor => Tile::WoodFloor,
+            Tile::StoneDoor => Tile::StoneFloor,
+            Tile::ObsidianDoor => Tile::ObsidianFloor,
+            Tile::Torch | Tile::Sign | Tile::WoodFence | Tile::StoneFence | Tile::ObsidianFence => {
+                Tile::from_id(data as u8).unwrap_or(Tile::Dirt)
+            }
+            _ => return false,
+        };
+        self.levels[self.current_level].tiles[index] = replacement;
+        self.levels[self.current_level].data[index] = 0;
+        if tile == Tile::Sign {
+            self.signs[self.current_level].remove(&index);
+        }
+        self.notification = Some(("CREATIVE TILE REMOVED".to_owned(), 30));
+        true
+    }
+
     fn pay_tool_melee_bonus(&mut self) -> u8 {
         let Some(ActiveItem::Tool(index)) = self.player.active_item else {
             return 0;
@@ -1885,8 +2607,12 @@ impl World {
         };
         let roll = self.random.next_int(roll_bound) as u8;
         let bonus = tool.melee_bonus(roll);
-        let equipped = &mut self.player.inventory.tools_mut()[index];
-        if equipped.pay_durability() { bonus } else { 0 }
+        if self.mode == GameMode::Creative {
+            bonus
+        } else {
+            let equipped = &mut self.player.inventory.tools_mut()[index];
+            if equipped.pay_durability() { bonus } else { 0 }
+        }
     }
 
     fn use_bucket(&mut self, item: ItemId, index: usize) -> bool {
@@ -1904,6 +2630,13 @@ impl World {
         };
         self.levels[self.current_level].tiles[index] = tile;
         self.levels[self.current_level].data[index] = 0;
+        if item == ItemId::WaterBucket && target == Tile::Lava {
+            self.unlock_achievement("minicraft.achievement.lava");
+        }
+        if self.mode == GameMode::Creative {
+            self.notification = Some((format!("USED {item}"), 45));
+            return true;
+        }
         self.consume_active_stack(item);
         self.player.inventory.add(bucket, 1);
         self.player.active_item = Some(ActiveItem::Stack(bucket));
@@ -1911,7 +2644,11 @@ impl World {
         true
     }
 
-    fn apply_explosion(&mut self, x: i32, y: i32, radius: i32) {
+    fn apply_explosion(&mut self, x: i32, y: i32, radius: i32, player_tnt: bool) {
+        self.sound(SoundEffect::Explode);
+        if player_tnt {
+            self.unlock_achievement("minicraft.achievement.demolition");
+        }
         let center_x = x.div_euclid(TILE_SIZE);
         let center_y = y.div_euclid(TILE_SIZE);
         for tile_y in center_y - radius..=center_y + radius {
@@ -1964,7 +2701,7 @@ impl World {
         }
         let cost = stamina_cost.saturating_sub(tool.tier.level());
         let infinite_energy = self.effect_active(PotionKind::Energy);
-        if !infinite_energy && self.player.stamina < cost {
+        if self.mode != GameMode::Creative && !infinite_energy && self.player.stamina < cost {
             self.notification = Some(("NOT ENOUGH STAMINA".to_owned(), 30));
             return None;
         }
@@ -1972,10 +2709,12 @@ impl World {
         if self.effect_active(PotionKind::Haste) {
             damage = damage.saturating_mul(2);
         }
-        if !self.player.inventory.tools_mut()[index].pay_durability() {
+        if self.mode != GameMode::Creative
+            && !self.player.inventory.tools_mut()[index].pay_durability()
+        {
             return None;
         }
-        if !infinite_energy {
+        if self.mode != GameMode::Creative && !infinite_energy {
             self.player.stamina -= cost;
         }
         Some(damage)
@@ -2017,14 +2756,14 @@ impl World {
         {
             return false;
         }
-        if !self.player.inventory.remove(item, 1) {
+        if self.mode != GameMode::Creative && !self.player.inventory.remove(item, 1) {
             self.player.active_item = None;
             return false;
         }
         self.levels[self.current_level]
             .entities
             .spawn_furniture(kind, x, y);
-        if self.player.inventory.count(item) == 0 {
+        if self.mode != GameMode::Creative && self.player.inventory.count(item) == 0 {
             self.player.active_item = None;
         }
         self.notification = Some((format!("{} PLACED", kind.display_name()), 60));
@@ -2032,6 +2771,11 @@ impl World {
     }
 
     fn respawn(&mut self) {
+        if self.mode == GameMode::Score {
+            self.score -= self.score / 3;
+            self.score_multiplier = 1;
+            self.multiplier_ticks = 300;
+        }
         let drop_x = self.player.x;
         let drop_y = self.player.y;
         for stack in self.player.inventory.take_all() {
@@ -2083,6 +2827,26 @@ impl World {
             Direction::Left => (-12, 0),
             Direction::Right => (12, 0),
         };
+        let target_tile_x = (self.player.x + offset_x).div_euclid(TILE_SIZE);
+        let target_tile_y = (self.player.y + offset_y).div_euclid(TILE_SIZE);
+        if target_tile_x >= 0
+            && target_tile_y >= 0
+            && target_tile_x < self.width as i32
+            && target_tile_y < self.height as i32
+        {
+            let index = target_tile_x as usize + target_tile_y as usize * self.width;
+            if self.levels[self.current_level].tiles[index] == Tile::Sign {
+                self.sign_editor = Some(SignEditor {
+                    level: self.current_level,
+                    tile: index,
+                    text: self.signs[self.current_level]
+                        .get(&index)
+                        .cloned()
+                        .unwrap_or_default(),
+                });
+                return;
+            }
+        }
         if let Some(kind) = self.levels[self.current_level].entities.furniture_near(
             self.player.x + offset_x,
             self.player.y + offset_y,
@@ -2140,9 +2904,14 @@ impl World {
                     }
                 });
             } else if kind == FurnitureKind::Bed {
-                self.day_tick = 16_200;
-                self.player.stamina = MAX_STAT;
-                self.notification = Some(("YOU REST UNTIL DAY".to_owned(), 75));
+                if self.levels[self.current_level].depth != 0 {
+                    self.notification = Some(("BEDS ONLY WORK ON THE SURFACE".to_owned(), 60));
+                } else if self.day_tick < 48_600 {
+                    self.notification = Some(("IT IS TOO EARLY TO SLEEP".to_owned(), 60));
+                } else {
+                    self.sleeping = 120;
+                    self.notification = Some(("YOU FALL ASLEEP".to_owned(), 75));
+                }
             } else {
                 self.notification = Some((format!("USED {}", kind.display_name()), 45));
             }
@@ -2159,7 +2928,14 @@ impl World {
         };
         if let Some(target) = target {
             self.current_level = target;
-            self.notification = Some((format!("ENTERED DEPTH {}", self.levels[target].depth), 90));
+            let depth = self.levels[target].depth;
+            if depth == -3 {
+                self.unlock_achievement("minicraft.achievement.lowest_caves");
+            }
+            if depth == -4 {
+                self.unlock_achievement("minicraft.achievement.obsidian_dungeon");
+            }
+            self.notification = Some((format!("ENTERED DEPTH {depth}"), 90));
         }
     }
 
@@ -2314,7 +3090,9 @@ impl World {
         }
 
         let depth = self.levels[self.current_level].depth;
-        let darkness = if depth == 0 {
+        let darkness = if self.mode == GameMode::Creative {
+            0
+        } else if depth == 0 {
             surface_darkness(self.day_tick)
         } else {
             176
@@ -2330,6 +3108,60 @@ impl World {
             self.day_tick,
             self.days,
         );
+        if self.mode == GameMode::Score {
+            let seconds = self.score_ticks / 60;
+            let score_status = format!(
+                "SCORE {} X{} {:02}:{:02}",
+                self.score,
+                self.score_multiplier,
+                seconds / 60,
+                seconds % 60
+            );
+            let width = score_status.chars().count() as i32 * 8 + 4;
+            screen.rect(WIDTH as i32 - width, 55, width, 10, 0x101018);
+            screen.text(&assets.font, &score_status, WIDTH as i32 - width + 2, 56);
+        }
+        if self.show_quests && (self.tutorials_enabled || self.quests_enabled) {
+            let inventory = self.inventory_progress();
+            let progress = if self.tutorials_enabled {
+                self.progress.current_tutorial().map(|step| {
+                    format!(
+                        "TUTORIAL {}",
+                        short_progress_id(&step.id).to_ascii_uppercase()
+                    )
+                })
+            } else {
+                None
+            }
+            .or_else(|| {
+                self.quests_enabled.then(|| {
+                    self.progress.current_quest(&inventory).map(|quest| {
+                        format!(
+                            "QUEST {}",
+                            short_progress_id(&quest.id).to_ascii_uppercase()
+                        )
+                    })
+                })?
+            });
+            if let Some(progress) = progress {
+                let label = progress.chars().take(37).collect::<String>();
+                screen.rect(2, 33, label.chars().count() as i32 * 8 + 4, 10, 0x101018);
+                screen.text(&assets.font, &label, 4, 34);
+            }
+            let counts = format!(
+                "T {}/{} Q {}/{}",
+                self.progress.tutorial_completed_count(),
+                self.progress.tutorial_count(),
+                self.progress.quest_completed_count(),
+                self.progress.quest_count()
+            );
+            screen.rect(2, 44, counts.chars().count() as i32 * 8 + 4, 10, 0x101018);
+            screen.text(&assets.font, &counts, 4, 45);
+        }
+        if self.story_complete {
+            screen.rect(WIDTH as i32 - 82, 33, 80, 10, 0x101018);
+            screen.text(&assets.font, "VICTORY", WIDTH as i32 - 76, 34);
+        }
         if let Some((message, _)) = &self.notification {
             let width = message.chars().count() as i32 * 8 + 4;
             screen.rect((WIDTH as i32 - width) / 2, 21, width, 11, 0x101018);
@@ -2349,7 +3181,62 @@ impl World {
         if self.paused {
             render_pause(screen, assets, self.pause_selection);
         }
+        if let Some((book, page)) = self.book_open {
+            render_world_book(screen, assets, book, page);
+        }
+        if let Some(editor) = &self.sign_editor {
+            render_sign_editor(screen, assets, &editor.text);
+        }
+        if self.sleeping > 0 {
+            screen.rect(0, 0, WIDTH as i32, HEIGHT as i32, 0x080812);
+            screen.centered_text(&assets.font, "SLEEPING...", HEIGHT as i32 / 2);
+        }
+        if self.game_over {
+            screen.rect(54, 76, WIDTH as i32 - 108, 74, 0x101018);
+            screen.centered_text(
+                &assets.font,
+                if self.mode == GameMode::Hardcore {
+                    "HARDCORE WORLD ENDED"
+                } else {
+                    "TIME IS UP"
+                },
+                91,
+            );
+            if self.mode == GameMode::Score {
+                screen.centered_text(&assets.font, &format!("FINAL SCORE {}", self.score), 108);
+            }
+            screen.centered_text(&assets.font, "SELECT TO RETURN", 132);
+        }
     }
+}
+
+fn render_world_book(screen: &mut Screen, assets: &Assets, book: Book, page: usize) {
+    let pages = book.pages();
+    let page = page.min(pages.len().saturating_sub(1));
+    screen.rect(18, 17, WIDTH as i32 - 36, HEIGHT as i32 - 34, 0xD8C68F);
+    screen.rect(22, 21, WIDTH as i32 - 44, HEIGHT as i32 - 42, 0x33291C);
+    screen.centered_text(&assets.font, book.title(), 27);
+    for (row, line) in pages[page].iter().enumerate() {
+        screen.text(&assets.font, line, 29, 42 + row as i32 * 8);
+    }
+    screen.centered_text(
+        &assets.font,
+        &format!("< PAGE {}/{} >  SELECT CLOSE", page + 1, pages.len()),
+        HEIGHT as i32 - 25,
+    );
+}
+
+fn render_sign_editor(screen: &mut Screen, assets: &Assets, text: &str) {
+    screen.rect(36, 72, WIDTH as i32 - 72, 69, 0x101018);
+    screen.centered_text(&assets.font, "EDIT SIGN", 81);
+    let visible = text.chars().take(28).collect::<String>();
+    screen.rect(47, 99, WIDTH as i32 - 94, 13, 0x493A28);
+    screen.centered_text(&assets.font, &format!("{visible}_"), 102);
+    screen.centered_text(&assets.font, "TYPE  BACKSPACE  SELECT SAVE", 124);
+}
+
+fn short_progress_id(id: &str) -> &str {
+    id.rsplit('.').next().unwrap_or(id)
 }
 
 fn damage_tile(
@@ -2397,6 +3284,43 @@ fn furniture_for_item(item: ItemId) -> Option<FurnitureKind> {
         ItemId::KnightSpawner => FurnitureKind::KnightSpawner,
         _ => return None,
     })
+}
+
+fn item_for_furniture(kind: FurnitureKind) -> Option<ItemId> {
+    Some(match kind {
+        FurnitureKind::Workbench => ItemId::Workbench,
+        FurnitureKind::Oven => ItemId::Oven,
+        FurnitureKind::Furnace => ItemId::Furnace,
+        FurnitureKind::Anvil => ItemId::Anvil,
+        FurnitureKind::Enchanter => ItemId::Enchanter,
+        FurnitureKind::Loom => ItemId::Loom,
+        FurnitureKind::Chest => ItemId::Chest,
+        FurnitureKind::DungeonChest => ItemId::DungeonChest,
+        FurnitureKind::Lantern => ItemId::Lantern,
+        FurnitureKind::IronLantern => ItemId::IronLantern,
+        FurnitureKind::GoldLantern => ItemId::GoldLantern,
+        FurnitureKind::Tnt => ItemId::Tnt,
+        FurnitureKind::Bed => ItemId::Bed,
+        FurnitureKind::Composter => ItemId::Composter,
+        FurnitureKind::CowSpawner => ItemId::CowSpawner,
+        FurnitureKind::PigSpawner => ItemId::PigSpawner,
+        FurnitureKind::SheepSpawner => ItemId::SheepSpawner,
+        FurnitureKind::SlimeSpawner => ItemId::SlimeSpawner,
+        FurnitureKind::ZombieSpawner => ItemId::ZombieSpawner,
+        FurnitureKind::CreeperSpawner => ItemId::CreeperSpawner,
+        FurnitureKind::SkeletonSpawner => ItemId::SkeletonSpawner,
+        FurnitureKind::SnakeSpawner => ItemId::SnakeSpawner,
+        FurnitureKind::KnightSpawner => ItemId::KnightSpawner,
+        FurnitureKind::KnightStatue => return None,
+    })
+}
+
+fn tile_progress_name(tile: Tile) -> String {
+    match tile {
+        Tile::Wheat => "wheat".to_owned(),
+        Tile::Potato => "potato".to_owned(),
+        _ => tile.asset_name().replace('_', " ").to_ascii_lowercase(),
+    }
 }
 
 fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
@@ -3103,7 +4027,7 @@ fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -
 #[cfg(test)]
 mod registry_tests {
     use super::{
-        ActiveItem, DAY_LENGTH, Direction, FurnitureKind, HUNGER_STAMINA_STEPS, Level,
+        ActiveItem, DAY_LENGTH, Direction, FurnitureKind, GameMode, HUNGER_STAMINA_STEPS, Level,
         MAX_HUNGER_TICKS, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
         entity::EntityArena, random::JavaRandom, spawn, surface_darkness, time_name,
         try_queue_natural_spawn,
@@ -3164,6 +4088,21 @@ mod registry_tests {
             day_tick: 0,
             days: 1,
             difficulty: 1,
+            mode: super::GameMode::Survival,
+            score: 0,
+            score_ticks: 20 * 60 * 60,
+            score_multiplier: 1,
+            multiplier_ticks: 300,
+            game_over: false,
+            story_complete: false,
+            sleeping: 0,
+            tutorials_enabled: true,
+            quests_enabled: true,
+            show_quests: true,
+            progress: crate::content::ProgressState::load().unwrap(),
+            signs: vec![std::collections::HashMap::new()],
+            sign_editor: None,
+            book_open: None,
             paused: false,
             pause_selection: 0,
             inventory_open: false,
@@ -3175,6 +4114,7 @@ mod registry_tests {
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
             random: JavaRandom::new(1),
+            sound_events: Vec::new(),
         }
     }
 
@@ -3476,5 +4416,177 @@ mod registry_tests {
         assert_eq!(level.pending_spawns.len(), 1);
         try_queue_natural_spawn(&mut level, 128, 128, 8, 8, 0, 1, &mut random);
         assert_eq!(level.pending_spawns.len(), 1);
+    }
+
+    #[test]
+    fn phase_six_modes_apply_their_distinct_runtime_rules() {
+        let mut creative = tiny_world();
+        creative.mode = GameMode::Creative;
+        creative.player.inventory.add(ItemId::Workbench, 1);
+        creative.player.active_item = Some(ActiveItem::Stack(ItemId::Workbench));
+        creative.attack();
+        assert_eq!(creative.player.inventory.count(ItemId::Workbench), 1);
+        assert!(!creative.hurt_player(5, false));
+        assert_eq!(creative.player.health, 10);
+
+        let mut score = tiny_world();
+        score.mode = GameMode::Score;
+        score.add_score(50, 1);
+        assert_eq!(score.score, 50);
+        assert_eq!(score.score_multiplier, 2);
+        score.add_score(50, 0);
+        assert_eq!(score.score, 150);
+
+        let mut hardcore = tiny_world();
+        hardcore.mode = GameMode::Hardcore;
+        hardcore.player.health = 0;
+        hardcore.tick(&Input::default());
+        assert!(hardcore.game_over);
+    }
+
+    #[test]
+    fn beds_signs_and_world_books_are_interactive() {
+        let mut world = tiny_world();
+        world.levels[0].entities.spawn_furniture(
+            FurnitureKind::Bed,
+            9 * TILE_SIZE + 8,
+            8 * TILE_SIZE + 8,
+        );
+        world.day_tick = 48_600;
+        world.use_target();
+        assert_eq!(world.sleeping, 120);
+
+        world.sleeping = 0;
+        world.player.direction = Direction::Down;
+        let sign = 8 + 9 * 16;
+        world.levels[0].tiles[sign] = Tile::Sign;
+        world.use_target();
+        assert!(world.sign_editor.is_some());
+        let typing = Input {
+            text: "HELLO".chars().collect(),
+            ..Input::default()
+        };
+        assert!(world.tick_sign_editor(&typing));
+        let save = Input {
+            select: true,
+            ..Input::default()
+        };
+        assert!(world.tick_sign_editor(&save));
+        assert_eq!(world.signs[0].get(&sign).map(String::as_str), Some("HELLO"));
+
+        world.player.inventory.add(ItemId::AntidiousBook, 1);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::AntidiousBook));
+        assert!(world.use_active_self_item());
+        assert!(world.book_open.is_some());
+    }
+
+    #[test]
+    fn versioned_world_snapshot_round_trips_complete_runtime_state() {
+        let mut world = tiny_world();
+        world.tick = 1_801;
+        world.day_tick = 49_000;
+        world.days = 7;
+        world.mode = GameMode::Score;
+        world.score = 4_321;
+        world.score_multiplier = 9;
+        world.player.health = 6;
+        world.player.inventory.add(ItemId::Gem, 12);
+        world.signs[0].insert(7, "ROUND TRIP".to_owned());
+        world
+            .progress
+            .unlock_achievement("minicraft.achievement.find_gem");
+        world.levels[0]
+            .entities
+            .spawn_furniture(FurnitureKind::Chest, 40, 56);
+
+        let text = world.to_save_string().unwrap();
+        let mut loaded = World::from_save_string(&text).unwrap();
+        assert_eq!(loaded.tick, 1_801);
+        assert_eq!(loaded.day_tick, 49_000);
+        assert_eq!(loaded.days, 7);
+        assert_eq!(loaded.mode, GameMode::Score);
+        assert_eq!(loaded.score, 4_321);
+        assert_eq!(loaded.score_multiplier, 9);
+        assert_eq!(loaded.player.health, 6);
+        assert_eq!(loaded.player.inventory.count(ItemId::Gem), 12);
+        assert_eq!(
+            loaded.signs[0].get(&7).map(String::as_str),
+            Some("ROUND TRIP")
+        );
+        assert!(
+            loaded
+                .progress
+                .achievement_unlocked("minicraft.achievement.find_gem")
+        );
+        assert!(
+            loaded.levels[0]
+                .entities
+                .has_furniture(FurnitureKind::Chest)
+        );
+        assert_eq!(
+            world.random.next_int(10_000),
+            loaded.random.next_int(10_000)
+        );
+
+        loaded.levels[0].tiles.pop();
+        let corrupt = loaded.to_save_string().unwrap();
+        assert!(World::from_save_string(&corrupt).is_err());
+    }
+
+    #[test]
+    fn malformed_world_snapshot_mutations_never_panic() {
+        let valid = tiny_world().to_save_string().unwrap().into_bytes();
+        for case in 0..512_usize {
+            let mut mutated = valid.clone();
+            if case % 3 == 0 {
+                mutated.truncate(case.wrapping_mul(7_919) % mutated.len());
+            } else if case % 3 == 1 {
+                let index = case.wrapping_mul(104_729) % mutated.len();
+                mutated[index] ^= 1 << (case % 8);
+            } else {
+                let index = case.wrapping_mul(65_537) % mutated.len();
+                mutated.splice(index..index, [b'{', b'[', 0xff, b']', b'}']);
+            }
+            let text = String::from_utf8_lossy(&mutated);
+            assert!(
+                std::panic::catch_unwind(|| World::from_save_string(&text)).is_ok(),
+                "mutation {case} panicked"
+            );
+        }
+    }
+
+    #[test]
+    fn save_resume_is_deterministic_and_two_day_soak_stays_bounded() {
+        let mut continuous = tiny_world();
+        continuous.mode = GameMode::Creative;
+        continuous.tutorials_enabled = false;
+        continuous.quests_enabled = false;
+        continuous.levels[0].max_mob_count = 0;
+
+        for _ in 0..10_000 {
+            continuous.tick(&Input::default());
+        }
+        let mut resumed = World::from_save_string(&continuous.to_save_string().unwrap()).unwrap();
+        for _ in 0..10_000 {
+            continuous.tick(&Input::default());
+            resumed.tick(&Input::default());
+        }
+        assert_eq!(
+            continuous.to_save_string().unwrap(),
+            resumed.to_save_string().unwrap()
+        );
+
+        let started = std::time::Instant::now();
+        for _ in 20_000..(DAY_LENGTH as usize * 2) {
+            continuous.tick(&Input::default());
+        }
+        assert_eq!(continuous.tick, u64::from(DAY_LENGTH) * 2);
+        assert_eq!(continuous.days, 3);
+        assert_eq!(continuous.day_tick, 0);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(15),
+            "headless two-day soak exceeded the generous regression budget"
+        );
+        assert!(continuous.levels[0].entities.entities().len() < 32);
     }
 }
