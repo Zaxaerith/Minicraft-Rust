@@ -24,19 +24,19 @@ impl Image {
 
         match info.color_type {
             png::ColorType::Rgba => {
-                for pixel in source.chunks_exact(4) {
+                for pixel in source.as_chunks::<4>().0 {
                     pixels.push(rgb(pixel[0], pixel[1], pixel[2]));
                     alpha.push(pixel[3]);
                 }
             }
             png::ColorType::Rgb => {
-                for pixel in source.chunks_exact(3) {
+                for pixel in source.as_chunks::<3>().0 {
                     pixels.push(rgb(pixel[0], pixel[1], pixel[2]));
                     alpha.push(255);
                 }
             }
             png::ColorType::GrayscaleAlpha => {
-                for pixel in source.chunks_exact(2) {
+                for pixel in source.as_chunks::<2>().0 {
                     pixels.push(rgb(pixel[0], pixel[0], pixel[0]));
                     alpha.push(pixel[1]);
                 }
