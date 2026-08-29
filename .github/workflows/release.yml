@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # SDL2 0.38's bundled CMake project predates CMake 4's policy cutoff.
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
 jobs:
   package:
     strategy:
