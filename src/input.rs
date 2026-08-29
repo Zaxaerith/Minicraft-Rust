@@ -310,9 +310,11 @@ mod gamepad_platform {
         fn new() -> Option<Self> {
             let sdl = sdl2::init().ok()?;
             let subsystem = sdl.game_controller().ok()?;
-            let _ = subsystem.load_mappings_from_read(std::io::Cursor::new(include_bytes!(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/gamecontrollerdb.txt")
+            let mut mappings = std::io::Cursor::new(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/gamecontrollerdb.txt"
             )));
+            let _ = subsystem.load_mappings_from_read(&mut mappings);
             let event_pump = sdl.event_pump().ok()?;
             let controller = open_first(&subsystem);
             Some(Self {
