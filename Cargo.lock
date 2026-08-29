@@ -348,7 +348,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "minicraft-plus-rust"
+name = "minicraft-rust"
 version = "2.2.4"
 dependencies = [
  "minifb",

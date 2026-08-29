@@ -1,8 +1,8 @@
 [package]
-name = "minicraft-plus-rust"
+name = "minicraft-rust"
 version = "2.2.4"
 edition = "2024"
-description = "A clean Rust reimplementation of Minicraft+ 2.2.4"
+description = "A clean Rust reimplementation of Minicraft"
 license = "GPL-3.0-only"
 
 [dependencies]

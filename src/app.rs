@@ -51,7 +51,7 @@ pub fn self_check(arguments: &[String]) -> Result<(), String> {
     }
     validate_embedded_assets()?;
     println!(
-        "Minicraft+ Rust self-check passed (savedir {})",
+        "Minicraft Rust self-check passed (savedir {})",
         config.game_dir.display()
     );
     Ok(())
@@ -158,7 +158,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
     }
     let mut screen = Screen::new();
     let mut window = Window::new(
-        "Minicraft Plus 2.2.4 — Rust",
+        "Minicraft Rust",
         WIDTH,
         HEIGHT,
         WindowOptions {

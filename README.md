@@ -1,4 +1,4 @@
-# Minicraft+ 2.2.4 — Rust reconstruction
+# Minicraft Rust — Rust reconstruction
 
 This repository is a from-scratch Rust reconstruction of
 [Minicraft+](https://github.com/MinicraftPlus/minicraft-plus-revived) 2.2.4.
@@ -78,9 +78,7 @@ pixel canvas and copied 2.2.4 artwork. It includes:
   Rust relay server, login/presence/state/heartbeat handling, and a client
   connectivity probe.
 
-The eight-phase reconstruction plan is complete. Exact compatibility boundaries
-and deliberate format/protocol differences are documented in
-[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+The eight-phase reconstruction plan is complete.
 
 ## Build and run
 
@@ -110,13 +108,11 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
-To audit a downloaded official 2.2.4 JAR and create a deterministic Windows
-archive:
+To build and create a deterministic Windows archive:
 
 ```powershell
-python scripts\audit_official.py .reference\official\minicraft-plus-2.2.4.jar
 cargo build --release --locked
-python scripts\package.py --platform windows-x86_64 --binary target\release\minicraft-plus-rust.exe
+python scripts\package.py --platform windows-x86_64 --binary target\release\minicraft-rust.exe
 ```
 
 The GitHub workflows apply the locked test, lint, build, self-check, and package

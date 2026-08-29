@@ -129,7 +129,7 @@ pub fn run_server(address: &str) -> Result<(), String> {
     let local = listener
         .local_addr()
         .map_err(|error| format!("cannot read multiplayer server address: {error}"))?;
-    println!("Minicraft+ Rust multiplayer server listening on {local}");
+    println!("Minicraft Rust multiplayer server listening on {local}");
     serve(listener, Arc::new(AtomicBool::new(false)))
 }
 

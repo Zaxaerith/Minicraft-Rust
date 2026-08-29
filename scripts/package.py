@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a deterministic, self-contained Minicraft+ Rust release archive."""
+"""Create a deterministic, self-contained Minicraft Rust release archive."""
 
 from __future__ import annotations
 
@@ -16,14 +16,6 @@ VERSION = "2.2.4"
 DOCUMENTS = [
     "LICENSE",
     "README.md",
-    "docs/BASELINE.md",
-    "docs/PORTING_PLAN.md",
-    "docs/PHASE4_REPORT.md",
-    "docs/PHASE5_PROGRESS.md",
-    "docs/PHASE6_REPORT.md",
-    "docs/PHASE7_REPORT.md",
-    "docs/PHASE8_REPORT.md",
-    "docs/COMPATIBILITY.md",
 ]
 
 
@@ -63,7 +55,7 @@ def main() -> None:
         raise SystemExit(f"release documentation is incomplete: {', '.join(missing)}")
 
     args.output.mkdir(parents=True, exist_ok=True)
-    archive = args.output / f"minicraft-plus-rust-{VERSION}-{args.platform}.zip"
+    archive = args.output / f"minicraft-rust-{VERSION}-{args.platform}.zip"
     if archive.exists():
         if not args.force:
             raise SystemExit(f"archive already exists: {archive}; pass --force to replace it")
@@ -77,8 +69,8 @@ def main() -> None:
         f"cargo_lock_sha256={lock_hash}\n"
         "assets=embedded from the locally copied Minicraft+ 2.2.4 resource set\n"
     ).encode()
-    executable_name = "minicraft-plus-rust" + binary.suffix
-    prefix = f"minicraft-plus-rust-{VERSION}-{args.platform}"
+    executable_name = "minicraft-rust" + binary.suffix
+    prefix = f"minicraft-rust-{VERSION}-{args.platform}"
     entries = [(executable_name, binary.read_bytes(), True)]
     entries.extend((name, (ROOT / name).read_bytes(), False) for name in DOCUMENTS)
     entries.append(("BUILD-INFO.txt", build_info, False))

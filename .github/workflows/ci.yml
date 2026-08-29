@@ -16,13 +16,13 @@ jobs:
         include:
           - os: windows-latest
             platform: windows-x86_64
-            binary: target/release/minicraft-plus-rust.exe
+            binary: target/release/minicraft-rust.exe
           - os: ubuntu-latest
             platform: linux-x86_64
-            binary: target/release/minicraft-plus-rust
+            binary: target/release/minicraft-rust
           - os: macos-latest
             platform: macos-native
-            binary: target/release/minicraft-plus-rust
+            binary: target/release/minicraft-rust
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +45,6 @@ jobs:
           --binary ${{ matrix.binary }} --output dist
       - uses: actions/upload-artifact@v4
         with:
-          name: minicraft-plus-rust-${{ matrix.platform }}
+          name: minicraft-rust-${{ matrix.platform }}
           path: dist/*.zip
           if-no-files-found: error

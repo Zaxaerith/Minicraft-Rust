@@ -67,7 +67,7 @@ fn main() {
         app::run(&arguments)
     };
     if let Err(error) = result {
-        eprintln!("Minicraft+ Rust failed: {error}");
+        eprintln!("Minicraft Rust failed: {error}");
         std::process::exit(1);
     }
 }

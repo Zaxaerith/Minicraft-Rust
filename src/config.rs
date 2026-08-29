@@ -201,7 +201,7 @@ fn determine_game_dir(arguments: &[String]) -> Result<PathBuf, String> {
         return Ok(PathBuf::from(app_data)
             .join("playminicraft")
             .join("mods")
-            .join("Minicraft_Plus_Rust"));
+            .join("Minicraft_Rust"));
     }
     let base = env::var_os("HOME")
         .map(PathBuf::from)
@@ -209,7 +209,7 @@ fn determine_game_dir(arguments: &[String]) -> Result<PathBuf, String> {
     Ok(base
         .join(".playminicraft")
         .join("mods")
-        .join("Minicraft_Plus_Rust"))
+        .join("Minicraft_Rust"))
 }
 
 fn absolute(path: &Path) -> Result<PathBuf, String> {

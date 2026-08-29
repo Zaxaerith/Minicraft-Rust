@@ -3,3 +3,7 @@
 /*.zip
 *.log
 
+# Codex progress / scratch files (not part of the project)
+/docs/
+/scripts/audit_official.py
+
