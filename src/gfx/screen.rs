@@ -56,6 +56,10 @@ impl Screen {
         self.blit_region(image, x, y, 0, 0, image.width, image.height, false);
     }
 
+    pub fn blit_tinted(&mut self, image: &Image, x: i32, y: i32, tint: u32) {
+        self.blit_region_tinted(image, x, y, 0, 0, image.width, image.height, tint);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn blit_region(
         &mut self,
@@ -129,6 +133,68 @@ impl Screen {
                     8,
                     false,
                 );
+            }
+        }
+    }
+
+    pub fn text_colored(&mut self, font: &Image, message: &str, x: i32, y: i32, color: u32) {
+        for (offset, character) in message.chars().enumerate() {
+            if let Some(index) = FONT_CHARS
+                .chars()
+                .position(|candidate| candidate == character)
+            {
+                self.blit_region_tinted(
+                    font,
+                    x + offset as i32 * 8,
+                    y,
+                    index % 32 * 8,
+                    index / 32 * 8,
+                    8,
+                    8,
+                    color,
+                );
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn blit_region_tinted(
+        &mut self,
+        image: &Image,
+        x: i32,
+        y: i32,
+        source_x: usize,
+        source_y: usize,
+        width: usize,
+        height: usize,
+        tint: u32,
+    ) {
+        for yy in 0..height {
+            let destination_y = y + yy as i32;
+            if !(0..HEIGHT as i32).contains(&destination_y) {
+                continue;
+            }
+            for xx in 0..width {
+                let destination_x = x + xx as i32;
+                if !(0..WIDTH as i32).contains(&destination_x) {
+                    continue;
+                }
+                if let Some((source, alpha)) = image.pixel(source_x + xx, source_y + yy)
+                    && alpha != 0
+                {
+                    let brightness =
+                        (((source >> 16) & 255) + ((source >> 8) & 255) + (source & 255)) / 3;
+                    let red = ((tint >> 16) & 255) * brightness / 255;
+                    let green = ((tint >> 8) & 255) * brightness / 255;
+                    let blue = (tint & 255) * brightness / 255;
+                    let color = red << 16 | green << 8 | blue;
+                    let index = destination_x as usize + destination_y as usize * WIDTH;
+                    self.pixels[index] = if alpha == 255 {
+                        color
+                    } else {
+                        blend(self.pixels[index], color, alpha)
+                    };
+                }
             }
         }
     }

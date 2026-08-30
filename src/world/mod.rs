@@ -561,6 +561,29 @@ enum PausePage {
     Quests,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PauseAction {
+    Return,
+    Options,
+    Achievements,
+    Quests,
+    Save,
+    MainMenu,
+}
+
+fn pause_actions(quests_enabled: bool) -> Vec<PauseAction> {
+    let mut actions = vec![
+        PauseAction::Return,
+        PauseAction::Options,
+        PauseAction::Achievements,
+    ];
+    if quests_enabled {
+        actions.push(PauseAction::Quests);
+    }
+    actions.extend([PauseAction::Save, PauseAction::MainMenu]);
+    actions
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct World {
     width: usize,
@@ -599,6 +622,8 @@ pub struct World {
     inventory_item_selection: usize,
     inventory_pane: usize,
     crafting_station: Option<FurnitureKind>,
+    #[serde(default)]
+    personal_crafting: bool,
     notification: Option<(String, u16)>,
     air_wizard_defeated: bool,
     obsidian_knight_defeated: bool,
@@ -643,8 +668,21 @@ impl World {
                 save.game_version
             ));
         }
-        save.world.validate_save()?;
-        Ok(save.world)
+        let mut world = save.world;
+        world.validate_save()?;
+        let overflow = world.player.inventory.set_capacity(27);
+        for stack in overflow {
+            world.levels[world.current_level].entities.spawn_item(
+                stack,
+                world.player.x,
+                world.player.y,
+            );
+        }
+        if matches!(world.player.active_item, Some(ActiveItem::Stack(item)) if world.player.inventory.count(item) == 0)
+        {
+            world.player.active_item = None;
+        }
+        Ok(world)
     }
 
     pub fn autosave_due(&self) -> bool {
@@ -657,6 +695,28 @@ impl World {
 
     pub fn take_sound_events(&mut self) -> Vec<SoundEffect> {
         std::mem::take(&mut self.sound_events)
+    }
+
+    /// Menu feedback is sampled on the render/input frame so it does not wait for
+    /// the next fixed 60 Hz world tick. Gameplay sounds remain tick-driven.
+    pub fn immediate_menu_sound(&self, input: &Input) -> Option<SoundEffect> {
+        if self.paused {
+            if input.select {
+                return Some(SoundEffect::Confirm);
+            }
+            if input.up_pressed
+                || input.down_pressed
+                || (self.pause_page == PausePage::Options
+                    && (input.left_pressed || input.right_pressed))
+            {
+                return Some(SoundEffect::Select);
+            }
+        } else if self.inventory_open
+            && (input.up_pressed || input.down_pressed || input.left_pressed || input.right_pressed)
+        {
+            return Some(SoundEffect::Select);
+        }
+        None
     }
 
     fn sound(&mut self, effect: SoundEffect) {
@@ -841,7 +901,8 @@ impl World {
             inventory_item_selection: 0,
             inventory_pane: 0,
             crafting_station: None,
-            notification: Some(("A NEW WORLD AWAKENS".to_owned(), 150)),
+            personal_crafting: false,
+            notification: None,
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
             random: random::JavaRandom::new(seed ^ 0x05EE_D224),
@@ -940,6 +1001,17 @@ impl World {
         self.crafting_station = None;
         self.inventory_pane = 0;
         self.inventory_item_selection = 1;
+    }
+
+    /// Opens the Java personal crafting display (Z / Shift+E) for visual regression.
+    pub fn populate_personal_crafting_preview(&mut self) {
+        self.player.inventory.add(ItemId::Wood, 20);
+        self.player.inventory.add(ItemId::Coal, 4);
+        self.inventory_open = true;
+        self.personal_crafting = true;
+        self.crafting_station = None;
+        self.inventory_pane = 1;
+        self.inventory_selection = 1;
     }
 
     /// Opens the Java-style sliding creative catalogue for visual regression.
@@ -1048,17 +1120,18 @@ impl World {
                     .health
                     .saturating_add(2)
                     .min(self.player.max_health);
-                self.notification = Some(("A NEW MORNING BEGINS".to_owned(), 90));
             }
             return WorldAction::None;
         }
         if input.exit {
             if self.inventory_open {
                 self.inventory_open = false;
+                self.personal_crafting = false;
+                self.crafting_station = None;
             } else if self.paused {
                 if self.pause_confirm {
                     self.pause_confirm = false;
-                    self.pause_selection = 5;
+                    self.pause_selection = pause_actions(self.quests_enabled).len() - 1;
                 } else if self.pause_page != PausePage::Main {
                     self.pause_page = PausePage::Main;
                     self.pause_selection = 0;
@@ -1081,7 +1154,7 @@ impl World {
                 if input.select {
                     if self.pause_selection == 0 {
                         self.pause_confirm = false;
-                        self.pause_selection = 5;
+                        self.pause_selection = pause_actions(self.quests_enabled).len() - 1;
                     } else {
                         self.paused = false;
                         self.pause_confirm = false;
@@ -1091,15 +1164,15 @@ impl World {
                 return WorldAction::None;
             }
             let count = match self.pause_page {
-                PausePage::Main => 6,
+                PausePage::Main => pause_actions(self.quests_enabled).len(),
                 PausePage::Options => 5,
                 PausePage::Achievements | PausePage::Quests => 1,
             };
             if input.up_pressed {
-                self.pause_selection = self.pause_selection.saturating_sub(1);
+                self.pause_selection = self.pause_selection.checked_sub(1).unwrap_or(count - 1);
             }
             if input.down_pressed {
-                self.pause_selection = (self.pause_selection + 1).min(count - 1);
+                self.pause_selection = (self.pause_selection + 1) % count;
             }
             if self.pause_page == PausePage::Options {
                 let direction = i32::from(input.right_pressed) - i32::from(input.left_pressed);
@@ -1115,29 +1188,31 @@ impl World {
             }
             if input.select {
                 match self.pause_page {
-                    PausePage::Main => match self.pause_selection {
-                        0 => self.paused = false,
-                        1 => {
-                            self.pause_page = PausePage::Options;
-                            self.pause_selection = 0;
+                    PausePage::Main => {
+                        match pause_actions(self.quests_enabled)[self.pause_selection] {
+                            PauseAction::Return => self.paused = false,
+                            PauseAction::Options => {
+                                self.pause_page = PausePage::Options;
+                                self.pause_selection = 0;
+                            }
+                            PauseAction::Achievements => {
+                                self.pause_page = PausePage::Achievements;
+                                self.pause_selection = 0;
+                            }
+                            PauseAction::Quests => {
+                                self.pause_page = PausePage::Quests;
+                                self.pause_selection = 0;
+                            }
+                            PauseAction::Save => {
+                                self.paused = false;
+                                return WorldAction::SaveGame;
+                            }
+                            PauseAction::MainMenu => {
+                                self.pause_confirm = true;
+                                self.pause_selection = 0;
+                            }
                         }
-                        2 => {
-                            self.pause_page = PausePage::Achievements;
-                            self.pause_selection = 0;
-                        }
-                        3 => {
-                            self.pause_page = PausePage::Quests;
-                            self.pause_selection = 0;
-                        }
-                        4 => {
-                            self.paused = false;
-                            return WorldAction::SaveGame;
-                        }
-                        _ => {
-                            self.pause_confirm = true;
-                            self.pause_selection = 0;
-                        }
-                    },
+                    }
                     PausePage::Options => match self.pause_selection {
                         1 => self.show_quests = !self.show_quests,
                         2 => self.tutorials_enabled = !self.tutorials_enabled,
@@ -1156,9 +1231,27 @@ impl World {
             }
             return WorldAction::None;
         }
-        if input.menu {
+        if input.craft {
+            if self.inventory_open && self.personal_crafting {
+                self.inventory_open = false;
+                self.personal_crafting = false;
+            } else if self.inventory_open && self.crafting_station.is_none() {
+                // Make the Java personal-crafting display reachable directly from
+                // the already-open player inventory instead of closing the menu.
+                self.personal_crafting = true;
+                self.inventory_selection = 0;
+            } else if !self.inventory_open {
+                self.inventory_open = true;
+                self.personal_crafting = true;
+                self.player.active_item = None;
+                self.crafting_station = None;
+                self.inventory_selection = 0;
+            }
+        } else if input.menu {
             self.inventory_open = !self.inventory_open;
+            self.personal_crafting = false;
             if self.inventory_open {
+                self.player.active_item = None;
                 self.crafting_station = None;
                 self.inventory_pane = usize::from(
                     self.mode == GameMode::Creative && self.player.inventory.used_slots() == 0,
@@ -1166,15 +1259,17 @@ impl World {
             }
         }
         if self.inventory_open {
-            if self.crafting_station.is_some() {
+            if self.personal_crafting || self.crafting_station.is_some() {
                 self.inventory_pane = 1;
+                let count = self.crafting_recipe_count();
                 if input.up_pressed {
-                    self.inventory_selection = self.inventory_selection.saturating_sub(1);
+                    self.inventory_selection = self
+                        .inventory_selection
+                        .checked_sub(1)
+                        .unwrap_or(count.saturating_sub(1));
                 }
                 if input.down_pressed {
-                    let count = self.crafting_recipe_count();
-                    self.inventory_selection =
-                        (self.inventory_selection + 1).min(count.saturating_sub(1));
+                    self.inventory_selection = (self.inventory_selection + 1) % count.max(1);
                 }
                 if (input.select || input.attack) && self.crafting_recipe_count() > 0 {
                     self.craft_selected_recipe();
@@ -1196,11 +1291,14 @@ impl World {
             if self.inventory_pane == 1 {
                 let entries = creative_entries();
                 if input.up_pressed {
-                    self.inventory_selection = self.inventory_selection.saturating_sub(1);
+                    self.inventory_selection = self
+                        .inventory_selection
+                        .checked_sub(1)
+                        .unwrap_or(entries.len().saturating_sub(1));
                 }
                 if input.down_pressed {
                     self.inventory_selection =
-                        (self.inventory_selection + 1).min(entries.len().saturating_sub(1));
+                        (self.inventory_selection + 1) % entries.len().max(1);
                 }
                 if input.select
                     && let Some(entry) = entries.get(self.inventory_selection).copied()
@@ -1209,22 +1307,23 @@ impl World {
                         CreativeEntry::Stack(item) => self.player.inventory.add(item, 1) == 0,
                         CreativeEntry::Tool(tool) => self.player.inventory.add_tool(tool).is_some(),
                     };
-                    if !inserted {
-                        self.notification = Some(("INVENTORY FULL".to_owned(), 45));
-                    }
+                    let _ = inserted;
                 }
                 return WorldAction::None;
             }
 
             if input.up_pressed {
-                self.inventory_item_selection = self.inventory_item_selection.saturating_sub(1);
+                let count = self.player.inventory.used_slots();
+                self.inventory_item_selection = self
+                    .inventory_item_selection
+                    .checked_sub(1)
+                    .unwrap_or(count.saturating_sub(1));
             }
             if input.down_pressed {
                 let count = self.player.inventory.used_slots();
-                self.inventory_item_selection =
-                    (self.inventory_item_selection + 1).min(count.saturating_sub(1));
+                self.inventory_item_selection = (self.inventory_item_selection + 1) % count.max(1);
             }
-            if input.attack {
+            if input.attack || input.select {
                 let stack_count = self.player.inventory.slots().len();
                 self.player.active_item = if self.inventory_item_selection < stack_count {
                     self.player
@@ -1242,7 +1341,7 @@ impl World {
                 };
                 if self.player.active_item.is_some() {
                     self.inventory_open = false;
-                    self.notification = Some(("ITEM EQUIPPED".to_owned(), 45));
+                    self.personal_crafting = false;
                 }
             }
             return WorldAction::None;
@@ -1311,8 +1410,8 @@ impl World {
         if self.player.attack_time == 0 {
             self.player.attack_item = None;
         }
-        if outcome.player_damage > 0 && self.hurt_player(outcome.player_damage, false) {
-            self.notification = Some(("A MONSTER HURTS YOU".to_owned(), 45));
+        if outcome.player_damage > 0 {
+            self.hurt_player(outcome.player_damage, false);
         }
         for (x, y, radius, player_tnt) in outcome.explosions {
             self.apply_explosion(x, y, radius, player_tnt);
@@ -1325,6 +1424,19 @@ impl World {
             if *remaining == 0 {
                 self.notification = None;
             }
+        }
+
+        // Java updates potion timers, fishing and survival recharge before it
+        // handles this tick's controls. An attack therefore resets recharge to
+        // zero for the full following tick instead of immediately gaining one.
+        self.tick_potion_effects();
+        self.tick_fishing();
+        if self.mode != GameMode::Creative {
+            self.tick_survival_stats();
+        } else {
+            self.player.health = self.player.max_health;
+            self.player.stamina = MAX_STAT;
+            self.player.hunger = MAX_STAT;
         }
 
         let mut horizontal = 0;
@@ -1372,34 +1484,38 @@ impl World {
                 self.unlock_achievement("minicraft.achievement.find_gem");
             }
         }
-        if let Some(stack) = collected.last() {
-            self.notification = Some((format!("{} +{}", stack.item, stack.count), 45));
+        if !collected.is_empty() {
             self.sound(SoundEffect::Pickup);
         }
-        if input.attack && !self.use_active_self_item() {
-            self.attack();
+        if input.attack
+            && (self.player.stamina > 0
+                || self.effect_active(PotionKind::Energy)
+                || self.mode == GameMode::Creative)
+        {
+            // Java pays one stamina before every attack(), even when the held item
+            // then charges an additional item/tile-specific stamina cost.
+            if self.mode != GameMode::Creative && !self.effect_active(PotionKind::Energy) {
+                self.player.stamina -= 1;
+            }
+            self.player.stamina_recharge = 0;
+            if !self.use_active_self_item() {
+                self.attack();
+            }
         }
         if input.select {
             self.use_target();
         }
         if input.pickup {
+            self.player.attack_time = 5;
+            self.player.attack_direction = self.player.direction;
+            self.player.attack_item = None;
             self.pickup_target();
-        }
-        self.tick_potion_effects();
-        self.tick_fishing();
-        if self.mode != GameMode::Creative {
-            self.tick_survival_stats();
-        } else {
-            self.player.health = self.player.max_health;
-            self.player.stamina = MAX_STAT;
-            self.player.hunger = MAX_STAT;
         }
         if self.tile_at_pixel(self.player.x, self.player.y) == Tile::Lava
             && self.tick.is_multiple_of(30)
             && !self.effect_active(PotionKind::Lava)
-            && self.hurt_player(1, false)
         {
-            self.notification = Some(("THE LAVA BURNS".to_owned(), 45));
+            self.hurt_player(1, false);
         }
         if self.player.health == 0 {
             self.sound(SoundEffect::Death);
@@ -1429,49 +1545,43 @@ impl World {
     }
 
     fn craft_selected_recipe(&mut self) {
-        let missing = "MISSING MATERIALS OR SPACE".to_owned();
-        let message = match self.crafting_station {
+        let crafted = match self.crafting_station {
             None => {
                 let recipe = HAND_RECIPES[self.inventory_selection];
-                self.craft_stack(recipe, missing)
+                self.craft_stack(recipe)
             }
             Some(FurnitureKind::Workbench) => {
                 if let Some(recipe) = WORKBENCH_STATION_RECIPES.get(self.inventory_selection) {
-                    self.craft_stack(*recipe, missing)
+                    self.craft_stack(*recipe)
                 } else {
                     let index = self.inventory_selection - WORKBENCH_STATION_RECIPES.len();
-                    self.craft_tool(WORKBENCH_TOOL_RECIPES[index], missing)
+                    self.craft_tool(WORKBENCH_TOOL_RECIPES[index])
                 }
             }
-            Some(FurnitureKind::Oven) => {
-                self.craft_stack(OVEN_RECIPES[self.inventory_selection], missing)
-            }
+            Some(FurnitureKind::Oven) => self.craft_stack(OVEN_RECIPES[self.inventory_selection]),
             Some(FurnitureKind::Furnace) => {
-                self.craft_stack(FURNACE_RECIPES[self.inventory_selection], missing)
+                self.craft_stack(FURNACE_RECIPES[self.inventory_selection])
             }
             Some(FurnitureKind::Anvil) => {
                 if let Some(recipe) = ANVIL_RECIPES.get(self.inventory_selection) {
-                    self.craft_stack(*recipe, missing)
+                    self.craft_stack(*recipe)
                 } else {
                     let index = self.inventory_selection - ANVIL_RECIPES.len();
-                    self.craft_tool(ANVIL_TOOL_RECIPES[index], missing)
+                    self.craft_tool(ANVIL_TOOL_RECIPES[index])
                 }
             }
             Some(FurnitureKind::Enchanter) => {
-                self.craft_stack(ENCHANTER_RECIPES[self.inventory_selection], missing)
+                self.craft_stack(ENCHANTER_RECIPES[self.inventory_selection])
             }
-            Some(FurnitureKind::Loom) => {
-                self.craft_stack(LOOM_RECIPES[self.inventory_selection], missing)
-            }
+            Some(FurnitureKind::Loom) => self.craft_stack(LOOM_RECIPES[self.inventory_selection]),
             _ => return,
         };
-        if message.starts_with("CRAFTED ") {
+        if crafted {
             self.sound(SoundEffect::Craft);
         }
-        self.notification = Some((message, 60));
     }
 
-    fn craft_stack(&mut self, recipe: crate::item::Recipe, missing: String) -> String {
+    fn craft_stack(&mut self, recipe: crate::item::Recipe) -> bool {
         let crafted = if self.mode == GameMode::Creative {
             self.player
                 .inventory
@@ -1482,13 +1592,11 @@ impl World {
         };
         if crafted {
             self.crafting_achievement(recipe.output.item);
-            format!("CRAFTED {} x{}", recipe.output.item, recipe.output.count)
-        } else {
-            missing
         }
+        crafted
     }
 
-    fn craft_tool(&mut self, recipe: crate::item::ToolRecipe, missing: String) -> String {
+    fn craft_tool(&mut self, recipe: crate::item::ToolRecipe) -> bool {
         let crafted = if self.mode == GameMode::Creative {
             self.player.inventory.add_tool(recipe.output)
         } else {
@@ -1502,9 +1610,9 @@ impl World {
             if recipe.output.kind == ToolKind::Bow {
                 self.unlock_achievement("minicraft.achievement.bow");
             }
-            format!("CRAFTED {}", recipe.output.display_name())
+            true
         } else {
-            missing
+            false
         }
     }
 
@@ -1522,7 +1630,6 @@ impl World {
                 self.player.armor_kind = Some(armor);
                 self.player.armor_damage_buffer = 0;
                 self.consume_active_stack(item);
-                self.notification = Some((format!("{} ARMOR EQUIPPED", armor.display_name()), 60));
             }
             return true;
         }
@@ -1538,7 +1645,6 @@ impl World {
                         self.player.y,
                     );
                 }
-                self.notification = Some((format!("{} POTION", potion.display_name()), 60));
             }
             return true;
         }
@@ -1557,7 +1663,6 @@ impl World {
                     self.player.y + 8,
                 );
                 self.consume_active_stack(item);
-                self.notification = Some(("THE AIR WIZARD RETURNS".to_owned(), 120));
             }
             return true;
         }
@@ -1585,7 +1690,6 @@ impl World {
                     center_y * TILE_SIZE + 8,
                 );
                 self.consume_active_stack(item);
-                self.notification = Some(("A KNIGHT STATUE APPEARS".to_owned(), 90));
             }
             return true;
         }
@@ -1594,7 +1698,8 @@ impl World {
                 self.player.max_health = (self.player.max_health + 5).min(MAX_HEALTH);
                 self.player.health = (self.player.health + 5).min(self.player.max_health);
                 self.consume_active_stack(item);
-                self.notification = Some(("MAX HEALTH INCREASED".to_owned(), 90));
+            } else {
+                self.notification = Some(("HEALTH INCREASE IS AT MAX!".to_owned(), 90));
             }
             return true;
         }
@@ -1617,7 +1722,6 @@ impl World {
                     self.player.inventory.add(previous, 1);
                 }
                 self.player.clothing = item;
-                self.notification = Some((format!("WEARING {item}"), 60));
                 self.unlock_achievement("minicraft.achievement.clothes");
             }
             return true;
@@ -1672,7 +1776,6 @@ impl World {
             } else {
                 self.signs[editor.level].insert(editor.tile, editor.text.trim().to_owned());
             }
-            self.notification = Some(("SIGN SAVED".to_owned(), 45));
         }
         true
     }
@@ -1783,14 +1886,6 @@ impl World {
         for reward in update.rewards {
             self.grant_reward(&reward);
         }
-        if let Some(id) = update.completed_quests.last() {
-            self.notification = Some((format!("QUEST COMPLETE: {}", id.to_ascii_uppercase()), 90));
-        } else if let Some(id) = update.completed_tutorials.last() {
-            self.notification = Some((
-                format!("TUTORIAL COMPLETE: {}", id.to_ascii_uppercase()),
-                75,
-            ));
-        }
     }
 
     fn grant_reward(&mut self, reward: &str) {
@@ -1832,20 +1927,20 @@ impl World {
                 creative,
             );
         let Some(kind) = picked else {
-            self.notification = Some(("NOTHING CAN BE PICKED UP".to_owned(), 30));
             return;
         };
         let Some(item) = item_for_furniture(kind) else {
             return;
         };
-        if !creative && self.player.inventory.add(item, 1) != 0 {
+        if creative || self.player.inventory.add(item, 1) == 0 {
+            self.player.active_item = Some(ActiveItem::Stack(item));
+        } else {
             self.levels[self.current_level].entities.spawn_item(
                 ItemStack::new(item, 1),
                 self.player.x,
                 self.player.y,
             );
         }
-        self.notification = Some((format!("PICKED UP {}", kind.display_name()), 45));
         self.sound(SoundEffect::Pickup);
     }
 
@@ -1975,7 +2070,6 @@ impl World {
                 );
             }
             self.unlock_achievement("minicraft.achievement.fish");
-            self.notification = Some((format!("CAUGHT {item}"), 75));
         } else {
             let tiers = [
                 ToolTier::Wood,
@@ -1986,17 +2080,10 @@ impl World {
             let kinds = [ToolKind::Pickaxe, ToolKind::Axe, ToolKind::Shovel];
             let tier = tiers[self.random.next_int(tiers.len() as i32) as usize];
             let kind = kinds[self.random.next_int(kinds.len() as i32) as usize];
-            if self
+            let _ = self
                 .player
                 .inventory
-                .add_tool(crate::item::ToolItem::new(kind, tier))
-                .is_some()
-            {
-                self.notification = Some((
-                    format!("CAUGHT {} {}", tier.display_name(), kind.display_name()),
-                    75,
-                ));
-            }
+                .add_tool(crate::item::ToolItem::new(kind, tier));
         }
     }
 
@@ -2048,7 +2135,6 @@ impl World {
         self.pay_stamina(2);
         self.player.hunger = self.player.hunger.saturating_add(feed).min(MAX_STAT);
         self.consume_active_stack(item);
-        self.notification = Some((format!("ATE {item}"), 45));
         true
     }
 
@@ -2211,7 +2297,6 @@ impl World {
                         tool.tier.level() + 3,
                         false,
                     );
-                    self.notification = Some(("ARROW FIRED".to_owned(), 30));
                 }
                 return;
             }
@@ -2220,11 +2305,9 @@ impl World {
                     target_x,
                     target_y,
                     &mut self.random,
-                ) {
-                    if self.mode != GameMode::Creative {
-                        self.player.inventory.tools_mut()[index].pay_durability();
-                    }
-                    self.notification = Some(("SHEEP SHEARED".to_owned(), 45));
+                ) && self.mode != GameMode::Creative
+                {
+                    self.player.inventory.tools_mut()[index].pay_durability();
                 }
                 return;
             }
@@ -2240,7 +2323,6 @@ impl World {
             .entities
             .ignite_tnt_near(target_x, target_y)
         {
-            self.notification = Some(("TNT FUSE LIT".to_owned(), 45));
             self.sound(SoundEffect::Fuse);
             return;
         }
@@ -2259,17 +2341,9 @@ impl World {
             &mut self.random,
         ) {
             self.player.attack_time = 5;
-            self.levels[self.current_level].entities.spawn_particle(
-                entity::ParticleKind::Smash,
-                target_x,
-                target_y,
-            );
-            let message = if hit.defeated {
-                format!("{} DEFEATED", hit.species.display_name())
-            } else {
-                format!("{} HP {}", hit.species.display_name(), hit.health)
-            };
-            self.notification = Some((message, 45));
+            self.levels[self.current_level]
+                .entities
+                .spawn_text_particle(hit.damage.to_string(), hit.x, hit.y);
             if !hit.defeated
                 || !matches!(
                     hit.species,
@@ -2294,7 +2368,6 @@ impl World {
             if item == ItemId::WateringCan {
                 if target == Tile::Water {
                     self.player.watering_content = 1_800;
-                    self.notification = Some(("WATERING CAN FILLED".to_owned(), 45));
                 } else if self.player.watering_content > 0 {
                     self.player.watering_content -= 1;
                     if matches!(
@@ -2313,10 +2386,6 @@ impl World {
                     } else if target == Tile::Farmland {
                         self.levels[self.current_level].data[index] = 7;
                     }
-                    self.notification =
-                        Some((format!("WATERING CAN {}", self.player.watering_content), 30));
-                } else {
-                    self.notification = Some(("WATERING CAN EMPTY".to_owned(), 45));
                 }
                 return;
             }
@@ -2326,7 +2395,6 @@ impl World {
                 {
                     self.player.fishing_level = Some(fishing_level);
                     self.player.fishing_ticks = 0;
-                    self.notification = Some(("FISHING...".to_owned(), 90));
                 }
                 return;
             }
@@ -2362,7 +2430,6 @@ impl World {
                 self.levels[self.current_level].data[index] =
                     (data & 0x7f) | ((old + amount).min(511) << 7);
                 self.consume_active_stack(item);
-                self.notification = Some(("CROP FERTILIZED".to_owned(), 45));
                 return;
             }
             if let Some((placed, data)) = tile_placement(item, target) {
@@ -2383,7 +2450,6 @@ impl World {
                 ) {
                     self.unlock_achievement("minicraft.achievement.plant_seed");
                 }
-                self.notification = Some((format!("PLACED {item}"), 45));
                 return;
             }
         }
@@ -2539,12 +2605,10 @@ impl World {
             }
             Tile::WoodDoor | Tile::StoneDoor | Tile::ObsidianDoor => {
                 self.levels[self.current_level].data[index] ^= 1;
-                self.notification = Some(("DOOR TOGGLED".to_owned(), 30));
             }
             Tile::BossDoor => {
                 if self.mode == GameMode::Creative || self.obsidian_knight_defeated {
                     self.levels[self.current_level].data[index] ^= 1;
-                    self.notification = Some(("BOSS DOOR TOGGLED".to_owned(), 30));
                 } else {
                     self.notification = Some(("DEFEAT THE OBSIDIAN KNIGHT FIRST".to_owned(), 75));
                 }
@@ -2618,7 +2682,6 @@ impl World {
                     let crop_score = (self.random.next_int(5) + 1) as u32;
                     self.add_score(crop_score, 0);
                 }
-                self.notification = Some(("CROP HARVESTED".to_owned(), 30));
             }
             Tile::Rock => {
                 let tool_damage = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 5);
@@ -2799,7 +2862,6 @@ impl World {
                     tile_x * TILE_SIZE + 8,
                     tile_y * TILE_SIZE + 8,
                 );
-                self.notification = Some(("SIGN REMOVED".to_owned(), 45));
             }
             Tile::IronOre | Tile::GoldOre | Tile::GemOre | Tile::LapisOre | Tile::CloudOre => {
                 let ore_tile = self.levels[self.current_level].tiles[index];
@@ -2885,7 +2947,6 @@ impl World {
         if tile == Tile::Sign {
             self.signs[self.current_level].remove(&index);
         }
-        self.notification = Some(("CREATIVE TILE REMOVED".to_owned(), 30));
         true
     }
 
@@ -2952,13 +3013,11 @@ impl World {
             self.unlock_achievement("minicraft.achievement.lava");
         }
         if self.mode == GameMode::Creative {
-            self.notification = Some((format!("USED {item}"), 45));
             return true;
         }
         self.consume_active_stack(item);
         self.player.inventory.add(bucket, 1);
         self.player.active_item = Some(ActiveItem::Stack(bucket));
-        self.notification = Some((format!("NOW HOLDING {bucket}"), 45));
         true
     }
 
@@ -2999,7 +3058,6 @@ impl World {
                 );
             }
         }
-        self.notification = Some(("BOOM".to_owned(), 45));
     }
 
     fn active_tool(&self) -> Option<crate::item::ToolItem> {
@@ -3019,8 +3077,7 @@ impl World {
         }
         let cost = stamina_cost.saturating_sub(tool.tier.level());
         let infinite_energy = self.effect_active(PotionKind::Energy);
-        if self.mode != GameMode::Creative && !infinite_energy && self.player.stamina < cost {
-            self.notification = Some(("NOT ENOUGH STAMINA".to_owned(), 30));
+        if self.mode != GameMode::Creative && !infinite_energy && self.player.stamina == 0 {
             return None;
         }
         let mut damage = tool.terrain_damage(self.random.next_int(5) as u8);
@@ -3033,7 +3090,7 @@ impl World {
             return None;
         }
         if self.mode != GameMode::Creative && !infinite_energy {
-            self.player.stamina -= cost;
+            self.player.stamina = self.player.stamina.saturating_sub(cost);
         }
         Some(damage)
     }
@@ -3084,7 +3141,6 @@ impl World {
         if self.mode != GameMode::Creative && self.player.inventory.count(item) == 0 {
             self.player.active_item = None;
         }
-        self.notification = Some((format!("{} PLACED", kind.display_name()), 60));
         true
     }
 
@@ -3136,7 +3192,6 @@ impl World {
         self.player.fishing_level = None;
         self.player.watering_content = 0;
         self.player.fishing_ticks = 0;
-        self.notification = Some(("YOU AWAKEN AT THE SURFACE".to_owned(), 120));
     }
 
     fn use_target(&mut self) {
@@ -3174,15 +3229,15 @@ impl World {
             if kind.crafting() {
                 self.inventory_open = true;
                 self.crafting_station = Some(kind);
+                self.personal_crafting = false;
                 self.inventory_pane = 1;
                 self.inventory_selection = 0;
-                self.notification = Some((kind.display_name().to_owned(), 45));
             } else if matches!(kind, FurnitureKind::Chest | FurnitureKind::DungeonChest) {
                 let active = match self.player.active_item {
                     Some(ActiveItem::Stack(item)) => Some(item),
                     _ => None,
                 };
-                let message = self.levels[self.current_level].entities.use_container_near(
+                self.levels[self.current_level].entities.use_container_near(
                     self.player.x + offset_x,
                     self.player.y + offset_y,
                     &mut self.player.inventory,
@@ -3193,13 +3248,12 @@ impl World {
                 {
                     self.player.active_item = None;
                 }
-                self.notification = message.map(|message| (message, 60));
             } else if kind == FurnitureKind::Composter {
                 let active = match self.player.active_item {
                     Some(ActiveItem::Stack(item)) => Some(item),
                     _ => None,
                 };
-                let message = self.levels[self.current_level].entities.use_composter_near(
+                self.levels[self.current_level].entities.use_composter_near(
                     self.player.x + offset_x,
                     self.player.y + offset_y,
                     &mut self.player.inventory,
@@ -3210,7 +3264,6 @@ impl World {
                 {
                     self.player.active_item = None;
                 }
-                self.notification = message.map(|message| (message, 60));
             } else if kind == FurnitureKind::KnightStatue {
                 let touches = self.levels[self.current_level]
                     .entities
@@ -3223,16 +3276,11 @@ impl World {
                     }
                 });
             } else if kind == FurnitureKind::Bed {
-                if self.levels[self.current_level].depth != 0 {
-                    self.notification = Some(("BEDS ONLY WORK ON THE SURFACE".to_owned(), 60));
-                } else if self.day_tick < 48_600 {
+                if self.day_tick < 48_600 {
                     self.notification = Some(("IT IS TOO EARLY TO SLEEP".to_owned(), 60));
                 } else {
                     self.sleeping = 120;
-                    self.notification = Some(("YOU FALL ASLEEP".to_owned(), 75));
                 }
-            } else {
-                self.notification = Some((format!("USED {}", kind.display_name()), 45));
             }
             return;
         }
@@ -3254,7 +3302,6 @@ impl World {
             if depth == -4 {
                 self.unlock_achievement("minicraft.achievement.obsidian_dungeon");
             }
-            self.notification = Some((format!("ENTERED DEPTH {depth}"), 90));
         }
     }
 
@@ -3515,6 +3562,7 @@ impl World {
                 self.inventory_selection,
                 self.inventory_pane,
                 self.crafting_station,
+                self.personal_crafting,
                 self.mode,
             );
         }
@@ -4151,9 +4199,10 @@ fn render_inventory(
     craft_selection: usize,
     pane: usize,
     station: Option<FurnitureKind>,
+    personal_crafting: bool,
     mode: GameMode,
 ) {
-    if let Some(station) = station {
+    if personal_crafting || station.is_some() {
         render_crafting_menu(screen, assets, player, station, craft_selection);
         return;
     }
@@ -4195,6 +4244,9 @@ fn render_inventory(
             player_entries.len(),
             player.inventory.capacity(),
         );
+        if mode != GameMode::Creative {
+            screen.text_colored(&assets.font, "Z: Crafting", 17, 97, 0x686868);
+        }
         return;
     }
 
@@ -4264,14 +4316,9 @@ fn render_inventory_panel(
     selection: Option<usize>,
 ) {
     let width = inventory_panel_width(entries, title);
-    let (y, height) = (9, 88);
+    let (y, height) = (9, 104);
     render_menu_frame(screen, &assets.hud, x, y, width, height);
-    screen.text(
-        &assets.font,
-        title,
-        x + (width - title.len() as i32 * 8) / 2,
-        y,
-    );
+    render_menu_title(screen, assets, title, x, y, width, 0xFFFFFF);
 
     let selected = selection.unwrap_or(0);
     let first = selected
@@ -4299,11 +4346,11 @@ fn render_crafting_menu(
     screen: &mut Screen,
     assets: &Assets,
     player: &Player,
-    station: FurnitureKind,
+    station: Option<FurnitureKind>,
     selection: usize,
 ) {
-    let recipes = recipe_views(Some(station));
-    let title = station.display_name();
+    let recipes = recipe_views(station);
+    let title = station.map_or("Crafting", FurnitureKind::display_name);
     let content_width = recipes
         .iter()
         .map(|(output, _)| output.chars().count())
@@ -4314,12 +4361,7 @@ fn render_crafting_menu(
     let width = (content_width + 48).clamp(96, 176);
     let (x, y, height) = (9, 9, 88);
     render_menu_frame(screen, &assets.hud, x, y, width, height);
-    screen.text(
-        &assets.font,
-        title,
-        x + (width - title.len() as i32 * 8) / 2,
-        y,
-    );
+    render_menu_title(screen, assets, title, x, y, width, 0xFFFFFF);
     let first = selection
         .saturating_sub(4)
         .min(recipes.len().saturating_sub(9));
@@ -4344,7 +4386,7 @@ fn render_crafting_menu(
         let panel_width = ((WIDTH as i32 - panel_x - 9) / 8) * 8;
         if panel_width >= 56 {
             render_menu_frame(screen, &assets.hud, panel_x, y, panel_width, 32);
-            screen.text(&assets.font, "HAVE", panel_x + 8, y);
+            render_menu_title(screen, assets, "HAVE", panel_x, y, panel_width, 0xFFFFFF);
             screen.text(
                 &assets.font,
                 &format!("{} {}", output_count(player, output), output),
@@ -4360,7 +4402,15 @@ fn render_crafting_menu(
                 panel_width,
                 cost_height,
             );
-            screen.text(&assets.font, "COST", panel_x + 8, y + 40);
+            render_menu_title(
+                screen,
+                assets,
+                "COST",
+                panel_x,
+                y + 40,
+                panel_width,
+                0xFFFFFF,
+            );
             for (row, cost) in costs.iter().enumerate() {
                 screen.blit(assets.item(cost.item), panel_x + 8, y + 52 + row as i32 * 8);
                 screen.text(
@@ -4433,6 +4483,23 @@ fn render_menu_frame(
             );
         }
     }
+}
+
+fn render_menu_title(
+    screen: &mut Screen,
+    assets: &Assets,
+    title: &str,
+    x: i32,
+    y: i32,
+    width: i32,
+    color: u32,
+) {
+    let title_width = title.chars().count() as i32 * 8;
+    let title_x = x + (width - title_width) / 2;
+    for offset in (0..title_width).step_by(8) {
+        screen.blit_region(&assets.hud, title_x + offset, y, 24, 48, 8, 8, false);
+    }
+    screen.text_colored(&assets.font, title, title_x, y, color);
 }
 
 fn render_inventory_counter(
@@ -4549,16 +4616,23 @@ fn render_entity(
     match &entity.kind {
         EntityKind::Item(stack) => {
             let image = assets.item(stack.item);
-            let bounce = if (tick / 12 + entity.id).is_multiple_of(2) {
-                0
-            } else {
-                -1
+            let Some(motion) = &entity.item_motion else {
+                screen.blit(
+                    image,
+                    entity.x - image.width as i32 / 2 - camera_x,
+                    entity.y - image.height as i32 / 2 - camera_y,
+                );
+                return;
             };
-            screen.blit(
-                image,
-                entity.x - image.width as i32 / 2 - camera_x,
-                entity.y - image.height as i32 / 2 - camera_y + bounce,
-            );
+            if entity.age >= motion.lifetime.saturating_sub(120)
+                && (entity.age / 6).is_multiple_of(2)
+            {
+                return;
+            }
+            let x = entity.x - image.width as i32 / 2 - camera_x;
+            let ground_y = entity.y - image.height as i32 / 2 - camera_y;
+            screen.blit_tinted(image, x, ground_y, 0x202020);
+            screen.blit(image, x, ground_y - motion.height as i32);
         }
         EntityKind::Mob(mob) => {
             if mob.hurt_time > 0 && tick.is_multiple_of(2) {
@@ -4649,19 +4723,45 @@ fn render_entity(
                 color,
             );
         }
-        EntityKind::Particle(kind) => {
-            let color = match kind {
-                entity::ParticleKind::Smash => 0xE8E8E8,
-                entity::ParticleKind::Fire => 0xFF8A30,
-            };
-            screen.rect(entity.x - camera_x, entity.y - camera_y, 2, 2, color);
-        }
+        EntityKind::Particle(kind) => match kind {
+            entity::ParticleKind::Smash => {
+                screen.blit(&assets.smash, entity.x - camera_x, entity.y - camera_y);
+            }
+            entity::ParticleKind::Fire => {
+                screen.rect(entity.x - camera_x, entity.y - camera_y, 2, 2, 0xFF8A30);
+            }
+        },
         EntityKind::TextParticle(text) => {
-            let x = entity.x - camera_x - text.chars().count() as i32 * 4;
-            let y = entity.y - camera_y - entity.age.min(16) as i32 / 2;
-            screen.text(&assets.font, text, x, y);
+            let (offset_x, offset_y, z) = text_particle_motion(entity.id, entity.age);
+            let x = entity.x - camera_x - text.chars().count() as i32 * 4 + offset_x;
+            let y = entity.y - camera_y + offset_y - z;
+            screen.text_colored(&assets.font, text, x + 1, y + 1, 0x000000);
+            screen.text_colored(&assets.font, text, x, y, 0xFF3030);
         }
     }
+}
+
+fn text_particle_motion(id: u64, age: u32) -> (i32, i32, i32) {
+    let seed = id.wrapping_mul(0x9E37_79B9);
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut z = 2.0;
+    let mut x_velocity = (seed % 601) as f64 / 1000.0 - 0.3;
+    let mut y_velocity = (seed.rotate_left(17) % 401) as f64 / 1000.0 - 0.2;
+    let mut z_velocity = 2.0 + (seed.rotate_left(31) % 701) as f64 / 1000.0;
+    for _ in 0..age {
+        x += x_velocity;
+        y += y_velocity;
+        z += z_velocity;
+        if z < 0.0 {
+            z = 0.0;
+            z_velocity *= -0.5;
+            x_velocity *= 0.6;
+            y_velocity *= 0.6;
+        }
+        z_velocity -= 0.15;
+    }
+    (x as i32, y as i32, z as i32)
 }
 
 fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
@@ -4669,50 +4769,51 @@ fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
     render_menu_frame(screen, &assets.hud, x, y, width, height);
     let (title, labels): (&str, Vec<String>) = match world.pause_page {
         PausePage::Main => (
-            "PAUSED",
-            [
-                "RETURN TO GAME",
-                "OPTIONS",
-                "ACHIEVEMENTS",
-                "QUESTS",
-                "SAVE GAME",
-                "MAIN MENU",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
+            "Paused",
+            pause_actions(world.quests_enabled)
+                .into_iter()
+                .map(|action| match action {
+                    PauseAction::Return => "Return to Game",
+                    PauseAction::Options => "Options",
+                    PauseAction::Achievements => "Achievements",
+                    PauseAction::Quests => "Quests",
+                    PauseAction::Save => "Save Game",
+                    PauseAction::MainMenu => "Main Menu",
+                })
+                .map(str::to_owned)
+                .collect(),
         ),
         PausePage::Options => (
-            "OPTIONS",
+            "Options",
             vec![
                 format!(
-                    "DIFFICULTY: {}",
-                    ["EASY", "NORMAL", "HARD"][world.difficulty.min(2)]
+                    "Difficulty: {}",
+                    ["Easy", "Normal", "Hard"][world.difficulty.min(2)]
                 ),
                 format!(
-                    "SHOW QUEST PANEL: {}",
-                    if world.show_quests { "ON" } else { "OFF" }
+                    "Show Quest Panel: {}",
+                    if world.show_quests { "On" } else { "Off" }
                 ),
                 format!(
-                    "TUTORIALS: {}",
-                    if world.tutorials_enabled { "ON" } else { "OFF" }
+                    "Tutorials: {}",
+                    if world.tutorials_enabled { "On" } else { "Off" }
                 ),
                 format!(
-                    "QUESTS: {}",
-                    if world.quests_enabled { "ON" } else { "OFF" }
+                    "Quests: {}",
+                    if world.quests_enabled { "On" } else { "Off" }
                 ),
-                "BACK".to_owned(),
+                "Back".to_owned(),
             ],
         ),
         PausePage::Achievements => (
-            "ACHIEVEMENTS",
+            "Achievements",
             vec![
                 format!("COMPLETED: {}", world.progress.achievement_count()),
                 "ENTER OR ESC TO RETURN".to_owned(),
             ],
         ),
         PausePage::Quests => (
-            "QUESTS",
+            "Quests",
             vec![
                 format!(
                     "TUTORIALS: {}/{}",
@@ -4728,14 +4829,9 @@ fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
             ],
         ),
     };
-    screen.text(
-        &assets.font,
-        title,
-        x + (width - title.len() as i32 * 8) / 2,
-        y,
-    );
+    render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
     for (index, label) in labels.iter().enumerate() {
-        let draw_y = y + 20 + index as i32 * 12;
+        let draw_y = y + 24 + index as i32 * 12;
         let draw_x = x + (width - label.chars().count() as i32 * 8) / 2;
         if index == world.pause_selection
             && matches!(world.pause_page, PausePage::Main | PausePage::Options)
@@ -4751,20 +4847,36 @@ fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
         screen.text(&assets.font, label, draw_x, draw_y);
     }
     if world.pause_page == PausePage::Main {
-        screen.centered_text(&assets.font, "UP AND DOWN TO SCROLL", y + height - 24);
-        screen.centered_text(&assets.font, "ENTER: CHOOSE", y + height - 14);
+        screen.text_colored(
+            &assets.font,
+            "UP and DOWN to Scroll",
+            (WIDTH as i32 - 21 * 8) / 2,
+            y + height - 24,
+            0x686868,
+        );
+        screen.text_colored(
+            &assets.font,
+            "ENTER: Choose",
+            (WIDTH as i32 - 13 * 8) / 2,
+            y + height - 14,
+            0x686868,
+        );
     }
     if world.pause_confirm {
         let (popup_x, popup_y, popup_width, popup_height) = (20, 56, 248, 80);
         screen.rect(popup_x, popup_y, popup_width, popup_height, 0x08080C);
         screen.frame(popup_x, popup_y, popup_width, popup_height, 0xC8C8C8);
-        screen.centered_text(&assets.font, "ARE YOU SURE YOU WANT TO EXIT", popup_y + 12);
-        screen.centered_text(
+        screen.centered_text(&assets.font, "Are you sure you want to", popup_y + 8);
+        screen.centered_text(&assets.font, "exit the game?", popup_y + 18);
+        let warning = "All unsaved progress will be lost";
+        screen.text_colored(
             &assets.font,
-            "ALL UNSAVED PROGRESS WILL BE LOST",
-            popup_y + 26,
+            warning,
+            (WIDTH as i32 - warning.chars().count() as i32 * 8) / 2,
+            popup_y + 30,
+            0xFF3030,
         );
-        for (index, label) in ["CANCEL", "QUIT WITHOUT SAVING"].iter().enumerate() {
+        for (index, label) in ["Cancel", "Quit without saving"].iter().enumerate() {
             let draw_y = popup_y + 48 + index as i32 * 12;
             let draw_x = (WIDTH as i32 - label.len() as i32 * 8) / 2;
             if index == world.pause_selection {
@@ -4927,10 +5039,14 @@ mod registry_tests {
     use super::{
         ActiveItem, DAY_LENGTH, Direction, FurnitureKind, GameMode, HUNGER_STAMINA_STEPS, Level,
         MAX_HUNGER_TICKS, PausePage, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
-        creative_entries, entity::EntityArena, player_sprite_frame, random::JavaRandom, spawn,
-        surface_darkness, time_name, try_queue_natural_spawn,
+        creative_entries,
+        entity::{EntityArena, EntityKind},
+        player_sprite_frame,
+        random::JavaRandom,
+        spawn, surface_darkness, time_name, try_queue_natural_spawn,
     };
     use crate::{
+        audio::SoundEffect,
         input::Input,
         item::{
             ArmorKind, Inventory, ItemId, PotionKind, ToolItem, ToolKind, ToolTier,
@@ -5012,6 +5128,7 @@ mod registry_tests {
             inventory_item_selection: 0,
             inventory_pane: 0,
             crafting_station: None,
+            personal_crafting: false,
             notification: None,
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
@@ -5076,6 +5193,145 @@ mod registry_tests {
             world.player.active_item,
             Some(ActiveItem::Stack(ItemId::Wood))
         );
+    }
+
+    #[test]
+    fn enter_equips_inventory_items_and_z_opens_personal_crafting() {
+        let mut world = tiny_world();
+        world.player.inventory.add(ItemId::Wood, 10);
+        world.tick(&Input {
+            menu: true,
+            ..Input::default()
+        });
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert!(!world.inventory_open);
+        assert_eq!(
+            world.player.active_item,
+            Some(ActiveItem::Stack(ItemId::Wood))
+        );
+
+        world.tick(&Input {
+            craft: true,
+            ..Input::default()
+        });
+        assert!(world.inventory_open);
+        assert!(world.personal_crafting);
+        assert_eq!(world.crafting_station, None);
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
+        assert!(world.take_sound_events().contains(&SoundEffect::Craft));
+    }
+
+    #[test]
+    fn z_switches_an_open_player_inventory_to_workbench_crafting() {
+        let mut world = tiny_world();
+        world.player.inventory.add(ItemId::Wood, 10);
+        world.tick(&Input {
+            menu: true,
+            ..Input::default()
+        });
+        assert!(world.inventory_open && !world.personal_crafting);
+
+        world.tick(&Input {
+            craft: true,
+            ..Input::default()
+        });
+        assert!(world.inventory_open && world.personal_crafting);
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 0);
+        assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
+        assert!(
+            world
+                .notification
+                .as_ref()
+                .is_none_or(|(message, _)| !message.starts_with("CRAFTED"))
+        );
+    }
+
+    #[test]
+    fn an_item_equipped_with_enter_can_be_used_after_closing_inventory() {
+        let mut world = tiny_world();
+        world.player.hunger = 5;
+        world.player.inventory.add(ItemId::Apple, 1);
+        world.tick(&Input {
+            menu: true,
+            ..Input::default()
+        });
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.hunger, 6);
+        assert_eq!(world.player.inventory.count(ItemId::Apple), 0);
+    }
+
+    #[test]
+    fn pickup_uses_the_power_glove_slash_without_subtitles() {
+        let mut world = tiny_world();
+        world.tutorials_enabled = false;
+        world.quests_enabled = false;
+        world.notification = None;
+        world.tick(&Input {
+            pickup: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.attack_time, 5);
+        assert!(world.notification.is_none());
+
+        world.levels[0].entities.spawn_furniture(
+            FurnitureKind::Workbench,
+            world.player.x + 12,
+            world.player.y,
+        );
+        world.tick(&Input {
+            pickup: true,
+            ..Input::default()
+        });
+        assert_eq!(
+            world.player.active_item,
+            Some(ActiveItem::Stack(ItemId::Workbench))
+        );
+        assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
+        assert!(world.notification.is_none());
+        assert!(world.take_sound_events().contains(&SoundEffect::Pickup));
+    }
+
+    #[test]
+    fn pause_navigation_is_available_to_the_render_frame_without_a_tick_delay() {
+        let mut world = tiny_world();
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        let down = Input {
+            down_pressed: true,
+            ..Input::default()
+        };
+        assert_eq!(world.immediate_menu_sound(&down), Some(SoundEffect::Select));
+        world.tick(&down);
+        let confirm = Input {
+            select: true,
+            ..Input::default()
+        };
+        assert_eq!(
+            world.immediate_menu_sound(&confirm),
+            Some(SoundEffect::Confirm)
+        );
+        world.tick(&confirm);
+        assert!(world.take_sound_events().is_empty());
     }
 
     #[test]
@@ -5257,8 +5513,9 @@ mod registry_tests {
             ..Input::default()
         });
         assert_eq!(world.player.hunger, 8);
-        assert_eq!(world.player.stamina, 8);
+        assert_eq!(world.player.stamina, 7);
         assert_eq!(world.player.inventory.count(ItemId::CookedPork), 1);
+        assert!(world.notification.is_none());
     }
 
     #[test]
@@ -5276,10 +5533,52 @@ mod registry_tests {
             ..Input::default()
         });
 
-        assert_eq!(world.player.hunger, 6);
+        assert_eq!(world.player.hunger, 5);
         assert_eq!(world.player.stamina, 0);
-        assert_eq!(world.player.inventory.count(ItemId::Apple), 0);
+        assert_eq!(world.player.inventory.count(ItemId::Apple), 1);
         assert_eq!(world.levels[0].data[target], 0);
+    }
+
+    #[test]
+    fn every_attack_input_pays_the_java_base_stamina_cost() {
+        let mut world = tiny_world();
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.stamina, 9);
+        assert_eq!(world.player.stamina_recharge, 0);
+
+        world.player.stamina = 0;
+        world.player.attack_time = 0;
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.attack_time, 0);
+    }
+
+    #[test]
+    fn tool_actions_accept_java_partial_stamina_payment_after_the_base_cost() {
+        let mut world = tiny_world();
+        let target = 9 + 8 * world.width;
+        world.levels[0].tiles[target] = Tile::Tree;
+        let axe = world
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood))
+            .unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(axe));
+        world.player.stamina = 2;
+
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+
+        assert_eq!(world.player.stamina, 0);
+        assert!((10..=14).contains(&world.levels[0].data[target]));
+        assert_eq!(world.player.attack_time, 10);
     }
 
     #[test]
@@ -5343,11 +5642,21 @@ mod registry_tests {
         world.player.active_item = None;
         world.attack();
         assert_eq!(world.levels[0].tiles[target], Tile::Farmland);
-        world.levels[0].entities.collect_near(
-            9 * TILE_SIZE + 8,
-            8 * TILE_SIZE + 8,
-            &mut world.player.inventory,
-        );
+        for _ in 0..31 {
+            world.tick(&Input::default());
+        }
+        let drops = world.levels[0]
+            .entities
+            .entities()
+            .iter()
+            .filter(|entity| matches!(entity.kind, super::EntityKind::Item(_)))
+            .map(|entity| (entity.x, entity.y))
+            .collect::<Vec<_>>();
+        for (x, y) in drops {
+            world.levels[0]
+                .entities
+                .collect_near(x, y, &mut world.player.inventory);
+        }
         assert!(world.player.inventory.count(ItemId::Wheat) >= 2);
         assert_eq!(world.player.inventory.count(ItemId::WheatSeeds), 1);
     }
@@ -5540,6 +5849,7 @@ mod registry_tests {
         world.score = 4_321;
         world.score_multiplier = 9;
         world.player.health = 6;
+        let _ = world.player.inventory.set_capacity(32);
         world.player.inventory.add(ItemId::Gem, 12);
         world.signs[0].insert(7, "ROUND TRIP".to_owned());
         world
@@ -5558,6 +5868,7 @@ mod registry_tests {
         assert_eq!(loaded.score, 4_321);
         assert_eq!(loaded.score_multiplier, 9);
         assert_eq!(loaded.player.health, 6);
+        assert_eq!(loaded.player.inventory.capacity(), 27);
         assert_eq!(loaded.player.inventory.count(ItemId::Gem), 12);
         assert_eq!(
             loaded.signs[0].get(&7).map(String::as_str),
@@ -5581,6 +5892,43 @@ mod registry_tests {
         loaded.levels[0].tiles.pop();
         let corrupt = loaded.to_save_string().unwrap();
         assert!(World::from_save_string(&corrupt).is_err());
+    }
+
+    #[test]
+    fn oversized_legacy_inventory_is_migrated_to_27_slots_without_deleting_stacks() {
+        let mut world = tiny_world();
+        let _ = world.player.inventory.set_capacity(32);
+        for item in ItemId::ALL.iter().copied().take(30) {
+            assert_eq!(world.player.inventory.add(item, 1), 0);
+        }
+        let total_before = world
+            .player
+            .inventory
+            .slots()
+            .iter()
+            .map(|stack| usize::from(stack.count))
+            .sum::<usize>();
+
+        let loaded = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        let held = loaded
+            .player
+            .inventory
+            .slots()
+            .iter()
+            .map(|stack| usize::from(stack.count))
+            .sum::<usize>();
+        let dropped = loaded.levels[loaded.current_level]
+            .entities
+            .entities()
+            .iter()
+            .filter_map(|entity| match entity.kind {
+                EntityKind::Item(stack) => Some(usize::from(stack.count)),
+                _ => None,
+            })
+            .sum::<usize>();
+        assert_eq!(loaded.player.inventory.capacity(), 27);
+        assert_eq!(loaded.player.inventory.used_slots(), 27);
+        assert_eq!(held + dropped, total_before);
     }
 
     #[test]

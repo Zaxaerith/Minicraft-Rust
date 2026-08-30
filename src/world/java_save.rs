@@ -170,7 +170,7 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     world.sign_editor = None;
     world.book_open = None;
     world.crafting_station = None;
-    world.notification = Some(("JAVA 2.2.4 SAVE IMPORTED".to_owned(), 180));
+    world.notification = None;
     world.validate_save()?;
     Ok(world)
 }
@@ -213,11 +213,9 @@ fn import_inventory(directory: &Path, world: &mut World) -> Result<(), String> {
         return Ok(());
     }
     let saved = read_save(&path)?;
-    let mut inventory = Inventory::new(if world.mode == GameMode::Creative {
-        256
-    } else {
-        32
-    });
+    // Java Inventory.maxItem is always 27. Creative's unlimited catalogue is a
+    // separate menu and does not enlarge the player's own inventory.
+    let mut inventory = Inventory::new(27);
     let mut active = None;
     for (index, entry) in saved.iter().filter(|entry| !entry.is_empty()).enumerate() {
         if compact(entry).contains("powerglove") || compact(entry).contains("totemofwind") {

@@ -2,7 +2,7 @@ use minifb::{Key, KeyRepeat, Window};
 
 use crate::config::KeyBindings;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Input {
     pub up: bool,
     pub down: bool,
@@ -16,6 +16,7 @@ pub struct Input {
     pub exit: bool,
     pub attack: bool,
     pub menu: bool,
+    pub craft: bool,
     pub pickup: bool,
     pub world_copy: bool,
     pub world_rename: bool,
@@ -25,6 +26,48 @@ pub struct Input {
 }
 
 impl Input {
+    pub fn latch(&mut self, latest: Self) {
+        self.up = latest.up;
+        self.down = latest.down;
+        self.left = latest.left;
+        self.right = latest.right;
+        self.up_pressed |= latest.up_pressed;
+        self.down_pressed |= latest.down_pressed;
+        self.left_pressed |= latest.left_pressed;
+        self.right_pressed |= latest.right_pressed;
+        self.select |= latest.select;
+        self.exit |= latest.exit;
+        self.attack |= latest.attack;
+        self.menu |= latest.menu;
+        self.craft |= latest.craft;
+        self.pickup |= latest.pickup;
+        self.world_copy |= latest.world_copy;
+        self.world_rename |= latest.world_rename;
+        self.world_delete |= latest.world_delete;
+        self.backspace |= latest.backspace;
+        self.text.extend(latest.text);
+    }
+
+    pub fn take_tick(&mut self) -> Self {
+        let tick = self.clone();
+        self.up_pressed = false;
+        self.down_pressed = false;
+        self.left_pressed = false;
+        self.right_pressed = false;
+        self.select = false;
+        self.exit = false;
+        self.attack = false;
+        self.menu = false;
+        self.craft = false;
+        self.pickup = false;
+        self.world_copy = false;
+        self.world_rename = false;
+        self.world_delete = false;
+        self.backspace = false;
+        self.text.clear();
+        tick
+    }
+
     pub fn poll(
         window: &Window,
         bindings: &KeyBindings,
@@ -39,6 +82,7 @@ impl Input {
         let exit = key_from_name(&bindings.exit).unwrap_or(Key::Escape);
         let attack = key_from_name(&bindings.attack).unwrap_or(Key::C);
         let menu = key_from_name(&bindings.menu).unwrap_or(Key::X);
+        let craft = key_from_name(&bindings.craft).unwrap_or(Key::Z);
         let pickup = key_from_name(&bindings.pickup).unwrap_or(Key::V);
         let shifted = window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
         let text = raw_keys
@@ -60,9 +104,10 @@ impl Input {
                 || pad.right_pressed,
             select: pressed(window, select) || pad.select,
             exit: pressed(window, exit) || pad.exit,
-            attack: pressed(window, attack) || pad.attack,
-            menu: pressed(window, menu) || pad.menu,
-            pickup: pressed(window, pickup) || pad.pickup,
+            attack: pressed(window, attack) || pressed(window, Key::Space) || pad.attack,
+            menu: pressed(window, menu) || (!shifted && pressed(window, Key::E)) || pad.menu,
+            craft: pressed(window, craft) || (shifted && pressed(window, Key::E)),
+            pickup: pressed(window, pickup) || pressed(window, Key::P) || pad.pickup,
             world_copy: shifted && raw_keys.contains(&Key::C),
             world_rename: shifted && raw_keys.contains(&Key::R),
             world_delete: shifted && raw_keys.contains(&Key::D),
@@ -124,7 +169,31 @@ impl Gamepad {
 
 #[cfg(test)]
 mod tests {
-    use super::{Gamepad, RawGamepadState, gamepad_platform};
+    use super::{Gamepad, Input, RawGamepadState, gamepad_platform};
+
+    #[test]
+    fn pressed_inputs_are_latched_until_the_next_fixed_tick() {
+        let mut latch = Input::default();
+        latch.latch(Input {
+            up: true,
+            attack: true,
+            craft: true,
+            text: vec!['A'],
+            ..Input::default()
+        });
+        latch.latch(Input {
+            up: true,
+            ..Input::default()
+        });
+        let tick = latch.take_tick();
+        assert!(tick.up && tick.attack && tick.craft);
+        assert_eq!(tick.text, vec!['A']);
+        let next = latch.take_tick();
+        assert!(next.up);
+        assert!(!next.attack);
+        assert!(!next.craft);
+        assert!(next.text.is_empty());
+    }
 
     #[test]
     fn controller_buttons_and_directions_are_edge_triggered() {

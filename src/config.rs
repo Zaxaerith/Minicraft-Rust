@@ -17,6 +17,7 @@ pub struct KeyBindings {
     pub exit: String,
     pub attack: String,
     pub menu: String,
+    pub craft: String,
     pub pickup: String,
 }
 
@@ -31,13 +32,14 @@ impl Default for KeyBindings {
             exit: "ESCAPE".to_owned(),
             attack: "C".to_owned(),
             menu: "X".to_owned(),
+            craft: "Z".to_owned(),
             pickup: "V".to_owned(),
         }
     }
 }
 
 impl KeyBindings {
-    pub const LABELS: [&'static str; 9] = [
+    pub const LABELS: [&'static str; 10] = [
         "MOVE UP",
         "MOVE DOWN",
         "MOVE LEFT",
@@ -46,6 +48,7 @@ impl KeyBindings {
         "EXIT / PAUSE",
         "ATTACK",
         "INVENTORY",
+        "CRAFTING",
         "PICK UP",
     ];
 
@@ -59,6 +62,7 @@ impl KeyBindings {
             5 => &self.exit,
             6 => &self.attack,
             7 => &self.menu,
+            8 => &self.craft,
             _ => &self.pickup,
         }
     }
@@ -73,6 +77,7 @@ impl KeyBindings {
             5 => self.exit = value,
             6 => self.attack = value,
             7 => self.menu = value,
+            8 => self.craft = value,
             _ => self.pickup = value,
         }
     }
@@ -82,6 +87,7 @@ impl KeyBindings {
 pub struct Settings {
     pub locale: String,
     pub fps: usize,
+    pub hwa: bool,
     pub difficulty: usize,
     pub sound: bool,
     pub autosave: bool,
@@ -103,6 +109,7 @@ impl Default for Settings {
         Self {
             locale: "en-us".to_owned(),
             fps: 60,
+            hwa: false,
             difficulty: 1,
             sound: true,
             autosave: true,
@@ -153,6 +160,7 @@ impl Config {
             "version": "2.2.4-rust",
             "locale": self.settings.locale,
             "fps": self.settings.fps,
+            "hwa": self.settings.hwa,
             "difficulty": self.settings.difficulty,
             "sound": self.settings.sound,
             "autosave": self.settings.autosave,
@@ -175,6 +183,7 @@ impl Config {
                 "exit": self.settings.key_bindings.exit,
                 "attack": self.settings.key_bindings.attack,
                 "menu": self.settings.key_bindings.menu,
+                "craft": self.settings.key_bindings.craft,
                 "pickup": self.settings.key_bindings.pickup,
             },
         });
@@ -227,6 +236,7 @@ fn parse_settings(text: &str) -> Option<Settings> {
     let mut settings = Settings::default();
     settings.locale = string(&value, "locale", &settings.locale);
     settings.fps = integer(&value, "fps", settings.fps).clamp(10, 300);
+    settings.hwa = boolean(&value, "hwa", settings.hwa);
     settings.difficulty = integer(&value, "difficulty", settings.difficulty).min(2);
     settings.sound = boolean(&value, "sound", settings.sound);
     settings.autosave = boolean(&value, "autosave", settings.autosave);
@@ -263,6 +273,7 @@ fn parse_settings(text: &str) -> Option<Settings> {
     settings.key_bindings.exit = binding(bindings, "exit", &settings.key_bindings.exit);
     settings.key_bindings.attack = binding(bindings, "attack", &settings.key_bindings.attack);
     settings.key_bindings.menu = binding(bindings, "menu", &settings.key_bindings.menu);
+    settings.key_bindings.craft = binding(bindings, "craft", &settings.key_bindings.craft);
     settings.key_bindings.pickup = binding(bindings, "pickup", &settings.key_bindings.pickup);
     Some(settings)
 }
@@ -296,11 +307,13 @@ mod tests {
 
     #[test]
     fn invalid_settings_are_clamped() {
-        let settings =
-            parse_settings(r#"{"locale":"fr-fr","fps":999,"difficulty":9,"world_size":17}"#)
-                .unwrap();
+        let settings = parse_settings(
+            r#"{"locale":"fr-fr","fps":999,"hwa":true,"difficulty":9,"world_size":17}"#,
+        )
+        .unwrap();
         assert_eq!(settings.locale, "fr-fr");
         assert_eq!(settings.fps, 300);
+        assert!(settings.hwa);
         assert_eq!(settings.difficulty, 2);
         assert_eq!(settings.world_size, 128);
 

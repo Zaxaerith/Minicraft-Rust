@@ -6,6 +6,17 @@ use super::{Tile, random::JavaRandom, spawn::NaturalMob};
 const DESPAWN_AGE: u32 = 18_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemMotion {
+    pub precise_x: f64,
+    pub precise_y: f64,
+    pub height: f64,
+    pub velocity_x: f64,
+    pub velocity_y: f64,
+    pub velocity_z: f64,
+    pub lifetime: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mob {
     pub species: NaturalMob,
     pub health: u16,
@@ -218,6 +229,8 @@ pub struct Entity {
     pub kind: EntityKind,
     pub state: u16,
     pub health: u16,
+    #[serde(default)]
+    pub item_motion: Option<ItemMotion>,
     storage: Option<Inventory>,
     removed: bool,
 }
@@ -227,6 +240,9 @@ pub struct HitResult {
     pub species: NaturalMob,
     pub defeated: bool,
     pub health: u16,
+    pub damage: u16,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug, Default)]
@@ -331,7 +347,40 @@ impl EntityArena {
     }
 
     pub fn spawn_item(&mut self, stack: ItemStack, x: i32, y: i32) -> u64 {
-        self.insert(x, y, EntityKind::Item(stack))
+        let id = self.insert(x, y, EntityKind::Item(stack));
+        let entity = self.entities.last_mut().expect("inserted item");
+        let first = split_mix(id.wrapping_add(0xA076_1D64_78BD_642F));
+        let second = split_mix(first);
+        let third = split_mix(second);
+        let fourth = split_mix(third);
+        let gaussian_x = gaussian(first, second);
+        let gaussian_y = gaussian(third, fourth);
+        let mut drop_x = x;
+        let mut drop_y = y;
+        for attempt in 0..6 {
+            let value = split_mix(fourth.wrapping_add(attempt));
+            let candidate_x = x + (value % 11) as i32 - 5;
+            let candidate_y = y + (value.rotate_left(23) % 11) as i32 - 5;
+            if candidate_x.div_euclid(16) == x.div_euclid(16)
+                && candidate_y.div_euclid(16) == y.div_euclid(16)
+            {
+                drop_x = candidate_x;
+                drop_y = candidate_y;
+                break;
+            }
+        }
+        entity.x = drop_x;
+        entity.y = drop_y;
+        entity.item_motion = Some(ItemMotion {
+            precise_x: f64::from(drop_x),
+            precise_y: f64::from(drop_y),
+            height: 2.0,
+            velocity_x: gaussian_x * 0.3,
+            velocity_y: gaussian_y * 0.2,
+            velocity_z: unit(split_mix(fourth)) * 0.7 + 1.0,
+            lifetime: 600 + (split_mix(first) % 70) as u32,
+        });
+        id
     }
 
     pub fn spawn_furniture(&mut self, kind: FurnitureKind, x: i32, y: i32) -> u64 {
@@ -498,6 +547,7 @@ impl EntityArena {
             kind,
             state: 0,
             health: 0,
+            item_motion: None,
             storage: None,
             removed: false,
         });
@@ -527,12 +577,42 @@ impl EntityArena {
             entity.age = entity.age.saturating_add(1);
             match &mut entity.kind {
                 EntityKind::Item(_) => {
-                    if entity.age > 6_000 {
+                    let motion = entity.item_motion.get_or_insert_with(|| ItemMotion {
+                        precise_x: f64::from(entity.x),
+                        precise_y: f64::from(entity.y),
+                        height: 0.0,
+                        velocity_x: 0.0,
+                        velocity_y: 0.0,
+                        velocity_z: 0.0,
+                        lifetime: 600,
+                    });
+                    motion.precise_x += motion.velocity_x;
+                    motion.precise_y += motion.velocity_y;
+                    motion.height += motion.velocity_z;
+                    if motion.height < 0.0 {
+                        motion.height = 0.0;
+                        motion.velocity_z *= -0.5;
+                        motion.velocity_x *= 0.6;
+                        motion.velocity_y *= 0.6;
+                    }
+                    motion.velocity_z -= 0.15;
+                    entity.x = motion.precise_x as i32;
+                    entity.y = motion.precise_y as i32;
+                    if entity.age >= motion.lifetime {
                         entity.removed = true;
                     }
                 }
-                EntityKind::Particle(_) | EntityKind::TextParticle(_) => {
-                    if entity.age > 30 {
+                EntityKind::Particle(kind) => {
+                    let lifetime = match kind {
+                        ParticleKind::Smash => 10,
+                        ParticleKind::Fire => 30,
+                    };
+                    if entity.age > lifetime {
+                        entity.removed = true;
+                    }
+                }
+                EntityKind::TextParticle(_) => {
+                    if entity.age > 60 {
                         entity.removed = true;
                     }
                 }
@@ -832,6 +912,9 @@ impl EntityArena {
             species,
             defeated,
             health,
+            damage,
+            x,
+            y,
         }
     }
 
@@ -1013,6 +1096,9 @@ impl EntityArena {
     ) -> Vec<ItemStack> {
         let mut collected = Vec::new();
         for entity in &mut self.entities {
+            if entity.age <= 30 {
+                continue;
+            }
             if squared_distance(entity.x, entity.y, player_x, player_y) > 12 * 12 {
                 continue;
             }
@@ -1034,6 +1120,21 @@ impl EntityArena {
     }
 }
 
+fn split_mix(mut value: u64) -> u64 {
+    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    value ^ (value >> 31)
+}
+
+fn unit(value: u64) -> f64 {
+    ((value >> 11) as f64 + 1.0) / ((1_u64 << 53) as f64 + 1.0)
+}
+
+fn gaussian(first: u64, second: u64) -> f64 {
+    (-2.0 * unit(first).ln()).sqrt() * (std::f64::consts::TAU * unit(second)).cos()
+}
+
 impl NaturalMob {
     pub const fn hostile(self) -> bool {
         !matches!(self, Self::Cow | Self::Pig | Self::Sheep)
@@ -1052,22 +1153,6 @@ impl NaturalMob {
             Self::Sheep => "sheep",
             Self::AirWizard => "air_wizard",
             Self::ObsidianKnight => "obsidian_knight",
-        }
-    }
-
-    pub const fn display_name(self) -> &'static str {
-        match self {
-            Self::Slime => "SLIME",
-            Self::Zombie => "ZOMBIE",
-            Self::Creeper => "CREEPER",
-            Self::Skeleton => "SKELETON",
-            Self::Snake => "SNAKE",
-            Self::Knight => "KNIGHT",
-            Self::Cow => "COW",
-            Self::Pig => "PIG",
-            Self::Sheep => "SHEEP",
-            Self::AirWizard => "AIR WIZARD",
-            Self::ObsidianKnight => "OBSIDIAN KNIGHT",
         }
     }
 }
@@ -1146,6 +1231,11 @@ mod tests {
         let hit = arena.damage_nearest(40, 40, 2, &mut random).unwrap();
         assert!(hit.defeated);
         assert_eq!(arena.mob_count(), 0);
+        for entity in &mut arena.entities {
+            if matches!(entity.kind, EntityKind::Item(_)) {
+                entity.age = 31;
+            }
+        }
         let mut inventory = Inventory::new(8);
         let collected = arena.collect_near(40, 40, &mut inventory);
         assert_eq!(collected[0].item, ItemId::Slime);
@@ -1232,10 +1322,32 @@ mod tests {
                 .unwrap()
                 .defeated
         );
+        for entity in &mut arena.entities {
+            if matches!(entity.kind, EntityKind::Item(_)) {
+                entity.age = 31;
+            }
+        }
         let mut inventory = Inventory::new(8);
-        arena.collect_near(50, 40, &mut inventory);
+        arena.collect_near(40, 40, &mut inventory);
+        arena.collect_near(60, 40, &mut inventory);
         assert!(inventory.count(ItemId::CloudOre) >= 5);
         assert!(inventory.count(ItemId::Shard) >= 15);
         assert_eq!(inventory.count(ItemId::ObsidianHeart), 1);
+    }
+
+    #[test]
+    fn dropped_items_use_java_ballistics_and_the_thirty_tick_pickup_delay() {
+        let mut arena = EntityArena::default();
+        arena.spawn_item(ItemStack::new(ItemId::Acorn, 1), 40, 40);
+        let item = &arena.entities[0];
+        let motion = item.item_motion.as_ref().unwrap();
+        assert_eq!(motion.height, 2.0);
+        assert!((1.0..1.7).contains(&motion.velocity_z));
+
+        let mut inventory = Inventory::new(8);
+        assert!(arena.collect_near(40, 40, &mut inventory).is_empty());
+        arena.entities[0].age = 31;
+        assert_eq!(arena.collect_near(40, 40, &mut inventory).len(), 1);
+        assert_eq!(inventory.count(ItemId::Acorn), 1);
     }
 }

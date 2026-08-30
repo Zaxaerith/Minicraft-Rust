@@ -18,6 +18,7 @@ pub struct Assets {
     pub title: Image,
     pub hud: Image,
     pub inventory_counter: Image,
+    pub smash: Image,
     pub skin: Image,
     pub skin_row: usize,
     tiles: Vec<Vec<Image>>,
@@ -47,6 +48,10 @@ impl Assets {
             inventory_counter: png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/inventory_counter.png"
+            )))?,
+            smash: png(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/assets/textures/entity/smash.png"
             )))?,
             skin: png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -99,6 +104,12 @@ impl Assets {
                 pack,
                 "assets/textures/gui/font.png",
                 &mut assets.font,
+                &mut assets.warnings,
+            );
+            override_image(
+                pack,
+                "assets/textures/entity/smash.png",
+                &mut assets.smash,
                 &mut assets.warnings,
             );
             override_image(
@@ -683,14 +694,15 @@ fn item_image(name: &str) -> Result<Image, String> {
         "baked_potato" => bytes!("baked_potato.png"),
         "wheat" => bytes!("wheat.png"),
         "key" => bytes!("key.png"),
-        "red_flower" => bytes!("red_flower.png"),
-        "white_flower" => bytes!("white_flower.png"),
+        "rose" => bytes!("rose.png"),
+        "oxeye_daisy" => bytes!("oxeye_daisy.png"),
         "cactus" => bytes!("cactus.png"),
         "sand" => bytes!("sand.png"),
         "glass" => bytes!("glass.png"),
         "glass_bottle" => bytes!("glass_bottle.png"),
         "fertilizer" => bytes!("fertilizer.png"),
         "dirt" => bytes!("dirt.png"),
+        "acorn" => bytes!("acorn.png"),
         "cloud" => bytes!("cloud.png"),
         "plank_wall" => bytes!("plank_wall.png"),
         "wood_door" => bytes!("wood_door.png"),
@@ -799,4 +811,34 @@ fn item_image(name: &str) -> Result<Image, String> {
         _ => bytes!("missing_item.png"),
     };
     png(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_java_item_with_a_named_sprite_has_a_real_texture() {
+        let assets = Assets::load(&[]).unwrap();
+        let missing = item_image("missing_item").unwrap();
+        let java_placeholders = [
+            ItemId::PowerGlove,
+            ItemId::FarmlandItem,
+            ItemId::HoleItem,
+            ItemId::LavaItem,
+            ItemId::PathItem,
+            ItemId::WaterItem,
+        ];
+
+        for &item in ItemId::ALL {
+            if !java_placeholders.contains(&item) {
+                assert_ne!(
+                    assets.item(item),
+                    &missing,
+                    "{} unexpectedly uses missing_item.png",
+                    item.display_name()
+                );
+            }
+        }
+    }
 }

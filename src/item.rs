@@ -68,8 +68,8 @@ item_registry! {
     BakedPotato => ("baked_potato", "BAKED POTATO"),
     Wheat => ("wheat", "WHEAT"),
     Key => ("key", "KEY"),
-    Rose => ("red_flower", "ROSE"),
-    Flower => ("white_flower", "FLOWER"),
+    Rose => ("rose", "ROSE"),
+    Flower => ("oxeye_daisy", "OXEYE DAISY"),
     Cactus => ("cactus", "CACTUS"),
     Sand => ("sand", "SAND"),
     Glass => ("glass", "GLASS"),
@@ -574,6 +574,18 @@ impl Inventory {
 
     pub fn capacity(&self) -> usize {
         self.capacity
+    }
+
+    /// Restores a fixed slot limit and returns stack slots that no longer fit. The
+    /// world loader drops those stacks beside the player instead of deleting them.
+    pub fn set_capacity(&mut self, capacity: usize) -> Vec<ItemStack> {
+        self.capacity = capacity;
+        let stack_capacity = capacity.saturating_sub(self.tools.len());
+        if self.slots.len() > stack_capacity {
+            self.slots.split_off(stack_capacity)
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn take_all(&mut self) -> Vec<ItemStack> {
