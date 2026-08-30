@@ -117,15 +117,6 @@ impl GameMode {
     pub const fn index(self) -> usize {
         self as usize
     }
-
-    pub const fn display_name(self) -> &'static str {
-        match self {
-            Self::Survival => "SURVIVAL",
-            Self::Creative => "CREATIVE",
-            Self::Hardcore => "HARDCORE",
-            Self::Score => "SCORE",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -485,10 +476,20 @@ enum Direction {
     Right,
 }
 
+fn default_direction() -> Direction {
+    Direction::Down
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ActiveItem {
     Stack(ItemId),
     Tool(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CreativeEntry {
+    Stack(ItemId),
+    Tool(ToolItem),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -498,6 +499,10 @@ struct Player {
     direction: Direction,
     walk_distance: u32,
     attack_time: u8,
+    #[serde(default = "default_direction")]
+    attack_direction: Direction,
+    #[serde(default)]
+    attack_item: Option<ActiveItem>,
     health: u8,
     max_health: u8,
     stamina: u8,
@@ -542,7 +547,18 @@ struct SignEditor {
 
 pub enum WorldAction {
     None,
+    SaveGame,
     ReturnToTitle,
+    QuitWithoutSaving,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+enum PausePage {
+    #[default]
+    Main,
+    Options,
+    Achievements,
+    Quests,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -574,6 +590,10 @@ pub struct World {
     book_open: Option<(Book, usize)>,
     paused: bool,
     pause_selection: usize,
+    #[serde(default)]
+    pause_page: PausePage,
+    #[serde(default)]
+    pause_confirm: bool,
     inventory_open: bool,
     inventory_selection: usize,
     inventory_item_selection: usize,
@@ -743,27 +763,9 @@ impl World {
         }
         let current_level = 1;
         let (spawn_x, spawn_y) = find_spawn(&levels[current_level].tiles, size, size);
-        let mut inventory = Inventory::new(if options.mode == GameMode::Creative {
-            256
-        } else {
-            32
-        });
-        if options.mode == GameMode::Creative {
-            for item in ItemId::ALL
-                .iter()
-                .copied()
-                .filter(|item| *item != ItemId::PowerGlove)
-            {
-                inventory.add(item, 1);
-            }
-            for kind in ToolKind::ALL {
-                for tier in ToolTier::ALL {
-                    if kind != ToolKind::Shears || tier == ToolTier::Wood {
-                        inventory.add_tool(ToolItem::new(kind, tier));
-                    }
-                }
-            }
-        }
+        // Java Player uses a 27-slot inventory in every mode. Creative mode exposes
+        // the unlimited item catalogue as a separate pane rather than preloading it.
+        let inventory = Inventory::new(27);
         let sign_levels = levels.len();
         let mut progress = ProgressState::load().expect("bundled progression data must be valid");
         if options.custom_skin {
@@ -780,6 +782,8 @@ impl World {
                 direction: Direction::Down,
                 walk_distance: 0,
                 attack_time: 0,
+                attack_direction: Direction::Down,
+                attack_item: None,
                 health: 10,
                 max_health: 10,
                 stamina: 10,
@@ -830,6 +834,8 @@ impl World {
             book_open: None,
             paused: false,
             pause_selection: 0,
+            pause_page: PausePage::Main,
+            pause_confirm: false,
             inventory_open: false,
             inventory_selection: 0,
             inventory_item_selection: 0,
@@ -922,6 +928,35 @@ impl World {
         self.notification = Some(("FOOD SURVIVAL PREVIEW".to_owned(), 150));
     }
 
+    /// Opens the Java-style player inventory for visual regression.
+    pub fn populate_inventory_preview(&mut self) {
+        self.player.inventory.add(ItemId::Wood, 20);
+        self.player.inventory.add(ItemId::Stone, 10);
+        self.player.inventory.add(ItemId::Coal, 4);
+        self.player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood));
+        self.inventory_open = true;
+        self.crafting_station = None;
+        self.inventory_pane = 0;
+        self.inventory_item_selection = 1;
+    }
+
+    /// Opens the Java-style sliding creative catalogue for visual regression.
+    pub fn populate_creative_inventory_preview(&mut self) {
+        self.mode = GameMode::Creative;
+        self.player.inventory = Inventory::new(27);
+        self.player.inventory.add(ItemId::Wood, 20);
+        self.player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood));
+        self.inventory_open = true;
+        self.crafting_station = None;
+        self.inventory_pane = 1;
+        self.inventory_item_selection = 0;
+        self.inventory_selection = 3;
+    }
+
     /// Renders all currently ported crafting furniture from local entity art.
     pub fn populate_stations_preview(&mut self) {
         let center_x = self.player.x;
@@ -962,8 +997,34 @@ impl World {
         self.quests_enabled = true;
         self.show_quests = true;
         self.player.inventory.add(ItemId::Wood, 1);
+        self.player.potion_effects[PotionKind::Speed.id()] = 4_200;
+        self.player.potion_effects[PotionKind::Light.id()] = 2_400;
         self.update_progress(ProgressEvent::InventoryChanged);
         self.notification = Some(("DATA-DRIVEN PROGRESS ACTIVE".to_owned(), 150));
+    }
+
+    pub fn populate_boss_preview(&mut self) {
+        let species = if self.levels[self.current_level].depth == -4 {
+            spawn::NaturalMob::ObsidianKnight
+        } else {
+            spawn::NaturalMob::AirWizard
+        };
+        if !self.levels[self.current_level].entities.has_mob(species) {
+            self.levels[self.current_level].entities.spawn_mob(
+                species,
+                self.player.x + 40,
+                self.player.y,
+            );
+        }
+        self.notification = None;
+    }
+
+    pub fn populate_pause_preview(&mut self) {
+        self.paused = true;
+        self.pause_page = PausePage::Main;
+        self.pause_selection = 1;
+        self.pause_confirm = false;
+        self.notification = None;
     }
 
     pub fn tick(&mut self, input: &Input) -> WorldAction {
@@ -994,23 +1055,103 @@ impl World {
         if input.exit {
             if self.inventory_open {
                 self.inventory_open = false;
+            } else if self.paused {
+                if self.pause_confirm {
+                    self.pause_confirm = false;
+                    self.pause_selection = 5;
+                } else if self.pause_page != PausePage::Main {
+                    self.pause_page = PausePage::Main;
+                    self.pause_selection = 0;
+                } else {
+                    self.paused = false;
+                }
             } else {
-                self.paused = !self.paused;
+                self.paused = true;
+                self.pause_page = PausePage::Main;
+                self.pause_selection = 0;
+                self.pause_confirm = false;
             }
             return WorldAction::None;
         }
         if self.paused {
+            if self.pause_confirm {
+                if input.up_pressed || input.down_pressed {
+                    self.pause_selection = usize::from(self.pause_selection == 0);
+                }
+                if input.select {
+                    if self.pause_selection == 0 {
+                        self.pause_confirm = false;
+                        self.pause_selection = 5;
+                    } else {
+                        self.paused = false;
+                        self.pause_confirm = false;
+                        return WorldAction::QuitWithoutSaving;
+                    }
+                }
+                return WorldAction::None;
+            }
+            let count = match self.pause_page {
+                PausePage::Main => 6,
+                PausePage::Options => 5,
+                PausePage::Achievements | PausePage::Quests => 1,
+            };
             if input.up_pressed {
                 self.pause_selection = self.pause_selection.saturating_sub(1);
             }
             if input.down_pressed {
-                self.pause_selection = (self.pause_selection + 1).min(1);
+                self.pause_selection = (self.pause_selection + 1).min(count - 1);
+            }
+            if self.pause_page == PausePage::Options {
+                let direction = i32::from(input.right_pressed) - i32::from(input.left_pressed);
+                match self.pause_selection {
+                    0 if direction != 0 => {
+                        self.difficulty = wrap_index(self.difficulty, direction, 3);
+                    }
+                    1 if direction != 0 => self.show_quests = !self.show_quests,
+                    2 if direction != 0 => self.tutorials_enabled = !self.tutorials_enabled,
+                    3 if direction != 0 => self.quests_enabled = !self.quests_enabled,
+                    _ => {}
+                }
             }
             if input.select {
-                if self.pause_selection == 0 {
-                    self.paused = false;
-                } else {
-                    return WorldAction::ReturnToTitle;
+                match self.pause_page {
+                    PausePage::Main => match self.pause_selection {
+                        0 => self.paused = false,
+                        1 => {
+                            self.pause_page = PausePage::Options;
+                            self.pause_selection = 0;
+                        }
+                        2 => {
+                            self.pause_page = PausePage::Achievements;
+                            self.pause_selection = 0;
+                        }
+                        3 => {
+                            self.pause_page = PausePage::Quests;
+                            self.pause_selection = 0;
+                        }
+                        4 => {
+                            self.paused = false;
+                            return WorldAction::SaveGame;
+                        }
+                        _ => {
+                            self.pause_confirm = true;
+                            self.pause_selection = 0;
+                        }
+                    },
+                    PausePage::Options => match self.pause_selection {
+                        1 => self.show_quests = !self.show_quests,
+                        2 => self.tutorials_enabled = !self.tutorials_enabled,
+                        3 => self.quests_enabled = !self.quests_enabled,
+                        4 => {
+                            self.pause_page = PausePage::Main;
+                            self.pause_selection = 1;
+                        }
+                        _ => {}
+                    },
+                    PausePage::Achievements | PausePage::Quests => {
+                        self.pause_page = PausePage::Main;
+                        self.pause_selection = 0;
+                    }
                 }
             }
             return WorldAction::None;
@@ -1019,35 +1160,71 @@ impl World {
             self.inventory_open = !self.inventory_open;
             if self.inventory_open {
                 self.crafting_station = None;
-                self.inventory_pane = 0;
+                self.inventory_pane = usize::from(
+                    self.mode == GameMode::Creative && self.player.inventory.used_slots() == 0,
+                );
             }
         }
         if self.inventory_open {
-            if input.left_pressed {
-                self.inventory_pane = 0;
-            }
-            if input.right_pressed {
+            if self.crafting_station.is_some() {
                 self.inventory_pane = 1;
-            }
-            if input.up_pressed {
-                if self.inventory_pane == 0 {
-                    self.inventory_item_selection = self.inventory_item_selection.saturating_sub(1);
-                } else {
+                if input.up_pressed {
                     self.inventory_selection = self.inventory_selection.saturating_sub(1);
                 }
-            }
-            if input.down_pressed {
-                if self.inventory_pane == 0 {
-                    let count = self.player.inventory.used_slots();
-                    self.inventory_item_selection =
-                        (self.inventory_item_selection + 1).min(count.saturating_sub(1));
-                } else {
+                if input.down_pressed {
                     let count = self.crafting_recipe_count();
                     self.inventory_selection =
                         (self.inventory_selection + 1).min(count.saturating_sub(1));
                 }
+                if (input.select || input.attack) && self.crafting_recipe_count() > 0 {
+                    self.craft_selected_recipe();
+                }
+                return WorldAction::None;
             }
-            if input.attack && self.inventory_pane == 0 {
+
+            if self.mode == GameMode::Creative {
+                if input.left_pressed {
+                    self.inventory_pane = 0;
+                }
+                if input.right_pressed {
+                    self.inventory_pane = 1;
+                }
+            } else {
+                self.inventory_pane = 0;
+            }
+
+            if self.inventory_pane == 1 {
+                let entries = creative_entries();
+                if input.up_pressed {
+                    self.inventory_selection = self.inventory_selection.saturating_sub(1);
+                }
+                if input.down_pressed {
+                    self.inventory_selection =
+                        (self.inventory_selection + 1).min(entries.len().saturating_sub(1));
+                }
+                if input.select
+                    && let Some(entry) = entries.get(self.inventory_selection).copied()
+                {
+                    let inserted = match entry {
+                        CreativeEntry::Stack(item) => self.player.inventory.add(item, 1) == 0,
+                        CreativeEntry::Tool(tool) => self.player.inventory.add_tool(tool).is_some(),
+                    };
+                    if !inserted {
+                        self.notification = Some(("INVENTORY FULL".to_owned(), 45));
+                    }
+                }
+                return WorldAction::None;
+            }
+
+            if input.up_pressed {
+                self.inventory_item_selection = self.inventory_item_selection.saturating_sub(1);
+            }
+            if input.down_pressed {
+                let count = self.player.inventory.used_slots();
+                self.inventory_item_selection =
+                    (self.inventory_item_selection + 1).min(count.saturating_sub(1));
+            }
+            if input.attack {
                 let stack_count = self.player.inventory.slots().len();
                 self.player.active_item = if self.inventory_item_selection < stack_count {
                     self.player
@@ -1067,9 +1244,6 @@ impl World {
                     self.inventory_open = false;
                     self.notification = Some(("ITEM EQUIPPED".to_owned(), 45));
                 }
-            }
-            if input.select && self.inventory_pane == 1 && self.crafting_recipe_count() > 0 {
-                self.craft_selected_recipe();
             }
             return WorldAction::None;
         }
@@ -1134,6 +1308,9 @@ impl World {
         };
         self.player.hurt_time = self.player.hurt_time.saturating_sub(1);
         self.player.attack_time = self.player.attack_time.saturating_sub(1);
+        if self.player.attack_time == 0 {
+            self.player.attack_item = None;
+        }
         if outcome.player_damage > 0 && self.hurt_player(outcome.player_damage, false) {
             self.notification = Some(("A MONSTER HURTS YOU".to_owned(), 45));
         }
@@ -1989,7 +2166,14 @@ impl World {
     }
 
     fn attack(&mut self) {
-        self.player.attack_time = 5;
+        self.player.walk_distance = self.player.walk_distance.wrapping_add(8);
+        self.player.attack_time = if self.player.active_item.is_some() {
+            10
+        } else {
+            5
+        };
+        self.player.attack_direction = self.player.direction;
+        self.player.attack_item = self.player.active_item;
         let (offset_x, offset_y) = match self.player.direction {
             Direction::Down => (0, 12),
             Direction::Up => (0, -12),
@@ -2074,6 +2258,7 @@ impl World {
             u16::from(damage),
             &mut self.random,
         ) {
+            self.player.attack_time = 5;
             self.levels[self.current_level].entities.spawn_particle(
                 entity::ParticleKind::Smash,
                 target_x,
@@ -2203,8 +2388,15 @@ impl World {
             }
         }
 
-        if self.mode == GameMode::Creative && self.creative_break_tile(index) {
+        if matches!(self.player.active_item, Some(ActiveItem::Stack(_))) {
             return;
+        }
+
+        if self.mode == GameMode::Creative {
+            self.player.attack_time = 5;
+            if self.creative_break_tile(index) {
+                return;
+            }
         }
 
         if let Some(tool) = self.active_tool() {
@@ -2225,6 +2417,12 @@ impl World {
                 }
                 self.levels[self.current_level].tiles[index] = tile;
                 self.levels[self.current_level].data[index] = 0;
+                self.levels[self.current_level].entities.spawn_particle(
+                    entity::ParticleKind::Smash,
+                    tile_x * TILE_SIZE,
+                    tile_y * TILE_SIZE,
+                );
+                self.sound(SoundEffect::MonsterHurt);
                 if tool.kind == ToolKind::Hoe {
                     self.update_progress(ProgressEvent::ItemUsedOnTile {
                         item: format!(
@@ -2266,16 +2464,56 @@ impl World {
                         );
                     }
                 }
-                self.notification = Some(("GROUND WORKED".to_owned(), 30));
                 return;
             }
         }
-        let bare_damage = u16::from(damage);
+        let bare_damage = (self.random.next_int(3) + 1) as u16;
+        let attacked_tile = self.levels[self.current_level].tiles[index];
+        if matches!(
+            attacked_tile,
+            Tile::Tree
+                | Tile::Cactus
+                | Tile::Rock
+                | Tile::HardRock
+                | Tile::WoodWall
+                | Tile::StoneWall
+                | Tile::ObsidianWall
+                | Tile::BossWall
+                | Tile::Sign
+                | Tile::IronOre
+                | Tile::GoldOre
+                | Tile::GemOre
+                | Tile::LapisOre
+                | Tile::CloudOre
+                | Tile::Wheat
+                | Tile::Potato
+                | Tile::Tomato
+                | Tile::Carrot
+                | Tile::HeavenlyBerries
+                | Tile::HellishBerries
+        ) {
+            self.levels[self.current_level].entities.spawn_particle(
+                entity::ParticleKind::Smash,
+                tile_x * TILE_SIZE,
+                tile_y * TILE_SIZE,
+            );
+            self.sound(SoundEffect::MonsterHurt);
+        }
         match self.levels[self.current_level].tiles[index] {
             Tile::Tree => {
-                let damage = self
-                    .pay_tool_terrain_damage(ToolKind::Axe, 4)
-                    .unwrap_or(bare_damage);
+                let tool_damage = self.pay_tool_terrain_damage(ToolKind::Axe, 4);
+                let damage = tool_damage.unwrap_or(bare_damage);
+                if tool_damage.is_none() {
+                    self.player.attack_time = 5;
+                    self.pay_basic_attack_tool_durability();
+                }
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 let total = self.levels[self.current_level].data[index] + damage;
                 if total >= 20 {
                     self.levels[self.current_level].tiles[index] = Tile::Grass;
@@ -2294,11 +2532,9 @@ impl World {
                             tile_y * TILE_SIZE + 8,
                         );
                     }
-                    self.notification = Some((format!("WOOD DROPPED {wood}"), 60));
                     self.unlock_achievement("minicraft.achievement.woodcutter");
                 } else {
                     self.levels[self.current_level].data[index] = total;
-                    self.notification = Some((format!("TREE {total}/20"), 30));
                 }
             }
             Tile::WoodDoor | Tile::StoneDoor | Tile::ObsidianDoor => {
@@ -2314,6 +2550,15 @@ impl World {
                 }
             }
             Tile::Cactus => {
+                self.player.attack_time = 5;
+                self.pay_basic_attack_tool_durability();
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        bare_damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 if damage_tile(
                     &mut self.levels[self.current_level],
                     index,
@@ -2334,6 +2579,8 @@ impl World {
             | Tile::Carrot
             | Tile::HeavenlyBerries
             | Tile::HellishBerries => {
+                self.player.attack_time = 5;
+                self.pay_basic_attack_tool_durability();
                 let crop = self.levels[self.current_level].tiles[index];
                 let data = self.levels[self.current_level].data[index];
                 let mature = (data >> 3) & 7 == 7;
@@ -2377,6 +2624,17 @@ impl World {
                 let tool_damage = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 5);
                 let used_pickaxe = tool_damage.is_some();
                 let damage = tool_damage.unwrap_or(bare_damage);
+                if tool_damage.is_none() {
+                    self.player.attack_time = 5;
+                    self.pay_basic_attack_tool_durability();
+                }
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 let level = &mut self.levels[self.current_level];
                 if damage_tile(level, index, damage, 50, Tile::Dirt) {
                     let count = if used_pickaxe {
@@ -2409,12 +2667,30 @@ impl World {
                     .active_tool()
                     .is_some_and(|tool| tool.kind == ToolKind::Pickaxe && tool.tier.level() == 4);
                 if !gem_pickaxe {
-                    self.notification = Some(("GEM PICKAXE REQUIRED".to_owned(), 45));
+                    if self.active_tool().is_some() {
+                        self.notification = Some(("GEM PICKAXE REQUIRED".to_owned(), 45));
+                    }
+                    self.levels[self.current_level]
+                        .entities
+                        .spawn_text_particle(
+                            "0".to_owned(),
+                            tile_x * TILE_SIZE + 8,
+                            tile_y * TILE_SIZE + 8,
+                        );
+                    self.player.attack_time = 5;
+                    self.pay_basic_attack_tool_durability();
                     return;
                 }
                 let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 2) else {
                     return;
                 };
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 let level = &mut self.levels[self.current_level];
                 if damage_tile(level, index, damage, 200, Tile::Dirt) {
                     level.entities.spawn_item(
@@ -2445,9 +2721,19 @@ impl World {
                 } else {
                     ToolKind::Pickaxe
                 };
-                let damage = self
-                    .pay_tool_terrain_damage(required, 4)
-                    .unwrap_or(bare_damage);
+                let tool_damage = self.pay_tool_terrain_damage(required, 4);
+                let damage = tool_damage.unwrap_or(0);
+                if tool_damage.is_none() {
+                    self.player.attack_time = 5;
+                    self.pay_basic_attack_tool_durability();
+                }
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 let replacement = match self.levels[self.current_level].tiles[index] {
                     Tile::WoodWall => Tile::WoodFloor,
                     Tile::StoneWall => Tile::StoneFloor,
@@ -2470,6 +2756,13 @@ impl World {
                     self.notification = Some(("PICKAXE REQUIRED".to_owned(), 45));
                     return;
                 };
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 damage_tile(
                     &mut self.levels[self.current_level],
                     index,
@@ -2510,10 +2803,19 @@ impl World {
             }
             Tile::IronOre | Tile::GoldOre | Tile::GemOre | Tile::LapisOre | Tile::CloudOre => {
                 let ore_tile = self.levels[self.current_level].tiles[index];
-                let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 6) else {
-                    self.notification = Some(("PICKAXE REQUIRED".to_owned(), 45));
-                    return;
-                };
+                let tool_damage = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 6);
+                let damage = tool_damage.unwrap_or(0);
+                if tool_damage.is_none() {
+                    self.player.attack_time = 5;
+                    self.pay_basic_attack_tool_durability();
+                }
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(
+                        damage.to_string(),
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
                 let replacement = if ore_tile == Tile::CloudOre {
                     Tile::Cloud
                 } else {
@@ -2612,6 +2914,22 @@ impl World {
         } else {
             let equipped = &mut self.player.inventory.tools_mut()[index];
             if equipped.pay_durability() { bonus } else { 0 }
+        }
+    }
+
+    fn pay_basic_attack_tool_durability(&mut self) {
+        if self.mode == GameMode::Creative {
+            return;
+        }
+        let Some(ActiveItem::Tool(index)) = self.player.active_item else {
+            return;
+        };
+        let Some(tool) = self.player.inventory.tools_mut().get_mut(index) else {
+            self.player.active_item = None;
+            return;
+        };
+        if tool.kind != ToolKind::Shears {
+            tool.pay_durability();
         }
     }
 
@@ -2810,6 +3128,7 @@ impl World {
         self.player.hunger_ticks = MAX_HUNGER_TICKS;
         self.player.step_count = 0;
         self.player.attack_time = 0;
+        self.player.attack_item = None;
         self.player.hunger_charge_delay = 0;
         self.player.hunger_starve_delay = 0;
         self.player.potion_effects = [0; PotionKind::ALL.len()];
@@ -2939,6 +3258,17 @@ impl World {
         }
     }
 
+    fn current_boss_health(&self) -> Option<(u16, u16)> {
+        let species = match self.levels[self.current_level].depth {
+            1 => spawn::NaturalMob::AirWizard,
+            -4 => spawn::NaturalMob::ObsidianKnight,
+            _ => return None,
+        };
+        self.levels[self.current_level]
+            .entities
+            .active_boss(species)
+    }
+
     pub fn render(&self, screen: &mut Screen, assets: &Assets) {
         let map_width = self.width as i32 * TILE_SIZE;
         let map_height = self.height as i32 * TILE_SIZE;
@@ -3040,29 +3370,29 @@ impl World {
             render_entity(screen, assets, entity, camera_x, camera_y, self.tick);
         }
 
-        let (source_x, flip) = match self.player.direction {
-            Direction::Down => (0, false),
-            Direction::Up => (16, false),
-            Direction::Left => (32 + (self.player.walk_distance as usize / 8 % 2) * 16, true),
-            Direction::Right => (
-                32 + (self.player.walk_distance as usize / 8 % 2) * 16,
-                false,
-            ),
-        };
+        let (source_x, flip) =
+            player_sprite_frame(self.player.direction, self.player.walk_distance);
+        let player_x = self.player.x - 8 - camera_x;
+        let player_y = self.player.y - 11 - camera_y;
         screen.blit_region(
             &assets.skin,
-            self.player.x - 8 - camera_x,
-            self.player.y - 11 - camera_y,
+            player_x,
+            player_y,
             source_x,
             assets.skin_row,
             16,
             16,
             flip,
         );
-        if self.player.attack_time > 0
-            && let Some(active) = self.player.active_item
-        {
-            let image = match active {
+        if self.player.attack_time > 0 {
+            render_attack_slash(
+                screen,
+                &assets.hud,
+                player_x,
+                player_y,
+                self.player.attack_direction,
+            );
+            let image = self.player.attack_item.and_then(|active| match active {
                 ActiveItem::Stack(item) => Some(assets.item(item)),
                 ActiveItem::Tool(index) => self
                     .player
@@ -3070,15 +3400,24 @@ impl World {
                     .tools()
                     .get(index)
                     .map(|tool| assets.tool(*tool)),
-            };
-            let (held_x, held_y) = match self.player.direction {
-                Direction::Down => (self.player.x + 3, self.player.y + 5),
-                Direction::Up => (self.player.x - 4, self.player.y - 13),
-                Direction::Left => (self.player.x - 13, self.player.y - 3),
-                Direction::Right => (self.player.x + 5, self.player.y - 3),
+            });
+            let (held_x, held_y, flip_item) = match self.player.attack_direction {
+                Direction::Up => (player_x + 4, player_y - 4, true),
+                Direction::Left => (player_x - 4, player_y + 4, true),
+                Direction::Right => (player_x + 12, player_y + 4, false),
+                Direction::Down => (player_x + 4, player_y + 12, false),
             };
             if let Some(image) = image {
-                screen.blit(image, held_x - camera_x, held_y - camera_y);
+                screen.blit_region(
+                    image,
+                    held_x,
+                    held_y,
+                    0,
+                    0,
+                    image.width,
+                    image.height,
+                    flip_item,
+                );
             }
         }
         for entity in entities
@@ -3103,24 +3442,22 @@ impl World {
             screen,
             assets,
             &self.player,
+            self.mode,
             self.seed,
             depth,
             self.day_tick,
             self.days,
         );
         if self.mode == GameMode::Score {
-            let seconds = self.score_ticks / 60;
-            let score_status = format!(
-                "SCORE {} X{} {:02}:{:02}",
+            render_score_overlay(
+                screen,
+                assets,
+                self.score_ticks,
                 self.score,
                 self.score_multiplier,
-                seconds / 60,
-                seconds % 60
             );
-            let width = score_status.chars().count() as i32 * 8 + 4;
-            screen.rect(WIDTH as i32 - width, 55, width, 10, 0x101018);
-            screen.text(&assets.font, &score_status, WIDTH as i32 - width + 2, 56);
         }
+        let mut potion_offset = 0;
         if self.show_quests && (self.tutorials_enabled || self.quests_enabled) {
             let inventory = self.inventory_progress();
             let progress = if self.tutorials_enabled {
@@ -3144,28 +3481,30 @@ impl World {
                 })?
             });
             if let Some(progress) = progress {
-                let label = progress.chars().take(37).collect::<String>();
-                screen.rect(2, 33, label.chars().count() as i32 * 8 + 4, 10, 0x101018);
-                screen.text(&assets.font, &label, 4, 34);
+                render_quest_overlay(screen, assets, &progress);
+                potion_offset = 33;
             }
-            let counts = format!(
-                "T {}/{} Q {}/{}",
-                self.progress.tutorial_completed_count(),
-                self.progress.tutorial_count(),
-                self.progress.quest_completed_count(),
-                self.progress.quest_count()
+        }
+        render_potion_overlay(screen, assets, &self.player, potion_offset);
+        if let Some((health, max_health)) = self.current_boss_health() {
+            render_boss_bar(
+                screen,
+                assets,
+                health,
+                max_health,
+                if depth == 1 {
+                    "Air wizard"
+                } else {
+                    "Obsidian Knight"
+                },
             );
-            screen.rect(2, 44, counts.chars().count() as i32 * 8 + 4, 10, 0x101018);
-            screen.text(&assets.font, &counts, 4, 45);
         }
         if self.story_complete {
             screen.rect(WIDTH as i32 - 82, 33, 80, 10, 0x101018);
             screen.text(&assets.font, "VICTORY", WIDTH as i32 - 76, 34);
         }
         if let Some((message, _)) = &self.notification {
-            let width = message.chars().count() as i32 * 8 + 4;
-            screen.rect((WIDTH as i32 - width) / 2, 21, width, 11, 0x101018);
-            screen.centered_text(&assets.font, message, 23);
+            screen.centered_text(&assets.font, message, HEIGHT as i32 * 2 / 5);
         }
         if self.inventory_open {
             render_inventory(
@@ -3176,10 +3515,11 @@ impl World {
                 self.inventory_selection,
                 self.inventory_pane,
                 self.crafting_station,
+                self.mode,
             );
         }
         if self.paused {
-            render_pause(screen, assets, self.pause_selection);
+            render_pause(screen, assets, self);
         }
         if let Some((book, page)) = self.book_open {
             render_world_book(screen, assets, book, page);
@@ -3489,72 +3829,207 @@ fn torch_lit(tiles: &[Tile], width: usize, height: usize, x: usize, y: usize) ->
     (top..=bottom).any(|yy| (left..=right).any(|xx| tiles[xx + yy * width] == Tile::Torch))
 }
 
+fn wrap_index(current: usize, direction: i32, length: usize) -> usize {
+    (current as i32 + direction).rem_euclid(length as i32) as usize
+}
+
+fn player_sprite_frame(direction: Direction, walk_distance: u32) -> (usize, bool) {
+    let frame = walk_distance as usize / 8 % 2;
+    match direction {
+        Direction::Down => (0, frame == 1),
+        Direction::Up => (16, frame == 1),
+        Direction::Left => (32 + frame * 16, true),
+        Direction::Right => (32 + frame * 16, false),
+    }
+}
+
+fn render_attack_slash(
+    screen: &mut Screen,
+    hud: &crate::gfx::Image,
+    x: i32,
+    y: i32,
+    direction: Direction,
+) {
+    let mut part = |source_x, draw_x, draw_y, flip_x, flip_y| {
+        screen.blit_region_transformed(hud, source_x, 0, 8, 8, draw_x, draw_y, flip_x, flip_y);
+    };
+    match direction {
+        Direction::Up => {
+            part(24, x, y - 4, false, false);
+            part(24, x + 8, y - 4, true, false);
+        }
+        Direction::Left => {
+            part(32, x - 4, y, true, false);
+            part(32, x - 4, y + 8, true, true);
+        }
+        Direction::Right => {
+            part(32, x + 12, y, false, false);
+            part(32, x + 12, y + 8, false, true);
+        }
+        Direction::Down => {
+            part(24, x, y + 12, false, true);
+            part(24, x + 8, y + 12, true, true);
+        }
+    }
+}
+
+fn render_score_overlay(
+    screen: &mut Screen,
+    assets: &Assets,
+    ticks: u32,
+    score: u32,
+    multiplier: u8,
+) {
+    let total_seconds = ticks.div_ceil(60);
+    let total_minutes = total_seconds / 60;
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    let seconds = total_seconds % 60;
+    let time = format!(
+        "TIME LEFT {}{}m {}s",
+        if hours > 0 {
+            format!("{hours}h ")
+        } else {
+            String::new()
+        },
+        minutes,
+        seconds
+    );
+    screen.text(&assets.font, &time, WIDTH as i32 / 2 - 72, 2);
+    let score = format!("CURRENT SCORE: {score}");
+    screen.text(
+        &assets.font,
+        &score,
+        WIDTH as i32 - score.chars().count() as i32 * 8 - 2,
+        11,
+    );
+    if multiplier > 1 {
+        let multiplier = format!("X{multiplier}");
+        screen.text(
+            &assets.font,
+            &multiplier,
+            WIDTH as i32 - multiplier.chars().count() as i32 * 8 - 2,
+            20,
+        );
+    }
+}
+
+fn render_quest_overlay(screen: &mut Screen, assets: &Assets, progress: &str) {
+    let label = progress.chars().take(30).collect::<String>();
+    let width =
+        (((label.chars().count().max(6) as i32 * 8 + 32) / 8) * 8).clamp(72, WIDTH as i32 - 18);
+    let x = WIDTH as i32 - 9 - width;
+    render_menu_frame(screen, &assets.hud, x, 9, width, 24);
+    screen.text(&assets.font, "QUESTS", x + (width - 48) / 2, 9);
+    screen.text(&assets.font, &label, x + 16, 17);
+}
+
+fn render_potion_overlay(screen: &mut Screen, assets: &Assets, player: &Player, offset: i32) {
+    for (row, kind) in PotionKind::ALL
+        .into_iter()
+        .filter(|kind| player.potion_effects[kind.id()] > 0)
+        .enumerate()
+    {
+        let total_seconds = u32::from(player.potion_effects[kind.id()]) / 60;
+        let label = format!(
+            "{} ({}:{:02})",
+            kind.display_name(),
+            total_seconds / 60,
+            total_seconds % 60
+        );
+        let x = 180;
+        let y = 17 + offset + row as i32 * 8;
+        screen.rect(
+            x - 2,
+            y - 1,
+            label.chars().count() as i32 * 8 + 4,
+            10,
+            0x101018,
+        );
+        screen.text(&assets.font, &label, x, y);
+    }
+}
+
+fn render_boss_bar(
+    screen: &mut Screen,
+    assets: &Assets,
+    health: u16,
+    max_health: u16,
+    title: &str,
+) {
+    let x = WIDTH as i32 / 4 - 24;
+    let y = HEIGHT as i32 / 8 - 24;
+    let length = if max_health == 0 {
+        0
+    } else {
+        usize::from(health) * 100 / usize::from(max_health)
+    };
+    screen.blit_region_transformed(&assets.hud, 0, 32, 8, 8, x + 200, y, true, false);
+    for column in 0..100 {
+        screen.blit_region(&assets.hud, x + column * 2, y, 24, 32, 8, 8, false);
+    }
+    screen.blit_region(&assets.hud, x - 5, y, 0, 40, 8, 8, false);
+    for column in 0..length {
+        screen.blit_region(&assets.hud, x + column as i32 * 2, y, 24, 40, 8, 8, false);
+    }
+    screen.centered_text(&assets.font, title, y + 8);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn render_hud(
     screen: &mut Screen,
     assets: &Assets,
     player: &Player,
-    seed: i64,
-    depth: i8,
-    day_tick: u32,
-    days: u32,
+    mode: GameMode,
+    _seed: i64,
+    _depth: i8,
+    _day_tick: u32,
+    _days: u32,
 ) {
-    screen.rect(0, 0, WIDTH as i32, 18, 0x101018);
-    screen.text(&assets.font, "HP", 4, 5);
-    let health_segments =
-        (u16::from(player.health) * 10).div_ceil(u16::from(player.max_health.max(1))) as i32;
-    for index in 0..10 {
-        screen.rect(
-            23 + index * 5,
-            5,
-            4,
-            7,
-            if index < health_segments {
-                0xDD3333
-            } else {
-                0x431818
-            },
-        );
+    let bottom = HEIGHT as i32;
+
+    if mode != GameMode::Creative || player.active_item.is_some() {
+        for x in 10..26 {
+            screen.blit_region(&assets.hud, x * 8, bottom - 8, 40, 16, 8, 8, false);
+        }
     }
-    screen.text(&assets.font, "ST", 82, 5);
-    for index in 0..10 {
-        screen.rect(
-            101 + index * 5,
-            5,
-            4,
-            7,
-            if index < player.stamina as i32 {
-                0xE6D84A
-            } else {
-                0x4A4518
-            },
-        );
+
+    if let Some(active) = player.active_item {
+        let (image, label) = match active {
+            ActiveItem::Stack(item) => (Some(assets.item(item)), item.display_name().to_owned()),
+            ActiveItem::Tool(index) => player
+                .inventory
+                .tools()
+                .get(index)
+                .map(|tool| (assets.tool(*tool), tool.display_name()))
+                .map_or((None, String::new()), |(image, label)| (Some(image), label)),
+        };
+        if let Some(image) = image {
+            screen.blit(image, 80, bottom - 8);
+            screen.text(&assets.font, &label, 88, bottom - 8);
+        }
     }
-    screen.text(&assets.font, "HU", 158, 5);
-    for index in 0..10 {
-        screen.rect(
-            177 + index * 5,
-            5,
-            4,
-            7,
-            if index < player.hunger as i32 {
-                0xD88A35
-            } else {
-                0x4A2B18
-            },
-        );
+
+    if let Some(ActiveItem::Tool(index)) = player.active_item
+        && let Some(tool) = player.inventory.tools().get(index)
+    {
+        let durability = u32::from(tool.durability) * 100 / u32::from(tool.max_durability.max(1));
+        screen.text(&assets.font, &format!("{durability}%"), 164, bottom - 16);
+        if tool.kind == ToolKind::Bow {
+            screen.text(
+                &assets.font,
+                &format!(" x{}", player.inventory.count(ItemId::Arrow)),
+                84,
+                bottom - 16,
+            );
+            screen.blit_region(&assets.hud, 84, bottom - 16, 32, 8, 8, 8, false);
+        }
     }
-    screen.text(
-        &assets.font,
-        &format!("D{days} {}", time_name(day_tick)),
-        232,
-        5,
-    );
-    let status = if let Some(armor) = player.armor_kind {
-        format!("AR {} {}", armor.display_name(), player.armor)
-    } else {
-        format!("SEED {seed}")
-    };
-    screen.text(&assets.font, &status, 4, HEIGHT as i32 - 9);
+    if player.active_item == Some(ActiveItem::Stack(ItemId::WateringCan)) {
+        let content = u32::from(player.watering_content) * 100 / 1_800;
+        screen.text(&assets.font, &format!("{content}%"), 164, bottom - 16);
+    }
+
     let effects = PotionKind::ALL
         .into_iter()
         .filter(|effect| player.potion_effects[effect.id()] > 0)
@@ -3569,34 +4044,82 @@ fn render_hud(
         .join(" ");
     if !effects.is_empty() {
         let width = effects.chars().count() as i32 * 8 + 4;
-        screen.rect(2, HEIGHT as i32 - 21, width, 10, 0x101018);
-        screen.text(&assets.font, &effects, 4, HEIGHT as i32 - 20);
+        screen.rect(WIDTH as i32 - width - 2, 8, width, 10, 0x101018);
+        screen.text(&assets.font, &effects, WIDTH as i32 - width, 9);
     }
-    if let Some(active) = player.active_item {
-        let label = match active {
-            ActiveItem::Stack(item) => item.display_name().to_owned(),
-            ActiveItem::Tool(index) => player
-                .inventory
-                .tools()
-                .get(index)
-                .map(|tool| {
-                    format!(
-                        "{} {}/{}",
-                        tool.display_name(),
-                        tool.durability,
-                        tool.max_durability
-                    )
-                })
-                .unwrap_or_default(),
+
+    for index in 0..10 {
+        let health_source_y = if player.health > 20 {
+            24
+        } else if player.health > 10 {
+            16
+        } else {
+            0
         };
-        screen.centered_text(&assets.font, &label, HEIGHT as i32 - 9);
+        screen.blit_region(&assets.hud, index * 8, bottom - 16, 0, 8, 8, 8, false);
+        let tier_start = if player.health > 20 {
+            20
+        } else if player.health > 10 {
+            10
+        } else {
+            0
+        };
+        if usize::from(player.health.saturating_sub(tier_start)) > index as usize {
+            screen.blit_region(
+                &assets.hud,
+                index * 8,
+                bottom - 16,
+                0,
+                health_source_y,
+                8,
+                8,
+                false,
+            );
+        }
+
+        if let Some(armor) = player.armor_kind {
+            let armor_icons = u16::from(player.armor) * 10 / u16::from(armor.durability().max(1));
+            if index <= i32::from(armor_icons) {
+                screen.blit(assets.item(armor.item()), index * 8, bottom - 24);
+            }
+        }
+
+        let stamina_source_y = if player.stamina_recharge_delay > 0 {
+            if (player.stamina_recharge_delay / 4).is_multiple_of(2) {
+                16
+            } else {
+                8
+            }
+        } else if index < i32::from(player.stamina) {
+            0
+        } else {
+            8
+        };
+        screen.blit_region(
+            &assets.hud,
+            index * 8,
+            bottom - 8,
+            8,
+            stamina_source_y,
+            8,
+            8,
+            false,
+        );
+        screen.blit_region(
+            &assets.hud,
+            WIDTH as i32 - 80 + index * 8,
+            bottom - 16,
+            16,
+            if index < i32::from(player.hunger) {
+                0
+            } else {
+                8
+            },
+            8,
+            8,
+            false,
+        );
     }
-    screen.text(
-        &assets.font,
-        &format!("DEPTH {depth}"),
-        WIDTH as i32 - 62,
-        HEIGHT as i32 - 9,
-    );
 }
 
 fn surface_darkness(tick: u32) -> u8 {
@@ -3609,6 +4132,7 @@ fn surface_darkness(tick: u32) -> u8 {
     }
 }
 
+#[cfg(test)]
 fn time_name(tick: u32) -> &'static str {
     match tick / (DAY_LENGTH / 4) {
         0 => "MORN",
@@ -3627,82 +4151,363 @@ fn render_inventory(
     craft_selection: usize,
     pane: usize,
     station: Option<FurnitureKind>,
+    mode: GameMode,
 ) {
-    screen.rect(18, 32, 252, 128, 0x15151D);
-    screen.frame(18, 32, 252, 128, 0xC8C8C8);
-    screen.text(
-        &assets.font,
-        if pane == 0 {
-            ">INVENTORY"
-        } else {
-            " INVENTORY"
-        },
-        28,
-        50,
+    if let Some(station) = station {
+        render_crafting_menu(screen, assets, player, station, craft_selection);
+        return;
+    }
+
+    let mut player_entries = player
+        .inventory
+        .slots()
+        .iter()
+        .map(|stack| {
+            (
+                assets.item(stack.item),
+                format!(" {} {}", stack.count.min(999), stack.item.display_name()),
+            )
+        })
+        .collect::<Vec<_>>();
+    player_entries.extend(
+        player
+            .inventory
+            .tools()
+            .iter()
+            .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name()))),
     );
-    if player.inventory.used_slots() == 0 {
-        screen.text(&assets.font, "EMPTY", 32, 70);
-    } else {
-        let start = item_selection.saturating_sub(4);
-        let stack_count = player.inventory.slots().len();
-        for (row, combined) in (start..player.inventory.used_slots()).take(5).enumerate() {
-            let y = 66 + row as i32 * 14;
-            let marker = if pane == 0 && combined == item_selection {
-                ">"
-            } else {
-                " "
-            };
-            if let Some(stack) = player.inventory.slots().get(combined) {
-                screen.blit(assets.item(stack.item), 30, y);
-                screen.text(
-                    &assets.font,
-                    &format!("{marker}{} x{}", stack.item, stack.count),
-                    42,
-                    y,
-                );
-                continue;
+
+    let player_width = inventory_panel_width(&player_entries, "INVENTORY");
+    if mode != GameMode::Creative || pane == 0 {
+        render_inventory_panel(
+            screen,
+            assets,
+            &player_entries,
+            "INVENTORY",
+            9,
+            Some(item_selection),
+        );
+        render_inventory_counter(
+            screen,
+            &assets.inventory_counter,
+            9 + player_width,
+            9,
+            player_entries.len(),
+            player.inventory.capacity(),
+        );
+        return;
+    }
+
+    let creative = creative_entries();
+    let creative_entries = creative
+        .iter()
+        .map(|entry| match entry {
+            CreativeEntry::Stack(item) => (assets.item(*item), format!(" {}", item.display_name())),
+            CreativeEntry::Tool(tool) => (assets.tool(*tool), format!(" {}", tool.display_name())),
+        })
+        .collect::<Vec<_>>();
+    let creative_width = inventory_panel_width(&creative_entries, "ITEMS");
+    let creative_x = WIDTH as i32 - 10 - creative_width;
+    let player_x = creative_x - 10 - player_width;
+    render_inventory_panel(screen, assets, &player_entries, "INVENTORY", player_x, None);
+    render_inventory_panel(
+        screen,
+        assets,
+        &creative_entries,
+        "ITEMS",
+        creative_x,
+        Some(craft_selection),
+    );
+    render_inventory_counter_minimized(
+        screen,
+        &assets.inventory_counter,
+        player_x + player_width,
+        9,
+        player_entries.len(),
+    );
+}
+
+fn creative_entries() -> Vec<CreativeEntry> {
+    let mut entries = ItemId::ALL
+        .iter()
+        .copied()
+        .filter(|item| *item != ItemId::PowerGlove)
+        .map(CreativeEntry::Stack)
+        .collect::<Vec<_>>();
+    for kind in ToolKind::ALL {
+        for tier in ToolTier::ALL {
+            if kind != ToolKind::Shears || tier == ToolTier::Wood {
+                entries.push(CreativeEntry::Tool(ToolItem::new(kind, tier)));
             }
-            let tool = &player.inventory.tools()[combined - stack_count];
-            screen.blit(assets.tool(*tool), 30, y);
-            let tool_label = if tool.kind == ToolKind::Shears {
-                format!("SHEARS {}", tool.durability)
-            } else {
-                format!(
-                    "{} {} {}",
-                    &tool.tier.display_name()[..1],
-                    tool.kind.display_name(),
-                    tool.durability
-                )
-            };
-            screen.text(&assets.font, &format!("{marker}{tool_label}"), 42, y);
         }
     }
-    let crafting_title = if pane == 1 {
-        station
-            .map(|kind| kind.display_name())
-            .map(|name| format!(">{name}"))
-            .unwrap_or_else(|| ">CRAFT".to_owned())
-    } else {
-        station
-            .map(|kind| format!(" {}", kind.display_name()))
-            .unwrap_or_else(|| " CRAFT".to_owned())
-    };
-    screen.text(&assets.font, &crafting_title, 156, 50);
-    let recipes = recipe_views(station);
-    let start = craft_selection.saturating_sub(2);
-    for (row, (index, (output, costs))) in
-        recipes.iter().enumerate().skip(start).take(3).enumerate()
-    {
-        let marker = if index == craft_selection { ">" } else { " " };
-        screen.text(
-            &assets.font,
-            &format!("{marker}{output}"),
-            142,
-            66 + row as i32 * 26,
-        );
-        render_costs(screen, assets, costs, 150, 76 + row as i32 * 26);
+    entries
+}
+
+fn inventory_panel_width(entries: &[(&crate::gfx::Image, String)], title: &str) -> i32 {
+    let content_width = entries
+        .iter()
+        .map(|(_, label)| label.chars().count())
+        .chain([title.len()])
+        .max()
+        .unwrap_or(title.len()) as i32
+        * 8;
+    ((content_width + 48).clamp(80, WIDTH as i32 - 18) / 8) * 8
+}
+
+fn render_inventory_panel(
+    screen: &mut Screen,
+    assets: &Assets,
+    entries: &[(&crate::gfx::Image, String)],
+    title: &str,
+    x: i32,
+    selection: Option<usize>,
+) {
+    let width = inventory_panel_width(entries, title);
+    let (y, height) = (9, 88);
+    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    screen.text(
+        &assets.font,
+        title,
+        x + (width - title.len() as i32 * 8) / 2,
+        y,
+    );
+
+    let selected = selection.unwrap_or(0);
+    let first = selected
+        .saturating_sub(4)
+        .min(entries.len().saturating_sub(9));
+    for (row, (image, label)) in entries.iter().skip(first).take(9).enumerate() {
+        let index = first + row;
+        let entry_x = x + 24;
+        let entry_y = y + 8 + row as i32 * 8;
+        if selection == Some(index) {
+            screen.text(&assets.font, ">", entry_x - 8, entry_y);
+            screen.text(
+                &assets.font,
+                "<",
+                entry_x + label.chars().count() as i32 * 8,
+                entry_y,
+            );
+        }
+        screen.text(&assets.font, label, entry_x, entry_y);
+        screen.blit(image, entry_x, entry_y);
     }
-    screen.centered_text(&assets.font, "ARROWS MOVE  C EQUIP  ENTER CRAFT", 145);
+}
+
+fn render_crafting_menu(
+    screen: &mut Screen,
+    assets: &Assets,
+    player: &Player,
+    station: FurnitureKind,
+    selection: usize,
+) {
+    let recipes = recipe_views(Some(station));
+    let title = station.display_name();
+    let content_width = recipes
+        .iter()
+        .map(|(output, _)| output.chars().count())
+        .chain([title.len()])
+        .max()
+        .unwrap_or(title.len()) as i32
+        * 8;
+    let width = (content_width + 48).clamp(96, 176);
+    let (x, y, height) = (9, 9, 88);
+    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    screen.text(
+        &assets.font,
+        title,
+        x + (width - title.len() as i32 * 8) / 2,
+        y,
+    );
+    let first = selection
+        .saturating_sub(4)
+        .min(recipes.len().saturating_sub(9));
+    for (row, (output, _)) in recipes.iter().skip(first).take(9).enumerate() {
+        let index = first + row;
+        let entry_x = x + 24;
+        let entry_y = y + 8 + row as i32 * 8;
+        if index == selection {
+            screen.text(&assets.font, ">", entry_x - 8, entry_y);
+            screen.text(
+                &assets.font,
+                "<",
+                entry_x + output.chars().count() as i32 * 8,
+                entry_y,
+            );
+        }
+        screen.text(&assets.font, output, entry_x, entry_y);
+    }
+
+    if let Some((output, costs)) = recipes.get(selection) {
+        let panel_x = x + width + 8;
+        let panel_width = ((WIDTH as i32 - panel_x - 9) / 8) * 8;
+        if panel_width >= 56 {
+            render_menu_frame(screen, &assets.hud, panel_x, y, panel_width, 32);
+            screen.text(&assets.font, "HAVE", panel_x + 8, y);
+            screen.text(
+                &assets.font,
+                &format!("{} {}", output_count(player, output), output),
+                panel_x + 8,
+                y + 12,
+            );
+            let cost_height = (costs.len().max(1) as i32 * 8 + 16).max(32);
+            render_menu_frame(
+                screen,
+                &assets.hud,
+                panel_x,
+                y + 40,
+                panel_width,
+                cost_height,
+            );
+            screen.text(&assets.font, "COST", panel_x + 8, y + 40);
+            for (row, cost) in costs.iter().enumerate() {
+                screen.blit(assets.item(cost.item), panel_x + 8, y + 52 + row as i32 * 8);
+                screen.text(
+                    &assets.font,
+                    &format!(" {}/{}", player.inventory.count(cost.item), cost.count),
+                    panel_x + 8,
+                    y + 52 + row as i32 * 8,
+                );
+            }
+        }
+    }
+}
+
+fn output_count(player: &Player, output: &str) -> usize {
+    let tool_count = player
+        .inventory
+        .tools()
+        .iter()
+        .filter(|tool| tool.display_name() == output)
+        .count();
+    if tool_count > 0 {
+        return tool_count;
+    }
+    ItemId::ALL
+        .iter()
+        .copied()
+        .filter(|item| {
+            output == item.display_name()
+                || output
+                    .strip_prefix(item.display_name())
+                    .is_some_and(|suffix| suffix.starts_with(" x"))
+        })
+        .max_by_key(|item| item.display_name().len())
+        .map_or(0, |item| usize::from(player.inventory.count(item)))
+}
+
+fn render_menu_frame(
+    screen: &mut Screen,
+    hud: &crate::gfx::Image,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) {
+    let right = x + width - 8;
+    let bottom = y + height - 8;
+    for draw_y in (y..=bottom).step_by(8) {
+        for draw_x in (x..=right).step_by(8) {
+            let edge_x = draw_x == x || draw_x == right;
+            let edge_y = draw_y == y || draw_y == bottom;
+            let source_x = if edge_x && edge_y {
+                0
+            } else if edge_y {
+                8
+            } else if edge_x {
+                16
+            } else {
+                24
+            };
+            screen.blit_region_transformed(
+                hud,
+                source_x,
+                48,
+                8,
+                8,
+                draw_x,
+                draw_y,
+                draw_x == right,
+                draw_y == bottom,
+            );
+        }
+    }
+}
+
+fn render_inventory_counter(
+    screen: &mut Screen,
+    counter: &crate::gfx::Image,
+    right: i32,
+    top: i32,
+    size: usize,
+    capacity: usize,
+) {
+    let background_x = if size < 10 { right - 16 } else { right - 21 };
+    let background_width = if size < 10 { 18 } else { 23 };
+    screen.blit_region(
+        counter,
+        background_x,
+        top - 3,
+        56 - background_width as usize,
+        12,
+        background_width as usize,
+        13,
+        false,
+    );
+    render_counter_digits(
+        screen,
+        counter,
+        right - if size < 10 { 14 } else { 19 },
+        top - 1,
+        5,
+        5,
+        7,
+        size,
+    );
+    render_counter_digits(screen, counter, right - 8, top + 3, 0, 4, 5, capacity);
+}
+
+fn render_inventory_counter_minimized(
+    screen: &mut Screen,
+    counter: &crate::gfx::Image,
+    right: i32,
+    top: i32,
+    size: usize,
+) {
+    if size < 10 {
+        screen.blit_region(counter, right - 12, top - 1, 0, 12, 4, 9, false);
+        screen.blit_region(counter, right - 8, top - 1, 8, 12, 4, 9, false);
+        render_counter_digits(screen, counter, right - 10, top + 1, 0, 4, 5, size);
+    } else {
+        screen.blit_region(counter, right - 16, top - 1, 0, 12, 12, 9, false);
+        render_counter_digits(screen, counter, right - 14, top + 1, 0, 4, 5, size);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_counter_digits(
+    screen: &mut Screen,
+    counter: &crate::gfx::Image,
+    x: i32,
+    y: i32,
+    source_y: usize,
+    width: usize,
+    height: usize,
+    number: usize,
+) {
+    for (index, digit) in number.to_string().bytes().enumerate() {
+        screen.blit_region(
+            counter,
+            x + index as i32 * width as i32,
+            y,
+            usize::from(digit - b'0') * width,
+            source_y,
+            width,
+            height,
+            false,
+        );
+    }
 }
 
 fn recipe_views(station: Option<FurnitureKind>) -> Vec<(String, &'static [ItemStack])> {
@@ -3731,15 +4536,6 @@ fn recipe_views(station: Option<FurnitureKind>) -> Vec<(String, &'static [ItemSt
         Some(FurnitureKind::Loom) => LOOM_RECIPES.iter().map(stack).collect(),
         _ => Vec::new(),
     }
-}
-
-fn render_costs(screen: &mut Screen, assets: &Assets, costs: &[ItemStack], x: i32, y: i32) {
-    let text = costs
-        .iter()
-        .map(|cost| format!("{} {}", cost.item, cost.count))
-        .collect::<Vec<_>>()
-        .join("+");
-    screen.text(&assets.font, &text, x, y);
 }
 
 fn render_entity(
@@ -3860,21 +4656,123 @@ fn render_entity(
             };
             screen.rect(entity.x - camera_x, entity.y - camera_y, 2, 2, color);
         }
+        EntityKind::TextParticle(text) => {
+            let x = entity.x - camera_x - text.chars().count() as i32 * 4;
+            let y = entity.y - camera_y - entity.age.min(16) as i32 / 2;
+            screen.text(&assets.font, text, x, y);
+        }
     }
 }
 
-fn render_pause(screen: &mut Screen, assets: &Assets, selection: usize) {
-    screen.rect(78, 52, 132, 88, 0x15151D);
-    screen.frame(78, 52, 132, 88, 0xC8C8C8);
-    screen.centered_text(&assets.font, "PAUSED", 62);
-    for (index, label) in ["RETURN TO GAME", "QUIT TO TITLE"].iter().enumerate() {
-        let marker = if index == selection { ">" } else { " " };
-        screen.text(
+fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
+    let (x, y, width, height) = (48, 32, 192, 128);
+    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    let (title, labels): (&str, Vec<String>) = match world.pause_page {
+        PausePage::Main => (
+            "PAUSED",
+            [
+                "RETURN TO GAME",
+                "OPTIONS",
+                "ACHIEVEMENTS",
+                "QUESTS",
+                "SAVE GAME",
+                "MAIN MENU",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        ),
+        PausePage::Options => (
+            "OPTIONS",
+            vec![
+                format!(
+                    "DIFFICULTY: {}",
+                    ["EASY", "NORMAL", "HARD"][world.difficulty.min(2)]
+                ),
+                format!(
+                    "SHOW QUEST PANEL: {}",
+                    if world.show_quests { "ON" } else { "OFF" }
+                ),
+                format!(
+                    "TUTORIALS: {}",
+                    if world.tutorials_enabled { "ON" } else { "OFF" }
+                ),
+                format!(
+                    "QUESTS: {}",
+                    if world.quests_enabled { "ON" } else { "OFF" }
+                ),
+                "BACK".to_owned(),
+            ],
+        ),
+        PausePage::Achievements => (
+            "ACHIEVEMENTS",
+            vec![
+                format!("COMPLETED: {}", world.progress.achievement_count()),
+                "ENTER OR ESC TO RETURN".to_owned(),
+            ],
+        ),
+        PausePage::Quests => (
+            "QUESTS",
+            vec![
+                format!(
+                    "TUTORIALS: {}/{}",
+                    world.progress.tutorial_completed_count(),
+                    world.progress.tutorial_count()
+                ),
+                format!(
+                    "QUESTS: {}/{}",
+                    world.progress.quest_completed_count(),
+                    world.progress.quest_count()
+                ),
+                "ENTER OR ESC TO RETURN".to_owned(),
+            ],
+        ),
+    };
+    screen.text(
+        &assets.font,
+        title,
+        x + (width - title.len() as i32 * 8) / 2,
+        y,
+    );
+    for (index, label) in labels.iter().enumerate() {
+        let draw_y = y + 20 + index as i32 * 12;
+        let draw_x = x + (width - label.chars().count() as i32 * 8) / 2;
+        if index == world.pause_selection
+            && matches!(world.pause_page, PausePage::Main | PausePage::Options)
+        {
+            screen.text(&assets.font, ">", draw_x - 8, draw_y);
+            screen.text(
+                &assets.font,
+                "<",
+                draw_x + label.chars().count() as i32 * 8,
+                draw_y,
+            );
+        }
+        screen.text(&assets.font, label, draw_x, draw_y);
+    }
+    if world.pause_page == PausePage::Main {
+        screen.centered_text(&assets.font, "UP AND DOWN TO SCROLL", y + height - 24);
+        screen.centered_text(&assets.font, "ENTER: CHOOSE", y + height - 14);
+    }
+    if world.pause_confirm {
+        let (popup_x, popup_y, popup_width, popup_height) = (20, 56, 248, 80);
+        screen.rect(popup_x, popup_y, popup_width, popup_height, 0x08080C);
+        screen.frame(popup_x, popup_y, popup_width, popup_height, 0xC8C8C8);
+        screen.centered_text(&assets.font, "ARE YOU SURE YOU WANT TO EXIT", popup_y + 12);
+        screen.centered_text(
             &assets.font,
-            &format!("{marker}{label}"),
-            86,
-            88 + index as i32 * 18,
+            "ALL UNSAVED PROGRESS WILL BE LOST",
+            popup_y + 26,
         );
+        for (index, label) in ["CANCEL", "QUIT WITHOUT SAVING"].iter().enumerate() {
+            let draw_y = popup_y + 48 + index as i32 * 12;
+            let draw_x = (WIDTH as i32 - label.len() as i32 * 8) / 2;
+            if index == world.pause_selection {
+                screen.text(&assets.font, ">", draw_x - 8, draw_y);
+                screen.text(&assets.font, "<", draw_x + label.len() as i32 * 8, draw_y);
+            }
+            screen.text(&assets.font, label, draw_x, draw_y);
+        }
     }
 }
 
@@ -4028,9 +4926,9 @@ fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -
 mod registry_tests {
     use super::{
         ActiveItem, DAY_LENGTH, Direction, FurnitureKind, GameMode, HUNGER_STAMINA_STEPS, Level,
-        MAX_HUNGER_TICKS, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
-        entity::EntityArena, random::JavaRandom, spawn, surface_darkness, time_name,
-        try_queue_natural_spawn,
+        MAX_HUNGER_TICKS, PausePage, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
+        creative_entries, entity::EntityArena, player_sprite_frame, random::JavaRandom, spawn,
+        surface_darkness, time_name, try_queue_natural_spawn,
     };
     use crate::{
         input::Input,
@@ -4059,6 +4957,8 @@ mod registry_tests {
                 direction: Direction::Right,
                 walk_distance: 0,
                 attack_time: 0,
+                attack_direction: Direction::Down,
+                attack_item: None,
                 health: 10,
                 max_health: 10,
                 stamina: 10,
@@ -4080,7 +4980,7 @@ mod registry_tests {
                 fishing_ticks: 0,
                 watering_content: 0,
                 clothing: ItemId::RegularClothes,
-                inventory: Inventory::new(32),
+                inventory: Inventory::new(27),
                 active_item: None,
             },
             seed: 1,
@@ -4105,6 +5005,8 @@ mod registry_tests {
             book_open: None,
             paused: false,
             pause_selection: 0,
+            pause_page: PausePage::Main,
+            pause_confirm: false,
             inventory_open: false,
             inventory_selection: 0,
             inventory_item_selection: 0,
@@ -4116,6 +5018,154 @@ mod registry_tests {
             random: JavaRandom::new(1),
             sound_events: Vec::new(),
         }
+    }
+
+    #[test]
+    fn player_skin_frames_match_java_four_direction_animation() {
+        assert_eq!(player_sprite_frame(Direction::Down, 0), (0, false));
+        assert_eq!(player_sprite_frame(Direction::Down, 8), (0, true));
+        assert_eq!(player_sprite_frame(Direction::Up, 0), (16, false));
+        assert_eq!(player_sprite_frame(Direction::Up, 8), (16, true));
+        assert_eq!(player_sprite_frame(Direction::Left, 0), (32, true));
+        assert_eq!(player_sprite_frame(Direction::Left, 8), (48, true));
+        assert_eq!(player_sprite_frame(Direction::Right, 0), (32, false));
+        assert_eq!(player_sprite_frame(Direction::Right, 8), (48, false));
+    }
+
+    #[test]
+    fn creative_inventory_is_a_separate_unlimited_catalogue() {
+        let mut world = tiny_world();
+        world.mode = GameMode::Creative;
+
+        world.tick(&Input {
+            menu: true,
+            ..Input::default()
+        });
+        assert!(world.inventory_open);
+        assert_eq!(world.inventory_pane, 1);
+        assert_eq!(world.player.inventory.capacity(), 27);
+        assert_eq!(world.player.inventory.used_slots(), 0);
+
+        assert!(
+            creative_entries()
+                .iter()
+                .all(|entry| !matches!(entry, super::CreativeEntry::Stack(ItemId::PowerGlove)))
+        );
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 2);
+        assert_eq!(world.player.inventory.used_slots(), 1);
+
+        world.tick(&Input {
+            left_pressed: true,
+            ..Input::default()
+        });
+        assert_eq!(world.inventory_pane, 0);
+        world.tick(&Input {
+            attack: true,
+            ..Input::default()
+        });
+        assert!(!world.inventory_open);
+        assert_eq!(
+            world.player.active_item,
+            Some(ActiveItem::Stack(ItemId::Wood))
+        );
+    }
+
+    #[test]
+    fn pause_menu_matches_java_save_and_confirmed_quit_flow() {
+        let mut world = tiny_world();
+        assert!(matches!(
+            world.tick(&Input {
+                exit: true,
+                ..Input::default()
+            }),
+            super::WorldAction::None
+        ));
+        assert!(world.paused);
+        world.pause_selection = 4;
+        assert!(matches!(
+            world.tick(&Input {
+                select: true,
+                ..Input::default()
+            }),
+            super::WorldAction::SaveGame
+        ));
+        assert!(!world.paused);
+
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        world.pause_selection = 5;
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert!(world.pause_confirm);
+        world.tick(&Input {
+            down_pressed: true,
+            ..Input::default()
+        });
+        assert!(matches!(
+            world.tick(&Input {
+                select: true,
+                ..Input::default()
+            }),
+            super::WorldAction::QuitWithoutSaving
+        ));
+    }
+
+    #[test]
+    fn ordinary_tile_hit_uses_java_damage_timing_and_tool_wear() {
+        let mut world = tiny_world();
+        let target = 9 + 8 * world.width;
+        world.levels[0].tiles[target] = Tile::Tree;
+        world
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Sword, ToolTier::Wood));
+        world.player.active_item = Some(ActiveItem::Tool(0));
+
+        world.attack();
+
+        assert!((1..=3).contains(&world.levels[0].data[target]));
+        assert_eq!(world.player.inventory.tools()[0].durability, 51);
+        assert_eq!(world.player.attack_time, 5);
+        assert_eq!(world.player.walk_distance, 8);
+        assert_eq!(world.player.attack_item, Some(ActiveItem::Tool(0)));
+        assert_eq!(
+            world.take_sound_events(),
+            vec![crate::audio::SoundEffect::MonsterHurt]
+        );
+    }
+
+    #[test]
+    fn successful_tool_tile_interaction_keeps_java_ten_tick_slash() {
+        let mut world = tiny_world();
+        let target = 9 + 8 * world.width;
+        world.levels[0].tiles[target] = Tile::Tree;
+        world
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood));
+        world.player.active_item = Some(ActiveItem::Tool(0));
+
+        world.attack();
+
+        assert!((10..=14).contains(&world.levels[0].data[target]));
+        assert_eq!(world.player.inventory.tools()[0].durability, 33);
+        assert_eq!(world.player.attack_time, 10);
+        assert_eq!(
+            world.take_sound_events(),
+            vec![crate::audio::SoundEffect::MonsterHurt]
+        );
     }
 
     #[test]

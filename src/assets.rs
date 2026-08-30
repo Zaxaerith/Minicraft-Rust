@@ -16,6 +16,8 @@ struct Connection {
 pub struct Assets {
     pub font: Image,
     pub title: Image,
+    pub hud: Image,
+    pub inventory_counter: Image,
     pub skin: Image,
     pub skin_row: usize,
     tiles: Vec<Vec<Image>>,
@@ -37,6 +39,14 @@ impl Assets {
             title: png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/title.png"
+            )))?,
+            hud: png(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/assets/textures/gui/hud.png"
+            )))?,
+            inventory_counter: png(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/assets/textures/gui/inventory_counter.png"
             )))?,
             skin: png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -95,6 +105,18 @@ impl Assets {
                 pack,
                 "assets/textures/gui/title.png",
                 &mut assets.title,
+                &mut assets.warnings,
+            );
+            override_image(
+                pack,
+                "assets/textures/gui/hud.png",
+                &mut assets.hud,
+                &mut assets.warnings,
+            );
+            override_image(
+                pack,
+                "assets/textures/gui/inventory_counter.png",
+                &mut assets.inventory_counter,
                 &mut assets.warnings,
             );
             for tile_id in Tile::ALL {

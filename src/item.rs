@@ -572,6 +572,10 @@ impl Inventory {
         self.slots.len() + self.tools.len()
     }
 
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     pub fn take_all(&mut self) -> Vec<ItemStack> {
         std::mem::take(&mut self.slots)
     }

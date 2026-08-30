@@ -17,6 +17,9 @@ pub struct Input {
     pub attack: bool,
     pub menu: bool,
     pub pickup: bool,
+    pub world_copy: bool,
+    pub world_rename: bool,
+    pub world_delete: bool,
     pub backspace: bool,
     pub text: Vec<char>,
 }
@@ -60,6 +63,9 @@ impl Input {
             attack: pressed(window, attack) || pad.attack,
             menu: pressed(window, menu) || pad.menu,
             pickup: pressed(window, pickup) || pad.pickup,
+            world_copy: shifted && raw_keys.contains(&Key::C),
+            world_rename: shifted && raw_keys.contains(&Key::R),
+            world_delete: shifted && raw_keys.contains(&Key::D),
             backspace: pressed(window, Key::Backspace),
             text,
         }

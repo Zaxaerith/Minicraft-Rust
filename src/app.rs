@@ -14,8 +14,8 @@ use crate::{
     resource_pack::{ResourcePack, discover},
     world::{GameMode, PlayOptions, World, WorldAction, WorldSpec},
     worlds::{
-        WorldRecord, create as create_world_record, load as load_world_records, load_state,
-        save_state,
+        WorldRecord, copy_record, create_named as create_world_record, delete_record,
+        load as load_world_records, load_state, rename_record, save_state,
     },
 };
 
@@ -79,9 +79,13 @@ enum State {
     },
     NewWorld {
         selection: usize,
+        name: String,
+        seed: String,
+        from_play_menu: bool,
     },
     Worlds {
         selection: usize,
+        popup: Option<WorldPopup>,
     },
     Help {
         selection: usize,
@@ -97,11 +101,16 @@ enum State {
         selection: usize,
         capture: Option<usize>,
     },
+    ControlGuide {
+        selection: usize,
+        controller: bool,
+    },
     Languages {
         selection: usize,
     },
     Skins {
         selection: usize,
+        ticks: u64,
     },
     ResourcePacks {
         selection: usize,
@@ -113,16 +122,32 @@ enum State {
     },
 }
 
+#[derive(Clone, Copy)]
+enum WorldPopupKind {
+    Copy,
+    Rename,
+    Delete,
+}
+
+struct WorldPopup {
+    kind: WorldPopupKind,
+    text: String,
+}
+
 enum Transition {
     None,
     Title,
     PlayMenu,
-    NewWorld,
-    CreateWorld,
+    NewWorld(bool),
+    CreateWorld(String, Option<i64>),
     Worlds,
     LoadWorld(usize),
+    CopyWorld(usize, String),
+    RenameWorld(usize, String),
+    DeleteWorld(usize),
     Options,
     Controls,
+    ControlGuide,
     CaptureBinding(usize),
     SetBinding(usize, String),
     ResetBindings,
@@ -131,6 +156,8 @@ enum Transition {
     Achievements,
     Languages,
     Skins,
+    PreviewSkin(usize),
+    CancelSkins,
     ChangeSkin(usize),
     ResourcePacks,
     TogglePack(usize),
@@ -187,19 +214,35 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
         let was_playing = matches!(state, State::Playing { .. });
         let mut settings_changed = false;
         let transition = match &mut state {
-            State::Title { selection, ticks } => tick_title(selection, ticks, &input),
+            State::Title { selection, ticks } => {
+                tick_title(selection, ticks, &input, world_records.len())
+            }
             State::Options { selection } => {
                 let result = tick_options(selection, &input, &mut config.settings);
                 settings_changed = result.1;
                 result.0
             }
             State::PlayMenu { selection } => tick_play_menu(selection, &input),
-            State::NewWorld { selection } => {
-                let result = tick_new_world(selection, &input, &mut config.settings);
+            State::NewWorld {
+                selection,
+                name,
+                seed,
+                from_play_menu,
+            } => {
+                let result = tick_new_world(
+                    selection,
+                    name,
+                    seed,
+                    *from_play_menu,
+                    &input,
+                    &mut config.settings,
+                );
                 settings_changed = result.1;
                 result.0
             }
-            State::Worlds { selection } => tick_worlds(selection, &input, world_records.len()),
+            State::Worlds { selection, popup } => {
+                tick_worlds(selection, popup, &input, &world_records)
+            }
             State::Help { selection } => tick_help(selection, &input),
             State::Book { page, book } => tick_book(*book, page, &input),
             State::Achievements { selection } => {
@@ -208,8 +251,12 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             State::Controls { selection, capture } => {
                 tick_controls(selection, capture, &input, &raw_keys)
             }
+            State::ControlGuide {
+                selection,
+                controller,
+            } => tick_control_guide(selection, controller, &input),
             State::Languages { selection } => tick_languages(selection, &input),
-            State::Skins { selection } => tick_skins(selection, &input, skins.len()),
+            State::Skins { selection, ticks } => tick_skins(selection, ticks, &input, skins.len()),
             State::ResourcePacks { selection } => {
                 tick_resource_packs(selection, &input, &packs, &config.settings.resource_packs)
             }
@@ -231,10 +278,16 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 }
                 match action {
                     WorldAction::None => Transition::None,
+                    WorldAction::SaveGame => {
+                        save_state(record, world)?;
+                        *last_autosave_tick = world.save_tick();
+                        Transition::None
+                    }
                     WorldAction::ReturnToTitle => {
                         save_state(record, world)?;
                         Transition::Title
                     }
+                    WorldAction::QuitWithoutSaving => Transition::Title,
                 }
             }
         };
@@ -264,9 +317,16 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 };
             }
             Transition::PlayMenu => state = State::PlayMenu { selection: 0 },
-            Transition::NewWorld => state = State::NewWorld { selection: 0 },
-            Transition::CreateWorld => {
-                let seed = random_seed();
+            Transition::NewWorld(from_play_menu) => {
+                state = State::NewWorld {
+                    selection: 0,
+                    name: String::new(),
+                    seed: String::new(),
+                    from_play_menu,
+                }
+            }
+            Transition::CreateWorld(name, requested_seed) => {
+                let seed = requested_seed.unwrap_or_else(random_seed);
                 let spec = WorldSpec::new(
                     config.settings.world_size,
                     config.settings.theme,
@@ -275,6 +335,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 let mode = GameMode::from_index(config.settings.game_mode);
                 let record = create_world_record(
                     &config.game_dir,
+                    &name,
                     seed,
                     spec,
                     mode,
@@ -295,7 +356,10 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             }
             Transition::Worlds => {
                 world_records = load_world_records(&config.game_dir)?;
-                state = State::Worlds { selection: 0 };
+                state = State::Worlds {
+                    selection: 0,
+                    popup: None,
+                };
             }
             Transition::LoadWorld(selection) => {
                 let record = world_records[selection].clone();
@@ -313,11 +377,58 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     last_autosave_tick,
                 };
             }
+            Transition::CopyWorld(selection, name) => {
+                copy_record(&config.game_dir, &world_records[selection], &name)?;
+                world_records = load_world_records(&config.game_dir)?;
+                let selection = world_records
+                    .iter()
+                    .position(|record| record.name.eq_ignore_ascii_case(name.trim()))
+                    .unwrap_or(0);
+                state = State::Worlds {
+                    selection,
+                    popup: None,
+                };
+            }
+            Transition::RenameWorld(selection, name) => {
+                rename_record(&config.game_dir, &world_records[selection], &name)?;
+                world_records = load_world_records(&config.game_dir)?;
+                let selection = world_records
+                    .iter()
+                    .position(|record| record.name.eq_ignore_ascii_case(name.trim()))
+                    .unwrap_or(0);
+                state = State::Worlds {
+                    selection,
+                    popup: None,
+                };
+            }
+            Transition::DeleteWorld(selection) => {
+                delete_record(&config.game_dir, &world_records[selection])?;
+                world_records = load_world_records(&config.game_dir)?;
+                state = if world_records.is_empty() {
+                    State::NewWorld {
+                        selection: 0,
+                        name: String::new(),
+                        seed: String::new(),
+                        from_play_menu: true,
+                    }
+                } else {
+                    State::Worlds {
+                        selection: selection.min(world_records.len() - 1),
+                        popup: None,
+                    }
+                };
+            }
             Transition::Options => state = State::Options { selection: 0 },
             Transition::Controls => {
                 state = State::Controls {
                     selection: 0,
                     capture: None,
+                }
+            }
+            Transition::ControlGuide => {
+                state = State::ControlGuide {
+                    selection: 0,
+                    controller: false,
                 }
             }
             Transition::CaptureBinding(selection) => {
@@ -357,7 +468,20 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     .iter()
                     .position(|skin| *skin == config.settings.selected_skin)
                     .unwrap_or(0);
-                state = State::Skins { selection };
+                state = State::Skins {
+                    selection,
+                    ticks: 0,
+                };
+            }
+            Transition::PreviewSkin(selection) => {
+                assets.select_skin(&skins[selection], &config.game_dir)?;
+            }
+            Transition::CancelSkins => {
+                assets.select_skin(&config.settings.selected_skin, &config.game_dir)?;
+                state = State::Title {
+                    selection: 2,
+                    ticks: 0,
+                };
             }
             Transition::ChangeSkin(selection) => {
                 assets.select_skin(&skins[selection], &config.game_dir)?;
@@ -431,19 +555,36 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 &config.settings,
                 *selection,
             ),
-            State::PlayMenu { selection } => {
-                render_play_menu(&mut screen, &assets, world_records.len(), *selection)
-            }
-            State::NewWorld { selection } => render_new_world(
+            State::PlayMenu { selection } => render_play_menu(
+                &mut screen,
+                &assets,
+                &localization,
+                world_records.len(),
+                *selection,
+            ),
+            State::NewWorld {
+                selection,
+                name,
+                seed,
+                ..
+            } => render_new_world(
                 &mut screen,
                 &assets,
                 &localization,
                 &config.settings,
                 *selection,
+                name,
+                seed,
             ),
-            State::Worlds { selection } => {
-                render_worlds(&mut screen, &assets, &world_records, *selection)
-            }
+            State::Worlds { selection, popup } => render_worlds(
+                &mut screen,
+                &assets,
+                &localization,
+                &config.settings,
+                &world_records,
+                *selection,
+                popup.as_ref(),
+            ),
             State::Help { selection } => render_help(&mut screen, &assets, *selection),
             State::Book { book, page } => render_book(&mut screen, &assets, *book, *page),
             State::Achievements { selection } => render_achievements(
@@ -460,10 +601,19 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 *selection,
                 *capture,
             ),
+            State::ControlGuide {
+                selection,
+                controller,
+            } => render_control_guide(&mut screen, &assets, &localization, *selection, *controller),
             State::Languages { selection } => render_languages(&mut screen, &assets, *selection),
-            State::Skins { selection } => {
-                render_skins(&mut screen, &assets, &localization, &skins, *selection)
-            }
+            State::Skins { selection, ticks } => render_skins(
+                &mut screen,
+                &assets,
+                &localization,
+                &skins,
+                *selection,
+                *ticks,
+            ),
             State::ResourcePacks { selection } => render_resource_packs(
                 &mut screen,
                 &assets,
@@ -539,6 +689,18 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
     if arguments.iter().any(|argument| argument == "--food-ui") {
         world.populate_food_preview();
     }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--inventory-ui")
+    {
+        world.populate_inventory_preview();
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--creative-inventory-ui")
+    {
+        world.populate_creative_inventory_preview();
+    }
     if arguments.iter().any(|argument| argument == "--stations") {
         world.populate_stations_preview();
     }
@@ -554,6 +716,12 @@ pub fn render_world_preview(arguments: &[String], output: &Path) -> Result<(), S
     if arguments.iter().any(|argument| argument == "--progress-ui") {
         world.populate_progress_preview();
     }
+    if arguments.iter().any(|argument| argument == "--boss-ui") {
+        world.populate_boss_preview();
+    }
+    if arguments.iter().any(|argument| argument == "--pause-ui") {
+        world.populate_pause_preview();
+    }
     let mut screen = Screen::new();
     screen.clear(0);
     world.render(&mut screen, &assets);
@@ -568,29 +736,52 @@ pub fn render_ui_preview(arguments: &[String], name: &str, output: &Path) -> Res
     let assets = Assets::load(&active)?;
     let achievements = achievements()?;
     let worlds = load_world_records(&config.game_dir)?;
+    let skins = skin_options(&config.game_dir);
     let mut screen = Screen::new();
     screen.clear(0x08080C);
     match name {
         "options" => render_options(&mut screen, &assets, &localization, &config.settings, 5),
-        "play" => render_play_menu(&mut screen, &assets, worlds.len(), 0),
-        "new-world" => render_new_world(&mut screen, &assets, &localization, &config.settings, 0),
-        "worlds" => render_worlds(&mut screen, &assets, &worlds, 0),
+        "play" => render_play_menu(&mut screen, &assets, &localization, worlds.len(), 0),
+        "new-world" => render_new_world(
+            &mut screen,
+            &assets,
+            &localization,
+            &config.settings,
+            0,
+            "",
+            "",
+        ),
+        "worlds" => render_worlds(
+            &mut screen,
+            &assets,
+            &localization,
+            &config.settings,
+            &worlds,
+            0,
+            None,
+        ),
         "help" => render_help(&mut screen, &assets, 0),
         "book" => render_book(&mut screen, &assets, Book::Instructions, 0),
         "achievements" => {
             render_achievements(&mut screen, &assets, &localization, &achievements, 0)
         }
         "controls" => render_controls(&mut screen, &assets, &config.settings.key_bindings, 0, None),
+        "skins" => render_skins(&mut screen, &assets, &localization, &skins, 0, 160),
         _ => {
             return Err(format!(
-                "unknown UI preview {name}; use options, play, new-world, worlds, help, book, achievements, or controls"
+                "unknown UI preview {name}; use options, play, new-world, worlds, help, book, achievements, controls, or skins"
             ));
         }
     }
     screen.save_png(output)
 }
 
-fn tick_title(selection: &mut usize, ticks: &mut u64, input: &Input) -> Transition {
+fn tick_title(
+    selection: &mut usize,
+    ticks: &mut u64,
+    input: &Input,
+    world_count: usize,
+) -> Transition {
     *ticks = ticks.wrapping_add(1);
     if input.up_pressed {
         *selection = selection.checked_sub(1).unwrap_or(TITLE_KEYS.len() - 1);
@@ -605,6 +796,7 @@ fn tick_title(selection: &mut usize, ticks: &mut u64, input: &Input) -> Transiti
         return Transition::None;
     }
     match *selection {
+        0 if world_count == 0 => Transition::NewWorld(false),
         0 => Transition::PlayMenu,
         1 => Transition::Options,
         2 => Transition::Skins,
@@ -615,16 +807,15 @@ fn tick_title(selection: &mut usize, ticks: &mut u64, input: &Input) -> Transiti
 }
 
 fn tick_play_menu(selection: &mut usize, input: &Input) -> Transition {
-    const COUNT: usize = 3;
+    const COUNT: usize = 2;
     if input.exit {
         return Transition::Title;
     }
     navigate(selection, input, COUNT);
     if input.select {
         match *selection {
-            0 => Transition::NewWorld,
-            1 => Transition::Worlds,
-            _ => Transition::Title,
+            0 => Transition::Worlds,
+            _ => Transition::NewWorld(true),
         }
     } else {
         Transition::None
@@ -633,40 +824,56 @@ fn tick_play_menu(selection: &mut usize, input: &Input) -> Transition {
 
 fn tick_new_world(
     selection: &mut usize,
+    name: &mut String,
+    seed: &mut String,
+    from_play_menu: bool,
     input: &Input,
     settings: &mut Settings,
 ) -> (Transition, bool) {
-    const COUNT: usize = 7;
     if input.exit {
-        return (Transition::PlayMenu, false);
+        return (
+            if from_play_menu {
+                Transition::PlayMenu
+            } else {
+                Transition::Title
+            },
+            false,
+        );
     }
-    navigate(selection, input, COUNT);
+    let score_mode = GameMode::from_index(settings.game_mode) == GameMode::Score;
+    if input.up_pressed {
+        loop {
+            *selection = selection.checked_sub(1).unwrap_or(9);
+            if score_mode || *selection != 2 {
+                break;
+            }
+        }
+    }
+    if input.down_pressed {
+        loop {
+            *selection = (*selection + 1) % 10;
+            if score_mode || *selection != 2 {
+                break;
+            }
+        }
+    }
+    if *selection == 0 {
+        edit_text(name, input, 36);
+    } else if *selection == 9 {
+        edit_text(seed, input, 20);
+    }
     let direction = i32::from(input.right_pressed) - i32::from(input.left_pressed);
     let mut changed = false;
     if direction != 0 {
         match *selection {
-            0 => {
-                let sizes = [128, 256, 512];
-                let current = sizes
-                    .iter()
-                    .position(|size| *size == settings.world_size)
-                    .unwrap_or(0);
-                settings.world_size = sizes[wrap(current, direction, sizes.len())];
-                changed = true;
-            }
             1 => {
-                settings.theme = wrap(settings.theme, direction, 5);
+                settings.game_mode = wrap(settings.game_mode, direction, GameMode::ALL.len());
+                if GameMode::from_index(settings.game_mode) != GameMode::Score && *selection == 2 {
+                    *selection = 3;
+                }
                 changed = true;
             }
             2 => {
-                settings.terrain_type = wrap(settings.terrain_type, direction, 4);
-                changed = true;
-            }
-            3 => {
-                settings.game_mode = wrap(settings.game_mode, direction, GameMode::ALL.len());
-                changed = true;
-            }
-            4 => {
                 let times = [10, 20, 40, 60, 120];
                 let current = times
                     .iter()
@@ -675,13 +882,48 @@ fn tick_new_world(
                 settings.score_minutes = times[wrap(current, direction, times.len())];
                 changed = true;
             }
+            4 => {
+                let sizes = [128, 256, 512];
+                let current = sizes
+                    .iter()
+                    .position(|size| *size == settings.world_size)
+                    .unwrap_or(0);
+                settings.world_size = sizes[wrap(current, direction, sizes.len())];
+                changed = true;
+            }
+            5 => {
+                settings.theme = wrap(settings.theme, direction, 5);
+                changed = true;
+            }
+            6 => {
+                settings.terrain_type = wrap(settings.terrain_type, direction, 4);
+                changed = true;
+            }
+            7 => {
+                settings.quests = !settings.quests;
+                changed = true;
+            }
+            8 => {
+                settings.tutorials = !settings.tutorials;
+                changed = true;
+            }
             _ => {}
         }
     }
     if input.select {
         match *selection {
-            5 => (Transition::CreateWorld, changed),
-            6 => (Transition::PlayMenu, changed),
+            3 if !name.trim().is_empty() => (
+                Transition::CreateWorld(name.trim().to_owned(), parse_world_seed(seed)),
+                changed,
+            ),
+            7 => {
+                settings.quests = !settings.quests;
+                (Transition::None, true)
+            }
+            8 => {
+                settings.tutorials = !settings.tutorials;
+                (Transition::None, true)
+            }
             _ => (Transition::None, changed),
         }
     } else {
@@ -689,18 +931,66 @@ fn tick_new_world(
     }
 }
 
-fn tick_worlds(selection: &mut usize, input: &Input, count: usize) -> Transition {
+fn tick_worlds(
+    selection: &mut usize,
+    popup: &mut Option<WorldPopup>,
+    input: &Input,
+    worlds: &[WorldRecord],
+) -> Transition {
+    if let Some(dialog) = popup {
+        if input.exit {
+            *popup = None;
+            return Transition::None;
+        }
+        if !matches!(dialog.kind, WorldPopupKind::Delete) {
+            edit_text(&mut dialog.text, input, 36);
+        }
+        if input.select {
+            return match dialog.kind {
+                WorldPopupKind::Copy if !dialog.text.trim().is_empty() => {
+                    Transition::CopyWorld(*selection, dialog.text.clone())
+                }
+                WorldPopupKind::Rename if !dialog.text.trim().is_empty() => {
+                    Transition::RenameWorld(*selection, dialog.text.clone())
+                }
+                WorldPopupKind::Delete => Transition::DeleteWorld(*selection),
+                _ => Transition::None,
+            };
+        }
+        return Transition::None;
+    }
     if input.exit {
         return Transition::PlayMenu;
     }
-    if count == 0 {
+    if worlds.is_empty() {
         return if input.select {
-            Transition::NewWorld
+            Transition::NewWorld(true)
         } else {
             Transition::None
         };
     }
-    navigate(selection, input, count);
+    navigate(selection, input, worlds.len());
+    if input.world_copy {
+        *popup = Some(WorldPopup {
+            kind: WorldPopupKind::Copy,
+            text: String::new(),
+        });
+        return Transition::None;
+    }
+    if input.world_rename {
+        *popup = Some(WorldPopup {
+            kind: WorldPopupKind::Rename,
+            text: worlds[*selection].name.clone(),
+        });
+        return Transition::None;
+    }
+    if input.world_delete {
+        *popup = Some(WorldPopup {
+            kind: WorldPopupKind::Delete,
+            text: String::new(),
+        });
+        return Transition::None;
+    }
     if input.select {
         Transition::LoadWorld(*selection)
     } else {
@@ -777,12 +1067,24 @@ fn tick_controls(
     }
 }
 
+fn tick_control_guide(selection: &mut usize, controller: &mut bool, input: &Input) -> Transition {
+    if input.exit {
+        return Transition::Options;
+    }
+    if input.left_pressed || input.right_pressed {
+        *controller = !*controller;
+        *selection = 0;
+    }
+    navigate(selection, input, if *controller { 16 } else { 23 });
+    Transition::None
+}
+
 fn tick_options(
     selection: &mut usize,
     input: &Input,
     settings: &mut Settings,
 ) -> (Transition, bool) {
-    const COUNT: usize = 11;
+    const COUNT: usize = 8;
     if input.exit {
         return (Transition::Title, false);
     }
@@ -796,31 +1098,15 @@ fn tick_options(
     let mut changed = false;
     if direction != 0 {
         match *selection {
-            1 => {
+            0 => {
                 settings.fps = (settings.fps as i32 + direction * 10).clamp(10, 300) as usize;
                 changed = true;
             }
-            2 => {
-                settings.difficulty = wrap(settings.difficulty, direction, 3);
-                changed = true;
-            }
-            3 => {
+            1 => {
                 settings.sound = !settings.sound;
                 changed = true;
             }
-            4 => {
-                settings.autosave = !settings.autosave;
-                changed = true;
-            }
-            5 => {
-                settings.tutorials = !settings.tutorials;
-                changed = true;
-            }
-            6 => {
-                settings.quests = !settings.quests;
-                changed = true;
-            }
-            7 => {
+            2 => {
                 settings.show_quests = !settings.show_quests;
                 changed = true;
             }
@@ -829,30 +1115,18 @@ fn tick_options(
     }
     if input.select {
         return match *selection {
-            0 => (Transition::Languages, changed),
-            3 => {
+            1 => {
                 settings.sound = !settings.sound;
                 (Transition::None, true)
             }
-            4 => {
-                settings.autosave = !settings.autosave;
-                (Transition::None, true)
-            }
-            5 => {
-                settings.tutorials = !settings.tutorials;
-                (Transition::None, true)
-            }
-            6 => {
-                settings.quests = !settings.quests;
-                (Transition::None, true)
-            }
-            7 => {
+            2 => {
                 settings.show_quests = !settings.show_quests;
                 (Transition::None, true)
             }
-            8 => (Transition::Controls, changed),
-            9 => (Transition::ResourcePacks, changed),
-            10 => (Transition::Title, changed),
+            4 => (Transition::Controls, changed),
+            5 => (Transition::ControlGuide, changed),
+            6 => (Transition::Languages, changed),
+            7 => (Transition::ResourcePacks, changed),
             _ => (Transition::None, changed),
         };
     }
@@ -885,17 +1159,21 @@ fn tick_languages(selection: &mut usize, input: &Input) -> Transition {
     }
 }
 
-fn tick_skins(selection: &mut usize, input: &Input, count: usize) -> Transition {
+fn tick_skins(selection: &mut usize, ticks: &mut u64, input: &Input, count: usize) -> Transition {
+    *ticks = ticks.wrapping_add(1);
     if input.exit {
-        return Transition::Title;
+        return Transition::CancelSkins;
     }
+    let previous = *selection;
     if input.up_pressed {
         *selection = selection.checked_sub(1).unwrap_or(count - 1);
     }
     if input.down_pressed {
         *selection = (*selection + 1) % count;
     }
-    if input.select {
+    if *selection != previous {
+        Transition::PreviewSkin(*selection)
+    } else if input.select {
         Transition::ChangeSkin(*selection)
     } else {
         Transition::None
@@ -940,36 +1218,36 @@ fn render_title(
     assets: &Assets,
     localization: &Localization,
     selection: usize,
-    ticks: u64,
+    _ticks: u64,
 ) {
     screen.blit(
         &assets.title,
         (WIDTH as i32 - assets.title.width as i32) / 2,
         18,
     );
-    screen.centered_text(
-        &assets.font,
-        "NOW POWERED BY RUST!",
-        48 + ((ticks / 30) % 2) as i32,
-    );
+    screen.centered_text(&assets.font, "Now with skins!", HEIGHT as i32 / 2 - 44);
     let version = localization.format("minicraft.displays.title.display.version", &["2.2.4"]);
     screen.text(&assets.font, &version, 2, 2);
+    screen.centered_text(
+        &assets.font,
+        localization.text("minicraft.displays.title.display.latest_already"),
+        76,
+    );
     for (index, key) in TITLE_KEYS.iter().enumerate() {
         let item = localization.text(key);
-        let y = 76 + index as i32 * 14;
+        let y = 96 + index as i32 * 10;
         if index == selection {
-            screen.rect(72, y - 2, 144, 11, 0x27334D);
-            screen.text(&assets.font, ">", 76, y);
+            let width = item.chars().count() as i32 * 8;
+            let x = (WIDTH as i32 - width) / 2;
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + width, y);
         }
         let x = (WIDTH as i32 - item.chars().count() as i32 * 8) / 2;
         screen.text(&assets.font, item, x, y);
     }
-    screen.centered_text(&assets.font, "UP DOWN TO MOVE", HEIGHT as i32 - 19);
-    screen.centered_text(
-        &assets.font,
-        "ENTER TO SELECT  ESC TO EXIT",
-        HEIGHT as i32 - 10,
-    );
+    screen.centered_text(&assets.font, "UP DOWN TO MOVE", HEIGHT as i32 - 30);
+    screen.centered_text(&assets.font, "ENTER TO SELECT", HEIGHT as i32 - 20);
+    screen.centered_text(&assets.font, "ESC TO EXIT", HEIGHT as i32 - 10);
 }
 
 fn render_options(
@@ -981,73 +1259,77 @@ fn render_options(
 ) {
     screen.centered_text(
         &assets.font,
-        localization.text("minicraft.display.options_display"),
-        18,
+        localization.text("minicraft.displays.options_main_menu"),
+        35,
     );
-    let difficulty_keys = [
-        "minicraft.settings.difficulty.easy",
-        "minicraft.settings.difficulty.normal",
-        "minicraft.settings.difficulty.hard",
-    ];
     let on = localization.text("minicraft.display.entries.boolean.true");
     let off = localization.text("minicraft.display.entries.boolean.false");
-    let values = [
-        LOCALES
-            .iter()
-            .find(|(code, _)| *code == settings.locale)
-            .map(|(_, name)| *name)
-            .unwrap_or("English (US)")
-            .to_owned(),
-        settings.fps.to_string(),
-        localization
-            .text(difficulty_keys[settings.difficulty])
-            .to_owned(),
-        if settings.sound { on } else { off }.to_owned(),
-        if settings.autosave { on } else { off }.to_owned(),
-        if settings.tutorials { on } else { off }.to_owned(),
-        if settings.quests { on } else { off }.to_owned(),
-        if settings.show_quests { on } else { off }.to_owned(),
-        String::new(),
-        String::new(),
-        String::new(),
-    ];
     let labels = [
-        localization.text("minicraft.display.options_display.language"),
-        localization.text("minicraft.settings.fps"),
-        localization.text("minicraft.settings.difficulty"),
-        localization.text("minicraft.settings.sound"),
-        localization.text("minicraft.settings.autosave"),
-        "TUTORIALS",
-        "QUESTS",
-        "SHOW QUEST HUD",
-        "KEY BINDINGS",
-        localization.text("minicraft.display.options_display.resource_packs"),
-        "BACK",
+        format!(
+            "{}: {}",
+            localization.text("minicraft.settings.fps"),
+            settings.fps
+        ),
+        format!(
+            "{}: {}",
+            localization.text("minicraft.settings.sound"),
+            if settings.sound { on } else { off }
+        ),
+        format!(
+            "{}: {}",
+            localization.text("minicraft.settings.show_quests"),
+            if settings.show_quests { on } else { off }
+        ),
+        format!(
+            "{}: {}",
+            localization.text("minicraft.settings.opengl_hwa"),
+            off
+        ),
+        localization
+            .text("minicraft.display.options_display.change_key_bindings")
+            .to_owned(),
+        localization.text("minicraft.displays.controls").to_owned(),
+        localization
+            .text("minicraft.display.options_display.language")
+            .to_owned(),
+        localization
+            .text("minicraft.display.options_display.resource_packs")
+            .to_owned(),
     ];
-    for index in 0..labels.len() {
-        let y = 29 + index as i32 * 14;
+    let width = labels
+        .iter()
+        .map(|label| label.chars().count())
+        .max()
+        .unwrap_or(0) as i32
+        * 8;
+    let x = (WIDTH as i32 - width) / 2;
+    for (index, label) in labels.iter().enumerate() {
+        let y = 51 + index as i32 * 14;
         if index == selection {
-            screen.rect(14, y - 2, WIDTH as i32 - 28, 11, 0x27334D);
-            screen.text(&assets.font, ">", 17, y);
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + label.chars().count() as i32 * 8, y);
         }
-        screen.text(&assets.font, labels[index], 29, y);
-        if !values[index].is_empty() {
-            let x = WIDTH as i32 - 21 - values[index].chars().count() as i32 * 8;
-            screen.text(&assets.font, &values[index], x, y);
-        }
+        screen.text(&assets.font, label, x, y);
     }
-    screen.centered_text(&assets.font, "LEFT RIGHT TO CHANGE", HEIGHT as i32 - 13);
 }
 
-fn render_play_menu(screen: &mut Screen, assets: &Assets, world_count: usize, selection: usize) {
-    screen.centered_text(&assets.font, "PLAY", 22);
+fn render_play_menu(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    world_count: usize,
+    selection: usize,
+) {
+    let _ = world_count;
     let labels = [
-        "CREATE NEW WORLD".to_owned(),
-        format!("WORLDS ({world_count})"),
-        "BACK".to_owned(),
+        localization
+            .text("minicraft.displays.title.play.load_world")
+            .to_owned(),
+        localization
+            .text("minicraft.displays.title.play.new_world")
+            .to_owned(),
     ];
-    render_centered_menu(screen, assets, &labels, selection, 65, 22);
-    screen.centered_text(&assets.font, "VERSIONED SAVES + BACKUPS", 155);
+    render_centered_menu(screen, assets, &labels, selection, 87, 10);
 }
 
 fn render_new_world(
@@ -1056,6 +1338,8 @@ fn render_new_world(
     localization: &Localization,
     settings: &Settings,
     selection: usize,
+    name: &str,
+    seed: &str,
 ) {
     const THEME_KEYS: [&str; 5] = [
         "minicraft.settings.theme.normal",
@@ -1070,77 +1354,255 @@ fn render_new_world(
         "minicraft.settings.type.mountain",
         "minicraft.settings.type.irregular",
     ];
-    screen.centered_text(&assets.font, "NEW WORLD", 18);
-    let labels = [
-        "SIZE",
-        "THEME",
-        "TERRAIN",
-        "MODE",
-        "SCORE TIME",
-        "CREATE",
-        "BACK",
+    const MODE_KEYS: [&str; 4] = [
+        "minicraft.settings.mode.survival",
+        "minicraft.settings.mode.creative",
+        "minicraft.settings.mode.hardcore",
+        "minicraft.settings.mode.score",
     ];
-    let values = [
-        settings.world_size.to_string(),
-        localization.text(THEME_KEYS[settings.theme]).to_owned(),
-        localization
-            .text(TYPE_KEYS[settings.terrain_type])
-            .to_owned(),
-        GameMode::from_index(settings.game_mode)
-            .display_name()
-            .to_owned(),
-        format!("{} MIN", settings.score_minutes),
-        String::new(),
-        String::new(),
+    let on = localization.text("minicraft.display.entries.boolean.true");
+    let off = localization.text("minicraft.display.entries.boolean.false");
+    let mut entries = vec![
+        (
+            0,
+            format!(
+                "{}: {}{}",
+                localization.text("minicraft.displays.world_gen.enter_world"),
+                name,
+                if selection == 0 { "_" } else { "" }
+            ),
+        ),
+        (
+            1,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.mode"),
+                localization.text(MODE_KEYS[settings.game_mode])
+            ),
+        ),
     ];
-    for index in 0..labels.len() {
-        let y = 34 + index as i32 * 20;
-        if index == selection {
-            screen.rect(18, y - 2, WIDTH as i32 - 36, 11, 0x27334D);
-            screen.text(&assets.font, ">", 22, y);
-        }
-        screen.text(&assets.font, labels[index], 38, y);
-        if !values[index].is_empty() {
-            let x = WIDTH as i32 - 24 - values[index].chars().count() as i32 * 8;
-            screen.text(&assets.font, &values[index], x, y);
-        }
+    if GameMode::from_index(settings.game_mode) == GameMode::Score {
+        entries.push((
+            2,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.scoretime"),
+                settings.score_minutes
+            ),
+        ));
     }
-    screen.centered_text(&assets.font, "LEFT RIGHT TO CHANGE", HEIGHT as i32 - 12);
+    entries.extend([
+        (
+            3,
+            localization
+                .text("minicraft.displays.world_gen.create_world")
+                .to_owned(),
+        ),
+        (
+            4,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.size"),
+                settings.world_size
+            ),
+        ),
+        (
+            5,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.theme"),
+                localization.text(THEME_KEYS[settings.theme])
+            ),
+        ),
+        (
+            6,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.type"),
+                localization.text(TYPE_KEYS[settings.terrain_type])
+            ),
+        ),
+        (
+            7,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.quests"),
+                if settings.quests { on } else { off }
+            ),
+        ),
+        (
+            8,
+            format!(
+                "{}: {}",
+                localization.text("minicraft.settings.tutorials"),
+                if settings.tutorials { on } else { off }
+            ),
+        ),
+        (
+            9,
+            format!(
+                "{}: {}{}",
+                localization.text("minicraft.displays.world_gen.world_seed"),
+                seed,
+                if selection == 9 { "_" } else { "" }
+            ),
+        ),
+    ]);
+    screen.centered_text(
+        &assets.font,
+        localization.text("minicraft.displays.world_gen.title"),
+        52,
+    );
+    let selected_row = entries
+        .iter()
+        .position(|(index, _)| *index == selection)
+        .unwrap_or(0);
+    let first = selected_row
+        .saturating_sub(2)
+        .min(entries.len().saturating_sub(5));
+    let width = entries
+        .iter()
+        .skip(first)
+        .take(5)
+        .map(|(_, label)| label.chars().count())
+        .max()
+        .unwrap_or(0) as i32
+        * 8;
+    let x = (WIDTH as i32 - width) / 2;
+    for (row, (index, label)) in entries.iter().skip(first).take(5).enumerate() {
+        let y = 68 + row as i32 * 18;
+        if *index == selection {
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + label.chars().count() as i32 * 8, y);
+        }
+        screen.text(&assets.font, label, x, y);
+    }
 }
 
-fn render_worlds(screen: &mut Screen, assets: &Assets, worlds: &[WorldRecord], selection: usize) {
-    screen.centered_text(&assets.font, "SELECT WORLD", 13);
+fn render_worlds(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    settings: &Settings,
+    worlds: &[WorldRecord],
+    selection: usize,
+    popup: Option<&WorldPopup>,
+) {
+    screen.centered_text(
+        &assets.font,
+        localization.text("minicraft.displays.world_select.select_world"),
+        0,
+    );
     if worlds.is_empty() {
-        screen.centered_text(&assets.font, "NO WORLDS FOUND", 74);
-        screen.centered_text(&assets.font, "ENTER TO CREATE ONE", 94);
+        screen.centered_text(&assets.font, "NO WORLDS FOUND", 92);
     } else {
         let first = selection
-            .saturating_sub(6)
-            .min(worlds.len().saturating_sub(13));
-        for (row, world) in worlds.iter().skip(first).take(13).enumerate() {
+            .saturating_sub(2)
+            .min(worlds.len().saturating_sub(5));
+        for (row, world) in worlds.iter().skip(first).take(5).enumerate() {
             let index = first + row;
-            let y = 32 + row as i32 * 11;
+            let label = &world.name;
+            let y = 76 + row as i32 * 10;
             if index == selection {
-                screen.rect(25, y - 1, 238, 9, 0x27334D);
-                screen.text(&assets.font, ">", 29, y);
+                let width = label.chars().count() as i32 * 8;
+                let x = (WIDTH as i32 - width) / 2;
+                screen.text(&assets.font, ">", x - 8, y);
+                screen.text(&assets.font, "<", x + width, y);
             }
-            screen.text(&assets.font, &world.name, 41, y);
-            let summary = format!("{} {}", world.spec.size, world.mode.display_name());
-            let x = WIDTH as i32 - 29 - summary.chars().count() as i32 * 8;
-            screen.text(&assets.font, &summary, x, y);
+            screen.centered_text(&assets.font, label, y);
+        }
+        screen.centered_text(
+            &assets.font,
+            &localization.format(
+                "minicraft.displays.world_select.display.world_version",
+                &["2.2.4"],
+            ),
+            28,
+        );
+    }
+    for (row, text) in [
+        localization.format(
+            "minicraft.displays.world_select.display.help.0",
+            &[&settings.key_bindings.select],
+        ),
+        localization.format(
+            "minicraft.displays.world_select.display.help.1",
+            &[&settings.key_bindings.exit],
+        ),
+        localization.format(
+            "minicraft.displays.world_select.display.help.2",
+            &["SHIFT-C"],
+        ),
+        localization.format(
+            "minicraft.displays.world_select.display.help.3",
+            &["SHIFT-R"],
+        ),
+        localization.format(
+            "minicraft.displays.world_select.display.help.4",
+            &["SHIFT-D"],
+        ),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let y = [
+            HEIGHT as i32 - 60,
+            HEIGHT as i32 - 40,
+            HEIGHT as i32 - 24,
+            HEIGHT as i32 - 16,
+            HEIGHT as i32 - 8,
+        ][row];
+        screen.centered_text(&assets.font, text, y);
+    }
+    if let Some(dialog) = popup {
+        render_world_popup(screen, assets, localization, worlds, selection, dialog);
+    }
+}
+
+fn render_world_popup(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    worlds: &[WorldRecord],
+    selection: usize,
+    popup: &WorldPopup,
+) {
+    let (x, y, width, height) = (28, 56, WIDTH as i32 - 56, 80);
+    screen.rect(x, y, width, height, 0x08080C);
+    screen.frame(x, y, width, height, 0xC8C8C8);
+    match popup.kind {
+        WorldPopupKind::Copy | WorldPopupKind::Rename => {
+            screen.centered_text(
+                &assets.font,
+                localization.text("minicraft.displays.world_select.popups.display.change"),
+                y + 12,
+            );
+            screen.centered_text(&assets.font, &format!("{}{}", popup.text, "_"), y + 30);
+        }
+        WorldPopupKind::Delete => {
+            screen.centered_text(&assets.font, "ARE YOU SURE YOU WANT TO DELETE", y + 12);
+            screen.centered_text(
+                &assets.font,
+                worlds
+                    .get(selection)
+                    .map(|world| world.name.as_str())
+                    .unwrap_or(""),
+                y + 26,
+            );
+            screen.centered_text(&assets.font, "THIS CAN NOT BE UNDONE!", y + 40);
         }
     }
-    screen.centered_text(&assets.font, "SEED-BASED WORLD RECORDS", HEIGHT as i32 - 12);
+    screen.centered_text(&assets.font, "ENTER TO CONFIRM", y + height - 22);
+    screen.centered_text(&assets.font, "ESC TO CANCEL", y + height - 12);
 }
 
 fn render_help(screen: &mut Screen, assets: &Assets, selection: usize) {
-    screen.centered_text(&assets.font, "HELP", 22);
+    screen.centered_text(&assets.font, "HELP", 66);
     let labels: Vec<String> = Book::ALL
         .iter()
         .map(|book| book.title().to_owned())
         .collect();
-    render_centered_menu(screen, assets, &labels, selection, 58, 21);
-    screen.centered_text(&assets.font, "ORIGINAL 2.2.4 BOOK CONTENT", 157);
+    render_centered_menu(screen, assets, &labels, selection, 91, 9);
 }
 
 fn render_book(screen: &mut Screen, assets: &Assets, book: Book, page: usize) {
@@ -1233,6 +1695,56 @@ fn render_controls(
     }
 }
 
+fn render_control_guide(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    selection: usize,
+    controller: bool,
+) {
+    screen.centered_text(
+        &assets.font,
+        localization.text("minicraft.displays.controls"),
+        0,
+    );
+    screen.centered_text(
+        &assets.font,
+        localization.text(if controller {
+            "minicraft.displays.controls.display.controller"
+        } else {
+            "minicraft.displays.controls.display.keyboard"
+        }),
+        10,
+    );
+    let count: usize = if controller { 16 } else { 23 };
+    let first = selection.saturating_sub(8).min(count.saturating_sub(17));
+    for (row, index) in (first..count).take(17).enumerate() {
+        let key = format!(
+            "minicraft.displays.controls.display.{}.{index:02}",
+            if controller { "controller" } else { "keyboard" }
+        );
+        let label = localization.text(&key);
+        let y = 20 + row as i32 * 8;
+        if index == selection {
+            let width = label.chars().count() as i32 * 8;
+            let x = (WIDTH as i32 - width) / 2;
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + width, y);
+        }
+        screen.centered_text(&assets.font, label, y);
+    }
+    screen.centered_text(
+        &assets.font,
+        if controller {
+            "CONTROLLER INPUTS"
+        } else {
+            "KEYBOARD INPUTS"
+        },
+        HEIGHT as i32 - 16,
+    );
+    screen.centered_text(&assets.font, "LEFT RIGHT TO SWITCH", HEIGHT as i32 - 8);
+}
+
 fn render_centered_menu(
     screen: &mut Screen,
     assets: &Assets,
@@ -1244,8 +1756,10 @@ fn render_centered_menu(
     for (index, label) in labels.iter().enumerate() {
         let y = start_y + index as i32 * spacing;
         if index == selection {
-            screen.rect(48, y - 2, WIDTH as i32 - 96, 11, 0x27334D);
-            screen.text(&assets.font, ">", 54, y);
+            let width = label.chars().count() as i32 * 8;
+            let x = (WIDTH as i32 - width) / 2;
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + width, y);
         }
         screen.centered_text(&assets.font, label, y);
     }
@@ -1283,44 +1797,61 @@ fn render_skins(
     localization: &Localization,
     skins: &[String],
     selection: usize,
+    ticks: u64,
 ) {
     screen.centered_text(
         &assets.font,
         localization.text("minicraft.displays.skin"),
-        12,
+        16,
     );
+    let (source_x, flip_x) = skin_preview_frame(ticks);
     screen.blit_region(
         &assets.skin,
         WIDTH as i32 / 2 - 8,
-        31,
-        0,
+        40,
+        source_x,
         assets.skin_row,
         16,
         16,
-        false,
+        flip_x,
     );
     let first = selection
-        .saturating_sub(5)
-        .min(skins.len().saturating_sub(11));
-    for (row, skin) in skins.iter().skip(first).take(11).enumerate() {
+        .saturating_sub(3)
+        .min(skins.len().saturating_sub(8));
+    for (row, skin) in skins.iter().skip(first).take(8).enumerate() {
         let index = first + row;
-        let y = 59 + row as i32 * 10;
+        let y = 82 + row as i32 * 10;
         if index == selection {
-            screen.rect(38, y - 1, 212, 9, 0x27334D);
-            screen.text(&assets.font, ">", 41, y);
+            let name_width = if skin.starts_with("minicraft.skin.") {
+                localization.text(skin).chars().count() as i32 * 8
+            } else {
+                skin.chars().count() as i32 * 8
+            };
+            let x = (WIDTH as i32 - name_width) / 2;
+            screen.text(&assets.font, ">", x - 8, y);
+            screen.text(&assets.font, "<", x + name_width, y);
         }
         let name = if skin.starts_with("minicraft.skin.") {
             localization.text(skin)
         } else {
             skin
         };
-        screen.text(&assets.font, name, 53, y);
+        screen.centered_text(&assets.font, name, y);
     }
-    screen.centered_text(
-        &assets.font,
-        "ENTER TO APPLY  ESC TO CANCEL",
-        HEIGHT as i32 - 11,
-    );
+    screen.centered_text(&assets.font, "UP DOWN TO MOVE", HEIGHT as i32 - 17);
+    screen.centered_text(&assets.font, "ENTER SELECT  ESC EXIT", HEIGHT as i32 - 9);
+}
+
+fn skin_preview_frame(ticks: u64) -> (usize, bool) {
+    let sprite_index = (ticks / 40 % 8) as usize;
+    let direction = sprite_index / 2;
+    let frame = sprite_index % 2;
+    match direction {
+        0 => (0, frame == 1),
+        1 => (16, frame == 1),
+        2 => (32 + frame * 16, true),
+        _ => (32 + frame * 16, false),
+    }
 }
 
 fn render_resource_packs(
@@ -1370,6 +1901,38 @@ fn random_seed() -> i64 {
         .unwrap_or(0x100)
 }
 
+fn edit_text(value: &mut String, input: &Input, max_chars: usize) {
+    if input.backspace {
+        value.pop();
+    }
+    for character in &input.text {
+        if value.chars().count() >= max_chars || character.is_control() {
+            break;
+        }
+        value.push(*character);
+    }
+}
+
+fn parse_world_seed(value: &str) -> Option<i64> {
+    if value.is_empty() {
+        return None;
+    }
+    if value.len() < 20
+        && value
+            .strip_prefix('-')
+            .unwrap_or(value)
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return value.parse().ok();
+    }
+    let mut seed = 1_125_899_906_842_597_i64;
+    for character in value.encode_utf16() {
+        seed = seed.wrapping_mul(31).wrapping_add(i64::from(character));
+    }
+    Some(seed)
+}
+
 fn play_options(settings: &Settings, mode: GameMode, score_minutes: usize) -> PlayOptions {
     PlayOptions {
         difficulty: settings.difficulty,
@@ -1417,4 +1980,76 @@ fn reload_resources(
     warnings.extend(discovery_warnings.iter().cloned());
     warnings.extend(assets.warnings.iter().cloned());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Transition, parse_world_seed, skin_preview_frame, tick_worlds};
+    use crate::{
+        input::Input,
+        world::{GameMode, WorldSpec},
+        worlds::WorldRecord,
+    };
+
+    #[test]
+    fn skin_preview_cycles_java_direction_and_walk_frames() {
+        assert_eq!(skin_preview_frame(0), (0, false));
+        assert_eq!(skin_preview_frame(40), (0, true));
+        assert_eq!(skin_preview_frame(80), (16, false));
+        assert_eq!(skin_preview_frame(120), (16, true));
+        assert_eq!(skin_preview_frame(160), (32, true));
+        assert_eq!(skin_preview_frame(200), (48, true));
+        assert_eq!(skin_preview_frame(240), (32, false));
+        assert_eq!(skin_preview_frame(280), (48, false));
+        assert_eq!(skin_preview_frame(320), (0, false));
+    }
+
+    #[test]
+    fn world_seed_input_matches_java_numeric_and_string_rules() {
+        assert_eq!(parse_world_seed(""), None);
+        assert_eq!(parse_world_seed("-42"), Some(-42));
+        assert_eq!(parse_world_seed("abc"), Some(-3_351_804_022_671_199_651));
+    }
+
+    #[test]
+    fn world_select_shift_actions_open_java_style_confirmation_popups() {
+        let worlds = vec![WorldRecord {
+            name: "ORIGINAL".to_owned(),
+            seed: 1,
+            spec: WorldSpec::default(),
+            mode: GameMode::Survival,
+            score_minutes: 20,
+            directory: std::path::PathBuf::new(),
+        }];
+        let mut selection = 0;
+        let mut popup = None;
+        assert!(matches!(
+            tick_worlds(
+                &mut selection,
+                &mut popup,
+                &Input {
+                    world_rename: true,
+                    ..Input::default()
+                },
+                &worlds,
+            ),
+            Transition::None
+        ));
+        assert_eq!(
+            popup.as_ref().map(|popup| popup.text.as_str()),
+            Some("ORIGINAL")
+        );
+        assert!(matches!(
+            tick_worlds(
+                &mut selection,
+                &mut popup,
+                &Input {
+                    select: true,
+                    ..Input::default()
+                },
+                &worlds,
+            ),
+            Transition::RenameWorld(0, name) if name == "ORIGINAL"
+        ));
+    }
 }

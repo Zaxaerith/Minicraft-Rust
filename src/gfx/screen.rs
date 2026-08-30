@@ -68,6 +68,24 @@ impl Screen {
         height: usize,
         flip_x: bool,
     ) {
+        self.blit_region_transformed(
+            image, source_x, source_y, width, height, x, y, flip_x, false,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_region_transformed(
+        &mut self,
+        image: &Image,
+        source_x: usize,
+        source_y: usize,
+        width: usize,
+        height: usize,
+        x: i32,
+        y: i32,
+        flip_x: bool,
+        flip_y: bool,
+    ) {
         for yy in 0..height {
             let destination_y = y + yy as i32;
             if !(0..HEIGHT as i32).contains(&destination_y) {
@@ -79,7 +97,9 @@ impl Screen {
                     continue;
                 }
                 let source_offset = if flip_x { width - xx - 1 } else { xx };
-                if let Some((color, alpha)) = image.pixel(source_x + source_offset, source_y + yy)
+                let source_row = if flip_y { height - yy - 1 } else { yy };
+                if let Some((color, alpha)) =
+                    image.pixel(source_x + source_offset, source_y + source_row)
                     && alpha != 0
                 {
                     let index = destination_x as usize + destination_y as usize * WIDTH;

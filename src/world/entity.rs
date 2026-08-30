@@ -51,6 +51,7 @@ pub enum EntityKind {
     Furniture(FurnitureKind),
     Projectile(Projectile),
     Particle(ParticleKind),
+    TextParticle(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,6 +254,18 @@ impl EntityArena {
             .count()
     }
 
+    pub fn active_boss(&self, species: NaturalMob) -> Option<(u16, u16)> {
+        self.entities.iter().find_map(|entity| {
+            if entity.removed {
+                return None;
+            }
+            let EntityKind::Mob(mob) = &entity.kind else {
+                return None;
+            };
+            (mob.species == species).then_some((mob.health, mob.max_health))
+        })
+    }
+
     pub fn spawn_mob(&mut self, species: NaturalMob, x: i32, y: i32) -> u64 {
         let max_health = mob_health(species);
         self.insert(
@@ -394,6 +407,10 @@ impl EntityArena {
         self.insert(x, y, EntityKind::Particle(kind))
     }
 
+    pub fn spawn_text_particle(&mut self, text: String, x: i32, y: i32) -> u64 {
+        self.insert(x, y, EntityKind::TextParticle(text))
+    }
+
     pub fn has_mob(&self, species: NaturalMob) -> bool {
         self.entities
             .iter()
@@ -514,7 +531,7 @@ impl EntityArena {
                         entity.removed = true;
                     }
                 }
-                EntityKind::Particle(_) => {
+                EntityKind::Particle(_) | EntityKind::TextParticle(_) => {
                     if entity.age > 30 {
                         entity.removed = true;
                     }
@@ -1197,12 +1214,17 @@ mod tests {
         let mut arena = EntityArena::default();
         let mut random = JavaRandom::new(12);
         arena.spawn_mob(NaturalMob::AirWizard, 40, 40);
+        assert_eq!(
+            arena.active_boss(NaturalMob::AirWizard),
+            Some((2_000, 2_000))
+        );
         assert!(
             arena
                 .damage_nearest(40, 40, 2_000, &mut random)
                 .unwrap()
                 .defeated
         );
+        assert_eq!(arena.active_boss(NaturalMob::AirWizard), None);
         arena.spawn_mob(NaturalMob::ObsidianKnight, 60, 40);
         assert!(
             arena
