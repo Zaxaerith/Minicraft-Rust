@@ -4,26 +4,18 @@ on:
   push:
   pull_request:
 
-env:
-  # SDL2 0.38's bundled CMake project predates CMake 4's policy cutoff.
-  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-and-package:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows-x86_64
-            binary: target/release/minicraft-rust.exe
-          - os: ubuntu-latest
-            platform: linux-x86_64
-            binary: target/release/minicraft-rust
-          - os: macos-latest
-            platform: macos-native
-            binary: target/release/minicraft-rust
-    runs-on: ${{ matrix.os }}
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -34,17 +26,17 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo build --release --locked
       - name: Embedded-resource smoke test
-        env:
-          BINARY: ${{ matrix.binary }}
+        shell: pwsh
         run: >-
-          python -c "import os,subprocess,tempfile;
-          subprocess.check_call([os.environ['BINARY'],'--self-check','--savedir',tempfile.mkdtemp()])"
-      - name: Deterministic package
+          python -c "import subprocess,tempfile;
+          subprocess.check_call([r'target/release/minicraft-rust.exe','--self-check','--savedir',tempfile.mkdtemp()])"
+      - name: Package Windows x64
+        shell: pwsh
         run: >-
-          python scripts/package.py --platform ${{ matrix.platform }}
-          --binary ${{ matrix.binary }} --output dist
+          python scripts/package.py --platform windows-x86_64
+          --binary target/release/minicraft-rust.exe --output dist
       - uses: actions/upload-artifact@v4
         with:
-          name: minicraft-rust-${{ matrix.platform }}
+          name: minicraft-rust-windows-x86_64
           path: dist/*.zip
           if-no-files-found: error

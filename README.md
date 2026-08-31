@@ -116,7 +116,8 @@ python scripts\package.py --platform windows-x86_64 --binary target\release\mini
 ```
 
 The GitHub workflows apply the locked test, lint, build, self-check, and package
-gates to Windows, Linux, and macOS.
+gates only to Windows x64. GitHub releases contain only the Windows x64 archive;
+Linux and macOS users build the source locally.
 
 For renderer diagnostics without opening a window:
 

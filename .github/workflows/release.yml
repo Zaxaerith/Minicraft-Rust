@@ -7,56 +7,41 @@ on:
 permissions:
   contents: write
 
-env:
-  # SDL2 0.38's bundled CMake project predates CMake 4's policy cutoff.
-  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-
 jobs:
-  package:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows-x86_64
-            binary: target/release/minicraft-rust.exe
-          - os: ubuntu-latest
-            platform: linux-x86_64
-            binary: target/release/minicraft-rust
-          - os: macos-latest
-            platform: macos-native
-            binary: target/release/minicraft-rust
-    runs-on: ${{ matrix.os }}
+  release-windows-x64:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
       - run: cargo build --release --locked
-      - env:
-          BINARY: ${{ matrix.binary }}
+      - name: Embedded-resource smoke test
+        shell: pwsh
         run: >-
-          python -c "import os,subprocess,tempfile;
-          subprocess.check_call([os.environ['BINARY'],'--self-check','--savedir',tempfile.mkdtemp()])"
-      - run: >-
-          python scripts/package.py --platform ${{ matrix.platform }}
-          --binary ${{ matrix.binary }} --output dist
+          python -c "import subprocess,tempfile;
+          subprocess.check_call([r'target/release/minicraft-rust.exe','--self-check','--savedir',tempfile.mkdtemp()])"
+      - name: Package Windows x64
+        shell: pwsh
+        run: >-
+          python scripts/package.py --platform windows-x86_64
+          --binary target/release/minicraft-rust.exe --output dist
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.platform }}
+          name: release-windows-x86_64
           path: dist/*.zip
-
-  publish:
-    needs: package
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: release-*
-          path: dist
-          merge-multiple: true
-      - env:
+          if-no-files-found: error
+      - name: Create GitHub release and upload Windows archive
+        shell: pwsh
+        env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "Minicraft Rust $GITHUB_REF_NAME"
-          gh release upload "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "Minicraft Rust $env:GITHUB_REF_NAME"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $archive = Get-ChildItem -Path dist -Filter '*.zip' | Select-Object -ExpandProperty FullName
+          gh release upload $env:GITHUB_REF_NAME $archive --repo $env:GITHUB_REPOSITORY --clobber
