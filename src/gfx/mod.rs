@@ -1,5 +1,1 @@
-mod image;
-mod screen;
-
-pub use image::Image;
-pub use screen::{HEIGHT, Screen, WIDTH};
+pub use minicraft_client::gfx::{HEIGHT, Image, Screen, WIDTH};

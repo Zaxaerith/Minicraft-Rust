@@ -1,7 +1,23 @@
+use minicraft_client::core::notifications::Notifications;
+use minicraft_client::core::updater::Updater;
+use minicraft_client::screen::pause::{PauseAction, PausePage, PauseSession, pause_actions};
+
+mod clock_save;
+mod core_update;
+mod end_game;
+mod level_update;
+pub(crate) mod notifications;
+mod pause;
+mod pause_save;
+mod player_update;
+mod render;
+mod sleep;
+
 mod entity;
 mod generation;
 mod java_save;
-mod random;
+mod quest_tree;
+pub(crate) mod random;
 pub mod spawn;
 mod structure;
 mod tile_behavior;
@@ -21,15 +37,20 @@ use crate::{
         HAND_RECIPES, Inventory, ItemId, ItemStack, LOOM_RECIPES, OVEN_RECIPES, PotionKind,
         ToolItem, ToolKind, ToolTier, WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
     },
+    localization::Localization,
 };
 
 pub use entity::FurnitureKind;
 use entity::{EntityArena, EntityKind};
 pub use java_save::{import_java_save, probe_java_save};
+use random::JavaRandom;
 
 const TILE_SIZE: i32 = 16;
-const DAY_LENGTH: u32 = 64_800;
+const DAY_LENGTH: u32 = minicraft_client::core::updater::DAY_LENGTH;
 const MAX_STAT: u8 = 10;
+fn default_render_gui() -> bool {
+    true
+}
 const MAX_HEALTH: u8 = 20;
 const MAX_HUNGER_TICKS: i16 = 400;
 const HUNGER_STAMINA_STEPS: [i16; 3] = [10, 7, 5];
@@ -128,6 +149,18 @@ pub struct PlayOptions {
     pub quests: bool,
     pub show_quests: bool,
     pub custom_skin: bool,
+}
+
+pub(crate) struct CraftingParityState {
+    pub capacity: usize,
+    pub used_slots: usize,
+    pub selection: usize,
+    pub items: Vec<(String, u32)>,
+    pub tools: Vec<(String, u32)>,
+    pub recipe_order: Vec<String>,
+    pub craftable: Vec<bool>,
+    pub selected_have: usize,
+    pub selected_costs: Vec<(String, u16, u16)>,
 }
 
 impl PlayOptions {
@@ -480,6 +513,23 @@ fn default_direction() -> Direction {
     Direction::Down
 }
 
+fn direction_for_move(horizontal: i32, vertical: i32, current: Direction) -> Direction {
+    if horizontal == 0 && vertical == 0 {
+        return current;
+    }
+    if horizontal.abs() > vertical.abs() {
+        if horizontal < 0 {
+            Direction::Left
+        } else {
+            Direction::Right
+        }
+    } else if vertical < 0 {
+        Direction::Up
+    } else {
+        Direction::Down
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ActiveItem {
     Stack(ItemId),
@@ -552,38 +602,6 @@ pub enum WorldAction {
     QuitWithoutSaving,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-enum PausePage {
-    #[default]
-    Main,
-    Options,
-    Achievements,
-    Quests,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PauseAction {
-    Return,
-    Options,
-    Achievements,
-    Quests,
-    Save,
-    MainMenu,
-}
-
-fn pause_actions(quests_enabled: bool) -> Vec<PauseAction> {
-    let mut actions = vec![
-        PauseAction::Return,
-        PauseAction::Options,
-        PauseAction::Achievements,
-    ];
-    if quests_enabled {
-        actions.push(PauseAction::Quests);
-    }
-    actions.extend([PauseAction::Save, PauseAction::MainMenu]);
-    actions
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct World {
     width: usize,
@@ -593,17 +611,30 @@ pub struct World {
     player: Player,
     seed: i64,
     tick: u64,
-    day_tick: u32,
+    #[serde(flatten, with = "clock_save")]
+    clock: minicraft_client::core::clock::SharedClock,
+    #[serde(skip, default = "default_render_gui")]
+    render_gui: bool,
+    #[serde(default, with = "core_update")]
+    updater: Updater,
     days: u32,
     difficulty: usize,
     mode: GameMode,
     score: u32,
-    score_ticks: u32,
+    score_ticks: i32,
     score_multiplier: u8,
     multiplier_ticks: u16,
     game_over: bool,
+    #[serde(default, with = "end_game")]
+    end_game: Option<minicraft_client::screen::end_game::EndGameDisplay>,
     story_complete: bool,
     sleeping: u16,
+    #[serde(default)]
+    bed_level: Option<usize>,
+    #[serde(default)]
+    respawn_tile: Option<(i32, i32)>,
+    #[serde(skip)]
+    sleep_speed: u8,
     tutorials_enabled: bool,
     quests_enabled: bool,
     show_quests: bool,
@@ -611,20 +642,23 @@ pub struct World {
     signs: Vec<HashMap<usize, String>>,
     sign_editor: Option<SignEditor>,
     book_open: Option<(Book, usize)>,
-    paused: bool,
-    pause_selection: usize,
-    #[serde(default)]
-    pause_page: PausePage,
-    #[serde(default)]
-    pause_confirm: bool,
+    #[serde(flatten, with = "pause_save")]
+    pause: PauseSession,
+    #[serde(skip)]
+    quest_tree_state: quest_tree::State,
     inventory_open: bool,
     inventory_selection: usize,
     inventory_item_selection: usize,
     inventory_pane: usize,
     crafting_station: Option<FurnitureKind>,
     #[serde(default)]
+    crafting_order: Vec<usize>,
+    #[serde(default)]
     personal_crafting: bool,
-    notification: Option<(String, u16)>,
+    #[serde(default, rename = "notification", with = "notifications")]
+    notifications: Notifications,
+    #[serde(skip)]
+    notification_context: notifications::Context,
     air_wizard_defeated: bool,
     obsidian_knight_defeated: bool,
     random: random::JavaRandom,
@@ -669,6 +703,7 @@ impl World {
             ));
         }
         let mut world = save.world;
+        pause_save::normalize(&mut world.pause, world.quests_enabled);
         world.validate_save()?;
         let overflow = world.player.inventory.set_capacity(27);
         for stack in overflow {
@@ -685,12 +720,8 @@ impl World {
         Ok(world)
     }
 
-    pub fn autosave_due(&self) -> bool {
-        self.tick > 0 && self.tick.is_multiple_of(1_800)
-    }
-
-    pub fn save_tick(&self) -> u64 {
-        self.tick
+    pub fn achievement_unlocked(&self, id: &str) -> bool {
+        self.progress.achievement_unlocked(id)
     }
 
     pub fn take_sound_events(&mut self) -> Vec<SoundEffect> {
@@ -699,24 +730,476 @@ impl World {
 
     /// Menu feedback is sampled on the render/input frame so it does not wait for
     /// the next fixed 60 Hz world tick. Gameplay sounds remain tick-driven.
-    pub fn immediate_menu_sound(&self, input: &Input) -> Option<SoundEffect> {
-        if self.paused {
+    pub fn immediate_menu_sounds(&self, input: &Input) -> Vec<SoundEffect> {
+        if self.pause.is_open() {
+            if input.exit {
+                // Game.exitDisplay() in 2.2.4 always plays craft.wav when closing a display.
+                return if self.pause.view().page == PausePage::Achievements {
+                    // AchievementsDisplay.onExit() follows Game.exitDisplay().
+                    vec![SoundEffect::Craft, SoundEffect::Confirm]
+                } else {
+                    vec![SoundEffect::Craft]
+                };
+            }
+            if self.pause.view().page == PausePage::QuestSeriesViewer {
+                let mut selection = self.pause.view().selection;
+                let mut state = self.quest_tree_state.clone();
+                return match self.quest_tree().tick(&mut selection, &mut state, input) {
+                    quest_tree::Action::Moved => vec![SoundEffect::Select],
+                    quest_tree::Action::Open => vec![SoundEffect::Confirm],
+                    quest_tree::Action::None => Vec::new(),
+                };
+            }
             if input.select {
-                return Some(SoundEffect::Confirm);
+                if matches!(
+                    self.pause.view().page,
+                    PausePage::Achievements | PausePage::QuestDetail
+                ) {
+                    // Achievement entries have a null SelectEntry callback.
+                    return Vec::new();
+                }
+                if self.pause.view().page == PausePage::Quests
+                    && self.quest_group_views_for_current_tab().is_empty()
+                {
+                    return Vec::new();
+                }
+                if self.pause.view().confirm && self.pause.view().selection == 0 {
+                    // SelectEntry plays confirm before Cancel calls Game.exitDisplay().
+                    return vec![SoundEffect::Confirm, SoundEffect::Craft];
+                }
+                return vec![SoundEffect::Confirm];
             }
-            if input.up_pressed
-                || input.down_pressed
-                || (self.pause_page == PausePage::Options
-                    && (input.left_pressed || input.right_pressed))
+            if input.up_pressed || input.down_pressed {
+                let selectable = match self.pause.view().page {
+                    PausePage::Quests => !self.quest_group_views_for_current_tab().is_empty(),
+                    PausePage::QuestDetail => false,
+                    _ => true,
+                };
+                if selectable {
+                    return vec![SoundEffect::Select];
+                }
+            }
+            if self.pause.view().page == PausePage::Options
+                && (input.left_pressed || input.right_pressed)
             {
-                return Some(SoundEffect::Select);
+                return vec![SoundEffect::Select];
             }
-        } else if self.inventory_open
-            && (input.up_pressed || input.down_pressed || input.left_pressed || input.right_pressed)
-        {
-            return Some(SoundEffect::Select);
+        } else if self.inventory_open {
+            if input.exit || input.menu || (self.personal_crafting && input.craft) {
+                return vec![SoundEffect::Craft];
+            }
+            if input.up_pressed || input.down_pressed || input.left_pressed || input.right_pressed {
+                return vec![SoundEffect::Select];
+            }
+            if self.personal_crafting || self.crafting_station.is_some() {
+                if input.select || input.attack {
+                    let recipes = ordered_recipe_views(
+                        self.crafting_station,
+                        &self.player.inventory,
+                        self.mode == GameMode::Creative,
+                        &self.crafting_order,
+                    );
+                    if recipes.get(self.inventory_selection).is_some_and(|recipe| {
+                        recipe_can_craft(
+                            recipe,
+                            &self.player.inventory,
+                            self.mode == GameMode::Creative,
+                        )
+                    }) {
+                        return vec![SoundEffect::Craft];
+                    }
+                }
+            } else if (input.select || input.attack)
+                && self.inventory_item_selection < self.player.inventory.used_slots()
+            {
+                // PlayerInvDisplay equips the selected item and closes through
+                // Game.exitDisplay(), which plays craft.wav in Java 2.2.4.
+                return vec![SoundEffect::Craft];
+            }
         }
-        None
+        Vec::new()
+    }
+
+    pub(crate) fn pause_state_for_parity(&self) -> (bool, &'static str, usize) {
+        if !self.pause.is_open() {
+            return (false, "gameplay", 0);
+        }
+        if self.pause.view().confirm {
+            return (true, "exit_confirm", self.pause.view().selection);
+        }
+        let screen = match self.pause.view().page {
+            PausePage::Main => "pause",
+            PausePage::Options => "pause_options",
+            PausePage::Achievements => "achievements",
+            PausePage::Quests => "quests",
+            PausePage::QuestSeriesInfo => "quest_series_info",
+            PausePage::QuestSeriesViewer => "quest_series_viewer",
+            PausePage::QuestDetail => "quest_detail",
+        };
+        let selection = if self.pause.view().page == PausePage::Quests {
+            self.pause.view().quest_tab
+        } else {
+            self.pause.view().selection
+        };
+        (true, screen, selection)
+    }
+
+    pub(crate) fn prepare_player_motion_parity(&mut self) {
+        let level = &mut self.levels[self.current_level];
+        level.tiles.fill(Tile::Grass);
+        level.data.fill(0);
+        level.pending_spawns.clear();
+        level.entities = EntityArena::default();
+        self.player.x = (self.width as i32 / 2) * TILE_SIZE + 8;
+        self.player.y = (self.height as i32 / 2) * TILE_SIZE + 8;
+        self.player.direction = Direction::Down;
+        self.player.walk_distance = 0;
+        self.player.step_count = 0;
+        self.player.stamina = MAX_STAT;
+        self.player.stamina_recharge = 0;
+        self.player.stamina_recharge_delay = 0;
+        self.player.hunger = MAX_STAT;
+        self.player.hunger_ticks = MAX_HUNGER_TICKS;
+        self.player.hunger_stamina_count = HUNGER_STAMINA_STEPS[self.difficulty];
+        self.tick = 0;
+        self.clock.set_day_tick(0);
+        self.updater = Updater::default();
+    }
+
+    pub(crate) fn set_player_stats_for_parity(
+        &mut self,
+        stamina: u8,
+        stamina_recharge: u8,
+        stamina_recharge_delay: u8,
+    ) {
+        self.player.stamina = stamina.min(MAX_STAT);
+        self.player.stamina_recharge = stamina_recharge;
+        self.player.stamina_recharge_delay = stamina_recharge_delay;
+    }
+
+    pub(crate) fn set_obstacle_for_parity(&mut self, dx: i32, dy: i32, solid: bool) {
+        let tile_x = self.player.x.div_euclid(TILE_SIZE) + dx;
+        let tile_y = self.player.y.div_euclid(TILE_SIZE) + dy;
+        if tile_x < 0 || tile_y < 0 {
+            return;
+        }
+        let index = tile_x as usize + tile_y as usize * self.width;
+        if index < self.levels[self.current_level].tiles.len() {
+            self.levels[self.current_level].tiles[index] =
+                if solid { Tile::Rock } else { Tile::Grass };
+            self.levels[self.current_level].data[index] = 0;
+        }
+    }
+
+    pub(crate) fn player_motion_state_for_parity(
+        &self,
+    ) -> (i32, i32, &'static str, u32, u8, u8, u8, u8) {
+        let direction = match self.player.direction {
+            Direction::Down => "down",
+            Direction::Up => "up",
+            Direction::Left => "left",
+            Direction::Right => "right",
+        };
+        (
+            self.player.x,
+            self.player.y,
+            direction,
+            self.player.walk_distance,
+            self.player.stamina,
+            self.player.stamina_recharge,
+            self.player.stamina_recharge_delay,
+            self.player.step_count,
+        )
+    }
+
+    pub(crate) fn prepare_combat_parity(&mut self, seed: i64, tool: Option<ToolKind>) {
+        self.prepare_player_motion_parity();
+        self.random = JavaRandom::new(seed);
+        self.player.direction = Direction::Right;
+        self.player.attack_time = 0;
+        self.player.attack_item = None;
+        self.player.inventory = Inventory::new(27);
+        self.player.active_item = tool.map(|kind| {
+            let index = self
+                .player
+                .inventory
+                .add_tool(ToolItem::new(kind, ToolTier::Wood))
+                .expect("empty parity inventory accepts one tool");
+            ActiveItem::Tool(index)
+        });
+        let tile_x = self.player.x.div_euclid(TILE_SIZE) + 1;
+        let tile_y = self.player.y.div_euclid(TILE_SIZE);
+        let index = tile_x as usize + tile_y as usize * self.width;
+        self.levels[self.current_level].tiles[index] = Tile::Tree;
+        self.levels[self.current_level].data[index] = 0;
+        self.sound_events.clear();
+    }
+
+    /// Runs only the deterministic Player.tick portions surrounding attack input.
+    /// Random tile ticks, natural spawning, and unrelated entity AI have their own
+    /// parity adapters and would otherwise obscure the combat random streams.
+    pub(crate) fn combat_attack_for_parity(&mut self) {
+        self.player.attack_time = self.player.attack_time.saturating_sub(1);
+        if self.player.attack_time == 0 {
+            self.player.attack_item = None;
+        }
+        self.tick_survival_stats();
+        if self.player.stamina > 0 {
+            self.player.stamina -= 1;
+            self.player.stamina_recharge = 0;
+            self.attack();
+        }
+    }
+
+    pub(crate) fn combat_state_for_parity(
+        &self,
+    ) -> (String, u16, u8, u8, u32, i32, u32, Vec<String>) {
+        let tile_x = self.player.x.div_euclid(TILE_SIZE) + 1;
+        let tile_y = self.player.y.div_euclid(TILE_SIZE);
+        let index = tile_x as usize + tile_y as usize * self.width;
+        let level = &self.levels[self.current_level];
+        let tool_durability = self
+            .active_tool()
+            .map_or(-1, |tool| i32::from(tool.durability));
+        let mut smash_count = 0_u32;
+        let mut text_values = Vec::new();
+        for entity in level.entities.entities() {
+            match &entity.kind {
+                EntityKind::Particle(entity::ParticleKind::Smash) => smash_count += 1,
+                EntityKind::TextParticle(text) => text_values.push(text.clone()),
+                _ => {}
+            }
+        }
+        let tile = match level.tiles[index] {
+            Tile::Tree => "tree".to_owned(),
+            Tile::Grass => "grass".to_owned(),
+            tile => tile_progress_name(tile),
+        };
+        (
+            tile,
+            level.data[index],
+            self.player.stamina,
+            self.player.attack_time,
+            self.player.walk_distance,
+            tool_durability,
+            smash_count,
+            text_values,
+        )
+    }
+
+    pub(crate) fn prepare_crafting_parity(
+        &mut self,
+        workbench: bool,
+        wood: u16,
+        coal: u16,
+        stone: u16,
+        string: u16,
+    ) {
+        self.prepare_player_motion_parity();
+        self.player.inventory = Inventory::new(27);
+        for (item, count) in [
+            (ItemId::Wood, wood),
+            (ItemId::Coal, coal),
+            (ItemId::Stone, stone),
+            (ItemId::String, string),
+        ] {
+            if count > 0 {
+                self.player.inventory.add(item, count);
+            }
+        }
+        self.player.active_item = None;
+        self.pause.close();
+        self.pause.begin_tick();
+        self.inventory_open = true;
+        self.personal_crafting = !workbench;
+        self.crafting_station = workbench.then_some(FurnitureKind::Workbench);
+        self.inventory_pane = 1;
+        self.inventory_selection = 0;
+        self.refresh_crafting_order();
+        self.sound_events.clear();
+    }
+
+    pub(crate) fn prepare_inventory_audio_parity(&mut self) {
+        self.prepare_player_motion_parity();
+        self.player.inventory = Inventory::new(27);
+        self.player.inventory.add(ItemId::Wood, 3);
+        self.player.inventory.add(ItemId::Coal, 2);
+        self.player.active_item = None;
+        self.pause.close();
+        self.pause.begin_tick();
+        self.inventory_open = true;
+        self.personal_crafting = false;
+        self.crafting_station = None;
+        self.inventory_pane = 0;
+        self.inventory_item_selection = 0;
+        self.sound_events.clear();
+    }
+
+    pub(crate) fn prepare_pause_audio_parity(&mut self) {
+        self.prepare_player_motion_parity();
+        self.inventory_open = false;
+        self.personal_crafting = false;
+        self.crafting_station = None;
+        self.pause.open();
+        self.pause.begin_tick();
+        self.sound_events.clear();
+    }
+
+    /// Settle a static preview fixture at a Display update boundary. This is
+    /// never called by the production renderer and does not tick the world.
+    pub(crate) fn settle_pause_preview(&mut self) {
+        self.pause.begin_tick();
+    }
+
+    pub(crate) fn prepare_quests_audio_parity(&mut self) {
+        self.prepare_pause_audio_parity();
+        self.progress = ProgressState::load().expect("bundled progression data must be valid");
+        self.quest_tree_state = quest_tree::State::default();
+        self.quests_enabled = true;
+        self.player.inventory = Inventory::new(27);
+        self.player.inventory.add(ItemId::WheatSeeds, 5);
+        self.update_progress(ProgressEvent::InventoryChanged);
+        self.pause.view_mut().selection = 3;
+        self.pause.push(PausePage::Quests, 0);
+        self.pause.begin_tick();
+        self.pause.view_mut().quest_tab = 0;
+        self.pause.view_mut().quest_group = 0;
+        self.pause.view_mut().quest_item = 0;
+        self.pause.view_mut().quest_series_selection = 0;
+    }
+
+    pub(crate) fn complete_hoe_quest_for_parity(&mut self) {
+        self.player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Hoe, ToolTier::Wood));
+        self.update_progress(ProgressEvent::InventoryChanged);
+    }
+
+    fn quest_group_views_for_current_tab(&self) -> Vec<crate::content::QuestGroupView> {
+        self.progress
+            .quest_group_views(&self.inventory_progress(), self.pause.view().quest_tab == 1)
+    }
+
+    fn quest_views_for_selected_group(&self) -> Vec<crate::content::QuestView> {
+        self.progress
+            .quest_views(self.pause.view().quest_group, &self.inventory_progress())
+    }
+
+    /// Refresh runtime geometry from the same localization used by rendering.
+    pub(crate) fn prepare_quest_layout(&mut self, localization: &Localization) {
+        if self.pause.is_open()
+            && matches!(
+                self.pause.view().page,
+                PausePage::QuestSeriesInfo | PausePage::QuestSeriesViewer | PausePage::QuestDetail
+            )
+        {
+            self.quest_tree_state.labels = self
+                .quest_views_for_selected_group()
+                .iter()
+                .map(|quest| (quest.id.clone(), localization.text(&quest.id).to_owned()))
+                .collect();
+        }
+    }
+
+    fn quest_tree(&self) -> quest_tree::Tree {
+        quest_tree::Tree::new(&self.quest_views_for_selected_group(), |id| {
+            self.quest_tree_state
+                .labels
+                .get(id)
+                .map_or_else(|| id.to_owned(), Clone::clone)
+        })
+    }
+
+    pub(crate) fn audio_menu_state_for_parity(&self) -> (&'static str, usize) {
+        if self.pause.is_open() {
+            let (_, screen, selection) = self.pause_state_for_parity();
+            return (screen, selection);
+        }
+        if self.inventory_open {
+            if self.personal_crafting || self.crafting_station.is_some() {
+                return ("crafting", self.inventory_selection);
+            }
+            return ("inventory", self.inventory_item_selection);
+        }
+        ("gameplay", 0)
+    }
+
+    pub(crate) fn select_crafting_product_for_parity(
+        &mut self,
+        product: &str,
+    ) -> Result<(), String> {
+        let recipes = ordered_recipe_views(
+            self.crafting_station,
+            &self.player.inventory,
+            self.mode == GameMode::Creative,
+            &self.crafting_order,
+        );
+        self.inventory_selection = recipes
+            .iter()
+            .position(|recipe| recipe.product_name() == product)
+            .ok_or_else(|| format!("crafting product {product:?} is unavailable"))?;
+        Ok(())
+    }
+
+    pub(crate) fn crafting_state_for_parity(&self) -> CraftingParityState {
+        let recipes = ordered_recipe_views(
+            self.crafting_station,
+            &self.player.inventory,
+            self.mode == GameMode::Creative,
+            &self.crafting_order,
+        );
+        let selected = recipes.get(self.inventory_selection);
+        let item_count = |item| u32::from(self.player.inventory.count(item));
+        let items = [
+            ItemId::Wood,
+            ItemId::Coal,
+            ItemId::Stone,
+            ItemId::String,
+            ItemId::Plank,
+            ItemId::Workbench,
+        ]
+        .into_iter()
+        .map(|item| (item.display_name().to_owned(), item_count(item)))
+        .collect();
+        let wood_axes = self
+            .player
+            .inventory
+            .tools()
+            .iter()
+            .filter(|tool| tool.kind == ToolKind::Axe && tool.tier == ToolTier::Wood)
+            .count() as u32;
+        CraftingParityState {
+            capacity: self.player.inventory.capacity(),
+            used_slots: self.player.inventory.used_slots(),
+            selection: self.inventory_selection,
+            items,
+            tools: vec![("Wood Axe".to_owned(), wood_axes)],
+            recipe_order: recipes.iter().map(RecipeView::product_name).collect(),
+            craftable: recipes
+                .iter()
+                .map(|recipe| {
+                    recipe_can_craft(
+                        recipe,
+                        &self.player.inventory,
+                        self.mode == GameMode::Creative,
+                    )
+                })
+                .collect(),
+            selected_have: selected.map_or(0, |recipe| recipe.output_count(&self.player)),
+            selected_costs: selected.map_or_else(Vec::new, |recipe| {
+                recipe
+                    .costs
+                    .iter()
+                    .map(|cost| {
+                        (
+                            cost.item.display_name().to_owned(),
+                            self.player.inventory.count(cost.item),
+                            cost.count,
+                        )
+                    })
+                    .collect()
+            }),
+        }
     }
 
     fn sound(&mut self, effect: SoundEffect) {
@@ -870,7 +1353,9 @@ impl World {
             },
             seed,
             tick: 0,
-            day_tick: 0,
+            clock: Default::default(),
+            render_gui: true,
+            updater: Updater::default(),
             days: 1,
             difficulty,
             mode: options.mode,
@@ -879,12 +1364,16 @@ impl World {
                 10 | 20 | 40 | 60 | 120 => options.score_minutes,
                 _ => 20,
             } * 60
-                * 60) as u32,
+                * 60) as i32,
             score_multiplier: 1,
             multiplier_ticks: 300,
             game_over: false,
+            end_game: None,
             story_complete: false,
             sleeping: 0,
+            bed_level: None,
+            respawn_tile: Some((spawn_x, spawn_y)),
+            sleep_speed: 1,
             tutorials_enabled: options.tutorials,
             quests_enabled: options.quests,
             show_quests: options.show_quests,
@@ -892,17 +1381,17 @@ impl World {
             signs: (0..sign_levels).map(|_| HashMap::new()).collect(),
             sign_editor: None,
             book_open: None,
-            paused: false,
-            pause_selection: 0,
-            pause_page: PausePage::Main,
-            pause_confirm: false,
+            pause: PauseSession::default(),
+            quest_tree_state: quest_tree::State::default(),
             inventory_open: false,
             inventory_selection: 0,
             inventory_item_selection: 0,
             inventory_pane: 0,
             crafting_station: None,
+            crafting_order: Vec::new(),
             personal_crafting: false,
-            notification: None,
+            notifications: Notifications::default(),
+            notification_context: notifications::Context::default(),
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
             random: random::JavaRandom::new(seed ^ 0x05EE_D224),
@@ -926,7 +1415,7 @@ impl World {
         let (x, y) = find_spawn(&world.levels[index].tiles, world.width, world.height);
         world.player.x = x * TILE_SIZE + 8;
         world.player.y = y * TILE_SIZE + 8;
-        world.notification = Some((format!("DEPTH {depth} PREVIEW"), 150));
+        world.notify(&format!("DEPTH {depth} PREVIEW"), 0);
         Ok(world)
     }
 
@@ -963,6 +1452,7 @@ impl World {
         self.inventory_open = true;
         self.crafting_station = Some(FurnitureKind::Workbench);
         self.inventory_pane = 1;
+        self.refresh_crafting_order();
         self.inventory_selection = WORKBENCH_STATION_RECIPES.len() + 4;
     }
 
@@ -984,13 +1474,16 @@ impl World {
         self.inventory_open = true;
         self.crafting_station = Some(FurnitureKind::Oven);
         self.inventory_pane = 0;
+        self.refresh_crafting_order();
         self.inventory_item_selection = 3;
         self.inventory_selection = 2;
-        self.notification = Some(("FOOD SURVIVAL PREVIEW".to_owned(), 150));
+        self.notify("FOOD SURVIVAL PREVIEW", 0);
     }
 
     /// Opens the Java-style player inventory for visual regression.
     pub fn populate_inventory_preview(&mut self) {
+        self.player.inventory = Inventory::new(27);
+        self.player.active_item = None;
         self.player.inventory.add(ItemId::Wood, 20);
         self.player.inventory.add(ItemId::Stone, 10);
         self.player.inventory.add(ItemId::Coal, 4);
@@ -998,6 +1491,7 @@ impl World {
             .inventory
             .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood));
         self.inventory_open = true;
+        self.personal_crafting = false;
         self.crafting_station = None;
         self.inventory_pane = 0;
         self.inventory_item_selection = 1;
@@ -1005,13 +1499,47 @@ impl World {
 
     /// Opens the Java personal crafting display (Z / Shift+E) for visual regression.
     pub fn populate_personal_crafting_preview(&mut self) {
+        self.player.inventory = Inventory::new(27);
+        self.player.active_item = None;
         self.player.inventory.add(ItemId::Wood, 20);
         self.player.inventory.add(ItemId::Coal, 4);
         self.inventory_open = true;
         self.personal_crafting = true;
         self.crafting_station = None;
         self.inventory_pane = 1;
+        self.refresh_crafting_order();
         self.inventory_selection = 1;
+    }
+
+    /// Creates a deterministic Java-style HUD fixture without changing terrain.
+    pub fn populate_hud_parity_preview(&mut self) {
+        self.mode = GameMode::Survival;
+        self.player.inventory = Inventory::new(27);
+        let mut axe = ToolItem::new(ToolKind::Axe, ToolTier::Wood);
+        axe.durability = 17;
+        let index = self
+            .player
+            .inventory
+            .add_tool(axe)
+            .expect("empty parity inventory accepts the HUD tool");
+        self.player.active_item = Some(ActiveItem::Tool(index));
+        self.player.health = 7;
+        self.player.stamina = 6;
+        self.player.hunger = 5;
+        self.player.stamina_recharge_delay = 0;
+        self.player.armor = 0;
+        self.player.armor_kind = None;
+        self.player.potion_effects.fill(0);
+    }
+
+    /// Opens the Java PauseDisplay main-menu confirmation popup fixture.
+    pub fn populate_exit_confirm_parity_preview(&mut self) {
+        self.quests_enabled = false;
+        self.pause.open();
+        self.pause.begin_tick();
+        self.pause.view_mut().selection = pause_actions(false).len() - 1;
+        self.pause.confirm_exit();
+        self.pause.begin_tick();
     }
 
     /// Opens the Java-style sliding creative catalogue for visual regression.
@@ -1049,7 +1577,7 @@ impl World {
         self.score = 12_450;
         self.score_multiplier = 7;
         self.score_ticks = 7 * 60 + 42;
-        self.notification = Some(("SCORE MODE PREVIEW".to_owned(), 150));
+        self.notify("SCORE MODE PREVIEW", 0);
     }
 
     pub fn populate_book_preview(&mut self) {
@@ -1072,7 +1600,7 @@ impl World {
         self.player.potion_effects[PotionKind::Speed.id()] = 4_200;
         self.player.potion_effects[PotionKind::Light.id()] = 2_400;
         self.update_progress(ProgressEvent::InventoryChanged);
-        self.notification = Some(("DATA-DRIVEN PROGRESS ACTIVE".to_owned(), 150));
+        self.notify("DATA-DRIVEN PROGRESS ACTIVE", 0);
     }
 
     pub fn populate_boss_preview(&mut self) {
@@ -1088,39 +1616,47 @@ impl World {
                 self.player.y,
             );
         }
-        self.notification = None;
+        self.notifications.clear();
     }
 
     pub fn populate_pause_preview(&mut self) {
-        self.paused = true;
-        self.pause_page = PausePage::Main;
-        self.pause_selection = 1;
-        self.pause_confirm = false;
-        self.notification = None;
+        self.pause.open();
+        self.pause.begin_tick();
+        self.pause.view_mut().selection = 1;
+        self.notifications.clear();
     }
 
     pub fn tick(&mut self, input: &Input) -> WorldAction {
+        self.begin_display_tick();
+        self.tick_after_display(true, input)
+    }
+
+    pub(crate) fn tick_after_display(&mut self, focused: bool, input: &Input) -> WorldAction {
+        self.tick_with_autosave(focused, input, false, |_| Ok(()))
+            .expect("disabled autosave has no fallible side effects")
+    }
+
+    fn tick_after_prelude(&mut self, focused: bool, input: &Input) -> WorldAction {
+        if !self.update_calendar_and_score(focused) {
+            return WorldAction::None;
+        }
+        self.tick_player_display_controls(input);
+        // Once activated, the terminal Display owns input instead of the
+        // previously open book/sign/inventory compatibility host.
+        if self.game_over
+            && self.mode == GameMode::Score
+            && self.end_game.as_ref().is_some_and(|display| display.active)
+        {
+            return self.tick_end_game(input);
+        }
         if self.tick_sign_editor(input) || self.tick_book(input) {
             return WorldAction::None;
         }
         if self.game_over {
-            return if input.select || input.exit {
-                WorldAction::ReturnToTitle
-            } else {
-                WorldAction::None
-            };
+            return self.tick_end_game(input);
         }
         if self.sleeping > 0 {
-            self.sleeping -= 1;
-            if self.sleeping == 0 {
-                self.day_tick = 0;
-                self.player.stamina = MAX_STAT;
-                self.player.health = self
-                    .player
-                    .health
-                    .saturating_add(2)
-                    .min(self.player.max_health);
-            }
+            self.tick_sleeping_level();
             return WorldAction::None;
         }
         if input.exit {
@@ -1128,108 +1664,15 @@ impl World {
                 self.inventory_open = false;
                 self.personal_crafting = false;
                 self.crafting_station = None;
-            } else if self.paused {
-                if self.pause_confirm {
-                    self.pause_confirm = false;
-                    self.pause_selection = pause_actions(self.quests_enabled).len() - 1;
-                } else if self.pause_page != PausePage::Main {
-                    self.pause_page = PausePage::Main;
-                    self.pause_selection = 0;
-                } else {
-                    self.paused = false;
-                }
+            } else if self.pause.is_open() {
+                self.pause.back();
             } else {
-                self.paused = true;
-                self.pause_page = PausePage::Main;
-                self.pause_selection = 0;
-                self.pause_confirm = false;
+                self.pause.open();
             }
             return WorldAction::None;
         }
-        if self.paused {
-            if self.pause_confirm {
-                if input.up_pressed || input.down_pressed {
-                    self.pause_selection = usize::from(self.pause_selection == 0);
-                }
-                if input.select {
-                    if self.pause_selection == 0 {
-                        self.pause_confirm = false;
-                        self.pause_selection = pause_actions(self.quests_enabled).len() - 1;
-                    } else {
-                        self.paused = false;
-                        self.pause_confirm = false;
-                        return WorldAction::QuitWithoutSaving;
-                    }
-                }
-                return WorldAction::None;
-            }
-            let count = match self.pause_page {
-                PausePage::Main => pause_actions(self.quests_enabled).len(),
-                PausePage::Options => 5,
-                PausePage::Achievements | PausePage::Quests => 1,
-            };
-            if input.up_pressed {
-                self.pause_selection = self.pause_selection.checked_sub(1).unwrap_or(count - 1);
-            }
-            if input.down_pressed {
-                self.pause_selection = (self.pause_selection + 1) % count;
-            }
-            if self.pause_page == PausePage::Options {
-                let direction = i32::from(input.right_pressed) - i32::from(input.left_pressed);
-                match self.pause_selection {
-                    0 if direction != 0 => {
-                        self.difficulty = wrap_index(self.difficulty, direction, 3);
-                    }
-                    1 if direction != 0 => self.show_quests = !self.show_quests,
-                    2 if direction != 0 => self.tutorials_enabled = !self.tutorials_enabled,
-                    3 if direction != 0 => self.quests_enabled = !self.quests_enabled,
-                    _ => {}
-                }
-            }
-            if input.select {
-                match self.pause_page {
-                    PausePage::Main => {
-                        match pause_actions(self.quests_enabled)[self.pause_selection] {
-                            PauseAction::Return => self.paused = false,
-                            PauseAction::Options => {
-                                self.pause_page = PausePage::Options;
-                                self.pause_selection = 0;
-                            }
-                            PauseAction::Achievements => {
-                                self.pause_page = PausePage::Achievements;
-                                self.pause_selection = 0;
-                            }
-                            PauseAction::Quests => {
-                                self.pause_page = PausePage::Quests;
-                                self.pause_selection = 0;
-                            }
-                            PauseAction::Save => {
-                                self.paused = false;
-                                return WorldAction::SaveGame;
-                            }
-                            PauseAction::MainMenu => {
-                                self.pause_confirm = true;
-                                self.pause_selection = 0;
-                            }
-                        }
-                    }
-                    PausePage::Options => match self.pause_selection {
-                        1 => self.show_quests = !self.show_quests,
-                        2 => self.tutorials_enabled = !self.tutorials_enabled,
-                        3 => self.quests_enabled = !self.quests_enabled,
-                        4 => {
-                            self.pause_page = PausePage::Main;
-                            self.pause_selection = 1;
-                        }
-                        _ => {}
-                    },
-                    PausePage::Achievements | PausePage::Quests => {
-                        self.pause_page = PausePage::Main;
-                        self.pause_selection = 0;
-                    }
-                }
-            }
-            return WorldAction::None;
+        if self.pause.is_open() {
+            return self.tick_pause(input);
         }
         if input.craft {
             if self.inventory_open && self.personal_crafting {
@@ -1240,12 +1683,14 @@ impl World {
                 // the already-open player inventory instead of closing the menu.
                 self.personal_crafting = true;
                 self.inventory_selection = 0;
+                self.refresh_crafting_order();
             } else if !self.inventory_open {
                 self.inventory_open = true;
                 self.personal_crafting = true;
                 self.player.active_item = None;
                 self.crafting_station = None;
                 self.inventory_selection = 0;
+                self.refresh_crafting_order();
             }
         } else if input.menu {
             self.inventory_open = !self.inventory_open;
@@ -1348,28 +1793,12 @@ impl World {
         }
 
         self.tick = self.tick.wrapping_add(1);
-        if self.mode == GameMode::Score {
-            if self.score_ticks == 0 {
-                self.game_over = true;
-                return WorldAction::None;
+        if self.mode == GameMode::Score && self.score_multiplier > 1 {
+            self.multiplier_ticks = self.multiplier_ticks.saturating_sub(1);
+            if self.multiplier_ticks == 0 {
+                self.score_multiplier = 1;
+                self.multiplier_ticks = 300;
             }
-            self.score_ticks -= 1;
-            if self.score_ticks == 0 {
-                self.game_over = true;
-                return WorldAction::None;
-            }
-            if self.score_multiplier > 1 {
-                self.multiplier_ticks = self.multiplier_ticks.saturating_sub(1);
-                if self.multiplier_ticks == 0 {
-                    self.score_multiplier = 1;
-                    self.multiplier_ticks = 300;
-                }
-            }
-        }
-        self.day_tick += 1;
-        if self.day_tick >= DAY_LENGTH {
-            self.day_tick = 0;
-            self.days += 1;
         }
         tile_behavior::tick_random_tiles(
             &mut self.levels[self.current_level],
@@ -1383,28 +1812,16 @@ impl World {
             self.height,
             self.player.x,
             self.player.y,
-            self.day_tick,
+            self.clock.get().day_tick,
             self.days,
             &mut self.random,
         );
         let time_slowed = self.effect_active(PotionKind::Time);
-        let outcome = {
-            let level = &mut self.levels[self.current_level];
-            for intent in std::mem::take(&mut level.pending_spawns) {
-                level.entities.spawn_mob(intent.kind, intent.x, intent.y);
-            }
-            level.entities.tick(
-                &mut level.tiles,
-                &level.data,
-                self.width,
-                self.height,
-                self.player.x,
-                self.player.y,
-                time_slowed,
-                self.mode == GameMode::Creative,
-                &mut self.random,
-            )
-        };
+        let outcome = self.tick_level_entities(
+            Some((self.player.x, self.player.y)),
+            time_slowed,
+            self.mode == GameMode::Creative,
+        );
         self.player.hurt_time = self.player.hurt_time.saturating_sub(1);
         self.player.attack_time = self.player.attack_time.saturating_sub(1);
         if self.player.attack_time == 0 {
@@ -1418,12 +1835,6 @@ impl World {
         }
         for mob in outcome.defeated_mobs {
             self.handle_defeated_mob(mob);
-        }
-        if let Some((_, remaining)) = &mut self.notification {
-            *remaining = remaining.saturating_sub(1);
-            if *remaining == 0 {
-                self.notification = None;
-            }
         }
 
         // Java updates potion timers, fishing and survival recharge before it
@@ -1439,38 +1850,29 @@ impl World {
             self.player.hunger = MAX_STAT;
         }
 
-        let mut horizontal = 0;
-        let mut vertical = 0;
-        if input.left {
-            horizontal -= 1;
-            self.player.direction = Direction::Left;
-        }
-        if input.right {
-            horizontal += 1;
-            self.player.direction = Direction::Right;
-        }
-        if input.up {
-            vertical -= 1;
-            self.player.direction = Direction::Up;
-        }
-        if input.down {
-            vertical += 1;
-            self.player.direction = Direction::Down;
-        }
+        let horizontal = i32::from(input.right) - i32::from(input.left);
+        let vertical = i32::from(input.down) - i32::from(input.up);
 
         if horizontal != 0 || vertical != 0 {
             let on_water = self.tile_at_pixel(self.player.x, self.player.y) == Tile::Water;
-            let swimming = self.effect_active(PotionKind::Swim);
-            let speed = if self.effect_active(PotionKind::Speed) {
-                2
-            } else {
-                1
-            };
-            if (!on_water || swimming || self.tick.is_multiple_of(2))
-                && self.move_player(horizontal * speed, vertical * speed)
-            {
-                self.player.walk_distance = self.player.walk_distance.wrapping_add(1);
-                self.player.step_count = self.player.step_count.saturating_add(1);
+            let has_swim = self.effect_active(PotionKind::Swim);
+            // Player.tick only calls Mob.move on even recovery-delay ticks (or
+            // while swimming). Mob.move then skips even swimming ticks before
+            // changing direction/walkDist, but reports movement to stepCount.
+            if self.player.stamina_recharge_delay.is_multiple_of(2) || on_water {
+                let moved = if on_water && !has_swim && self.tick.is_multiple_of(2) {
+                    true
+                } else {
+                    self.player.direction =
+                        direction_for_move(horizontal, vertical, self.player.direction);
+                    self.player.walk_distance = self.player.walk_distance.wrapping_add(1);
+                    // Java casts each component of +/-1 * 1.5 back to int, so
+                    // the Speed potion does not turn ordinary movement into 2 px.
+                    self.move_player(horizontal, vertical)
+                };
+                if moved {
+                    self.player.step_count = self.player.step_count.saturating_add(1);
+                }
             }
         }
         let collected = self.levels[self.current_level].entities.collect_near(
@@ -1544,41 +1946,41 @@ impl World {
         }
     }
 
+    fn refresh_crafting_order(&mut self) {
+        let recipes = recipe_views(self.crafting_station);
+        let creative = self.mode == GameMode::Creative;
+        let mut order: Vec<usize> = (0..recipes.len()).collect();
+        order.sort_by(|&left, &right| {
+            recipe_can_craft(&recipes[right], &self.player.inventory, creative).cmp(
+                &recipe_can_craft(&recipes[left], &self.player.inventory, creative),
+            )
+        });
+        self.crafting_order = order;
+    }
+
     fn craft_selected_recipe(&mut self) {
-        let crafted = match self.crafting_station {
-            None => {
-                let recipe = HAND_RECIPES[self.inventory_selection];
-                self.craft_stack(recipe)
-            }
-            Some(FurnitureKind::Workbench) => {
-                if let Some(recipe) = WORKBENCH_STATION_RECIPES.get(self.inventory_selection) {
-                    self.craft_stack(*recipe)
-                } else {
-                    let index = self.inventory_selection - WORKBENCH_STATION_RECIPES.len();
-                    self.craft_tool(WORKBENCH_TOOL_RECIPES[index])
-                }
-            }
-            Some(FurnitureKind::Oven) => self.craft_stack(OVEN_RECIPES[self.inventory_selection]),
-            Some(FurnitureKind::Furnace) => {
-                self.craft_stack(FURNACE_RECIPES[self.inventory_selection])
-            }
-            Some(FurnitureKind::Anvil) => {
-                if let Some(recipe) = ANVIL_RECIPES.get(self.inventory_selection) {
-                    self.craft_stack(*recipe)
-                } else {
-                    let index = self.inventory_selection - ANVIL_RECIPES.len();
-                    self.craft_tool(ANVIL_TOOL_RECIPES[index])
-                }
-            }
-            Some(FurnitureKind::Enchanter) => {
-                self.craft_stack(ENCHANTER_RECIPES[self.inventory_selection])
-            }
-            Some(FurnitureKind::Loom) => self.craft_stack(LOOM_RECIPES[self.inventory_selection]),
-            _ => return,
+        let recipes = ordered_recipe_views(
+            self.crafting_station,
+            &self.player.inventory,
+            self.mode == GameMode::Creative,
+            &self.crafting_order,
+        );
+        let Some(recipe) = recipes.get(self.inventory_selection).copied() else {
+            return;
         };
-        if crafted {
-            self.sound(SoundEffect::Craft);
-        }
+        // craft.wav is dispatched by immediate_menu_sounds on the input frame;
+        // queueing it here would play it again on the next fixed world tick.
+        match recipe.output {
+            RecipeOutput::Stack(output) => self.craft_stack(crate::item::Recipe {
+                output,
+                costs: recipe.costs,
+            }),
+            RecipeOutput::Tool(output) => self.craft_tool(crate::item::ToolRecipe {
+                output,
+                costs: recipe.costs,
+                tool_cost: recipe.tool_cost,
+            }),
+        };
     }
 
     fn craft_stack(&mut self, recipe: crate::item::Recipe) -> bool {
@@ -1650,12 +2052,12 @@ impl World {
         }
         if item == ItemId::AirTotem {
             if self.levels[self.current_level].depth != 1 {
-                self.notification = Some(("USE THIS IN THE SKY".to_owned(), 60));
+                self.add_notification("minicraft.notification.wrong_level_sky");
             } else if self.levels[self.current_level]
                 .entities
                 .has_mob(spawn::NaturalMob::AirWizard)
             {
-                self.notification = Some(("THE AIR WIZARD IS ALREADY ACTIVE".to_owned(), 60));
+                self.add_notification("minicraft.notification.boss_limit");
             } else if self.pay_stamina(2) {
                 self.levels[self.current_level].entities.spawn_mob(
                     spawn::NaturalMob::AirWizard,
@@ -1672,17 +2074,21 @@ impl World {
             let near_center = (self.player.x.div_euclid(TILE_SIZE) - center_x).abs() <= 3
                 && (self.player.y.div_euclid(TILE_SIZE) - center_y).abs() <= 3;
             if self.levels[self.current_level].depth != -4 || !near_center {
-                self.notification = Some(("USE THIS IN THE DUNGEON BOSS ROOM".to_owned(), 75));
+                self.add_notification(if self.levels[self.current_level].depth != -4 {
+                    "minicraft.notification.wrong_level_dungeon"
+                } else {
+                    "minicraft.notification.spawn_on_boss_tile"
+                });
             } else if self.levels[self.current_level]
                 .entities
                 .has_mob(spawn::NaturalMob::ObsidianKnight)
             {
-                self.notification = Some(("THE OBSIDIAN KNIGHT IS ALREADY ACTIVE".to_owned(), 60));
+                self.add_notification("minicraft.notification.boss_limit");
             } else if self.levels[self.current_level]
                 .entities
                 .has_furniture(FurnitureKind::KnightStatue)
             {
-                self.notification = Some(("THE KNIGHT STATUE IS ALREADY HERE".to_owned(), 60));
+                self.add_notification("minicraft.notification.knight_statue_exists");
             } else if self.pay_stamina(2) {
                 self.levels[self.current_level].entities.spawn_furniture(
                     FurnitureKind::KnightStatue,
@@ -1699,7 +2105,7 @@ impl World {
                 self.player.health = (self.player.health + 5).min(self.player.max_health);
                 self.consume_active_stack(item);
             } else {
-                self.notification = Some(("HEALTH INCREASE IS AT MAX!".to_owned(), 90));
+                self.notify("Health increase is at max!", 0);
             }
             return true;
         }
@@ -1807,22 +2213,19 @@ impl World {
         match species {
             spawn::NaturalMob::AirWizard => {
                 self.sound(SoundEffect::BossDeath);
+                self.notify("minicraft.notification.air_wizard_defeated", 0);
+                if !self.air_wizard_defeated {
+                    self.unlock_achievement("minicraft.achievement.airwizard");
+                    self.notify("minicraft.notification.dungeon_opened", -400);
+                }
                 self.air_wizard_defeated = true;
-                self.unlock_achievement("minicraft.achievement.airwizard");
-                self.notification = Some((
-                    "THE AIR WIZARD FALLS; THE OBSIDIAN DEPTHS OPEN".to_owned(),
-                    180,
-                ));
             }
             spawn::NaturalMob::ObsidianKnight => {
                 self.sound(SoundEffect::BossDeath);
                 self.obsidian_knight_defeated = true;
                 self.story_complete = true;
+                self.notify("minicraft.notification.obsidian_knight_defeated", 0);
                 self.unlock_achievement("minicraft.achievement.obsidianknight");
-                self.notification = Some((
-                    "THE OBSIDIAN KNIGHT FALLS; MINICRAFT IS RESTORED".to_owned(),
-                    240,
-                ));
             }
             _ => {}
         }
@@ -1830,8 +2233,8 @@ impl World {
 
     fn unlock_achievement(&mut self, id: &str) {
         if self.progress.unlock_achievement(id) {
-            let label = id.rsplit('.').next().unwrap_or(id).replace('_', " ");
-            self.notification = Some((format!("ACHIEVEMENT: {}", label.to_ascii_uppercase()), 90));
+            let label = self.notification_context.locale.text(id).to_owned();
+            self.add_notification_args("minicraft.notification.achievement_unlocked", &[&label]);
         }
     }
 
@@ -1973,7 +2376,7 @@ impl World {
             }
             PotionKind::Escape => {
                 if self.current_level == 1 {
-                    self.notification = Some(("YOU CANNOT ESCAPE FROM HERE".to_owned(), 60));
+                    self.add_notification("You can't escape from here!");
                     return false;
                 }
                 self.current_level = if self.current_level == 0 {
@@ -2088,6 +2491,9 @@ impl World {
     }
 
     fn hurt_player(&mut self, mut damage: u8, direct: bool) -> bool {
+        if self.sleeping > 0 {
+            return false;
+        }
         if self.mode == GameMode::Creative {
             return false;
         }
@@ -2215,14 +2621,38 @@ impl World {
         let old_x = self.player.x;
         let old_y = self.player.y;
         let next_x = self.player.x + horizontal;
+        self.apply_bumped_tile_damage(next_x, self.player.y);
         if self.can_stand(next_x, self.player.y) {
             self.player.x = next_x;
         }
         let next_y = self.player.y + vertical;
+        self.apply_bumped_tile_damage(self.player.x, next_y);
         if self.can_stand(self.player.x, next_y) {
             self.player.y = next_y;
         }
         self.player.x != old_x || self.player.y != old_y
+    }
+
+    fn apply_bumped_tile_damage(&mut self, x: i32, y: i32) {
+        let damage = [(-4, -3), (4, -3), (-4, 4), (4, 4)]
+            .into_iter()
+            .map(|(offset_x, offset_y)| self.tile_at_pixel(x + offset_x, y + offset_y))
+            .map(|tile| match tile {
+                Tile::Cactus => {
+                    if self.difficulty.min(2) == 2 {
+                        2
+                    } else {
+                        1
+                    }
+                }
+                Tile::LavaBrick => 3,
+                _ => 0,
+            })
+            .max()
+            .unwrap_or(0);
+        if damage > 0 {
+            self.hurt_player(damage, false);
+        }
     }
 
     fn can_stand(&self, x: i32, y: i32) -> bool {
@@ -2327,35 +2757,35 @@ impl World {
             return;
         }
 
-        let mut damage = (self.random.next_int(2) + 1) as u8;
         if self.levels[self.current_level]
             .entities
             .mob_near(self.player.x + offset_x, self.player.y + offset_y)
         {
+            let mut damage = (self.random.next_int(2) + 1) as u8;
             damage = damage.saturating_add(self.pay_tool_melee_bonus());
-        }
-        if let Some(hit) = self.levels[self.current_level].entities.damage_nearest(
-            self.player.x + offset_x,
-            self.player.y + offset_y,
-            u16::from(damage),
-            &mut self.random,
-        ) {
-            self.player.attack_time = 5;
-            self.levels[self.current_level]
-                .entities
-                .spawn_text_particle(hit.damage.to_string(), hit.x, hit.y);
-            if !hit.defeated
-                || !matches!(
-                    hit.species,
-                    spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
-                )
-            {
-                self.sound(SoundEffect::MonsterHurt);
+            if let Some(hit) = self.levels[self.current_level].entities.damage_nearest(
+                self.player.x + offset_x,
+                self.player.y + offset_y,
+                u16::from(damage),
+                &mut self.random,
+            ) {
+                self.player.attack_time = 5;
+                self.levels[self.current_level]
+                    .entities
+                    .spawn_text_particle(hit.damage.to_string(), hit.x, hit.y);
+                if !hit.defeated
+                    || !matches!(
+                        hit.species,
+                        spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
+                    )
+                {
+                    self.sound(SoundEffect::MonsterHurt);
+                }
+                if hit.defeated {
+                    self.handle_defeated_mob(hit.species);
+                }
+                return;
             }
-            if hit.defeated {
-                self.handle_defeated_mob(hit.species);
-            }
-            return;
         }
         let tile_x = (self.player.x + offset_x) / TILE_SIZE;
         let tile_y = (self.player.y + offset_y) / TILE_SIZE;
@@ -2533,7 +2963,6 @@ impl World {
                 return;
             }
         }
-        let bare_damage = (self.random.next_int(3) + 1) as u16;
         let attacked_tile = self.levels[self.current_level].tiles[index];
         if matches!(
             attacked_tile,
@@ -2568,7 +2997,7 @@ impl World {
         match self.levels[self.current_level].tiles[index] {
             Tile::Tree => {
                 let tool_damage = self.pay_tool_terrain_damage(ToolKind::Axe, 4);
-                let damage = tool_damage.unwrap_or(bare_damage);
+                let damage = tool_damage.unwrap_or_else(|| (self.random.next_int(3) + 1) as u16);
                 if tool_damage.is_none() {
                     self.player.attack_time = 5;
                     self.pay_basic_attack_tool_durability();
@@ -2610,10 +3039,11 @@ impl World {
                 if self.mode == GameMode::Creative || self.obsidian_knight_defeated {
                     self.levels[self.current_level].data[index] ^= 1;
                 } else {
-                    self.notification = Some(("DEFEAT THE OBSIDIAN KNIGHT FIRST".to_owned(), 75));
+                    self.add_notification("minicraft.notification.defeat_obsidian_knight_first");
                 }
             }
             Tile::Cactus => {
+                let bare_damage = (self.random.next_int(3) + 1) as u16;
                 self.player.attack_time = 5;
                 self.pay_basic_attack_tool_durability();
                 self.levels[self.current_level]
@@ -2686,7 +3116,7 @@ impl World {
             Tile::Rock => {
                 let tool_damage = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 5);
                 let used_pickaxe = tool_damage.is_some();
-                let damage = tool_damage.unwrap_or(bare_damage);
+                let damage = tool_damage.unwrap_or_else(|| (self.random.next_int(3) + 1) as u16);
                 if tool_damage.is_none() {
                     self.player.attack_time = 5;
                     self.pay_basic_attack_tool_durability();
@@ -2731,7 +3161,9 @@ impl World {
                     .is_some_and(|tool| tool.kind == ToolKind::Pickaxe && tool.tier.level() == 4);
                 if !gem_pickaxe {
                     if self.active_tool().is_some() {
-                        self.notification = Some(("GEM PICKAXE REQUIRED".to_owned(), 45));
+                        // Java HardRockTile adds this key literally, without localization.
+                        self.notifications
+                            .add("minicraft.notification.gem_pickaxe_required");
                     }
                     self.levels[self.current_level]
                         .entities
@@ -2776,7 +3208,7 @@ impl World {
                     && !self.air_wizard_defeated
                     && self.mode != GameMode::Creative
                 {
-                    self.notification = Some(("DEFEAT THE AIR WIZARD FIRST".to_owned(), 75));
+                    self.add_notification("minicraft.notification.defeat_air_wizard_first");
                     return;
                 }
                 let required = if self.levels[self.current_level].tiles[index] == Tile::WoodWall {
@@ -2812,11 +3244,10 @@ impl World {
             }
             Tile::BossWall => {
                 if !self.obsidian_knight_defeated && self.mode != GameMode::Creative {
-                    self.notification = Some(("DEFEAT THE OBSIDIAN KNIGHT FIRST".to_owned(), 75));
+                    self.add_notification("minicraft.notification.defeat_obsidian_knight_first");
                     return;
                 }
                 let Some(damage) = self.pay_tool_terrain_damage(ToolKind::Pickaxe, 4) else {
-                    self.notification = Some(("PICKAXE REQUIRED".to_owned(), 45));
                     return;
                 };
                 self.levels[self.current_level]
@@ -3165,11 +3596,7 @@ impl World {
             );
         }
         self.current_level = 1;
-        let (x, y) = find_spawn(
-            &self.levels[self.current_level].tiles,
-            self.width,
-            self.height,
-        );
+        let (x, y) = self.respawn_position();
         self.player.x = x * TILE_SIZE + 8;
         self.player.y = y * TILE_SIZE + 8;
         self.player.health = self.player.max_health;
@@ -3232,6 +3659,7 @@ impl World {
                 self.personal_crafting = false;
                 self.inventory_pane = 1;
                 self.inventory_selection = 0;
+                self.refresh_crafting_order();
             } else if matches!(kind, FurnitureKind::Chest | FurnitureKind::DungeonChest) {
                 let active = match self.player.active_item {
                     Some(ActiveItem::Stack(item)) => Some(item),
@@ -3268,18 +3696,26 @@ impl World {
                 let touches = self.levels[self.current_level]
                     .entities
                     .tap_statue_near(self.player.x + offset_x, self.player.y + offset_y);
-                self.notification = touches.map(|touches| {
-                    if touches >= 3 {
-                        ("THE OBSIDIAN KNIGHT AWAKENS".to_owned(), 120)
-                    } else {
-                        (format!("THE STATUE STIRS {touches}/3"), 60)
+                if let Some(touches) = touches {
+                    match touches {
+                        1 => self.add_notification("minicraft.notifications.statue_tapped"),
+                        2 => self.add_notification("minicraft.notifications.statue_touched"),
+                        _ => self.notify("minicraft.notification.obsidian_knight_awoken", 0),
                     }
-                });
+                }
             } else if kind == FurnitureKind::Bed {
-                if self.day_tick < 48_600 {
-                    self.notification = Some(("IT IS TOO EARLY TO SLEEP".to_owned(), 60));
+                if !minicraft_client::core::sleep::can_sleep(
+                    self.clock.get().day_tick,
+                    self.days > 1,
+                ) {
+                    let seconds =
+                        (40_500_u32.saturating_sub(self.clock.get().day_tick)).div_ceil(60);
+                    self.add_notification_args(
+                        "minicraft.notification.cannot_sleep",
+                        &[&(seconds / 60).to_string(), &(seconds % 60).to_string()],
+                    );
                 } else {
-                    self.sleeping = 120;
+                    self.enter_bed();
                 }
             }
             return;
@@ -3314,287 +3750,6 @@ impl World {
         self.levels[self.current_level]
             .entities
             .active_boss(species)
-    }
-
-    pub fn render(&self, screen: &mut Screen, assets: &Assets) {
-        let map_width = self.width as i32 * TILE_SIZE;
-        let map_height = self.height as i32 * TILE_SIZE;
-        let camera_x = (self.player.x - WIDTH as i32 / 2).clamp(0, map_width - WIDTH as i32);
-        let camera_y =
-            (self.player.y - (HEIGHT as i32 - 8) / 2).clamp(0, map_height - HEIGHT as i32);
-        let first_x = camera_x / TILE_SIZE;
-        let first_y = camera_y / TILE_SIZE;
-        let last_x = ((camera_x + WIDTH as i32) / TILE_SIZE + 1).min(self.width as i32);
-        let last_y = ((camera_y + HEIGHT as i32) / TILE_SIZE + 1).min(self.height as i32);
-        let light_scale = if self.effect_active(PotionKind::Light) {
-            12
-        } else {
-            8
-        };
-        let mut lights = vec![(
-            self.player.x - camera_x,
-            self.player.y - camera_y,
-            5 * light_scale,
-        )];
-        lights.extend(
-            self.levels[self.current_level]
-                .entities
-                .light_sources()
-                .map(|(x, y, radius)| (x - camera_x, y - camera_y, radius * light_scale)),
-        );
-
-        for tile_y in first_y..last_y {
-            for tile_x in first_x..last_x {
-                let tile = self.levels[self.current_level].tiles
-                    [tile_x as usize + tile_y as usize * self.width];
-                let data = self.levels[self.current_level].data
-                    [tile_x as usize + tile_y as usize * self.width];
-                let image = assets.tile(tile, data);
-                let frame_count = (image.height / 16).max(1);
-                let frame = (self.tick as usize / 12) % frame_count;
-                for underlay in underlay_layers(tile, data, self.levels[self.current_level].depth)
-                    .into_iter()
-                    .flatten()
-                {
-                    let underlay_image = assets.tile(underlay, 0);
-                    let underlay_frames = (underlay_image.height / 16).max(1);
-                    assets.render_tile(
-                        screen,
-                        underlay,
-                        0,
-                        tile_x * TILE_SIZE - camera_x,
-                        tile_y * TILE_SIZE - camera_y,
-                        (self.tick as usize / 12) % underlay_frames,
-                        connection_mask(
-                            &self.levels[self.current_level].tiles,
-                            self.width,
-                            self.height,
-                            tile_x as usize,
-                            tile_y as usize,
-                            underlay,
-                        ),
-                    );
-                }
-                let connected = connection_mask(
-                    &self.levels[self.current_level].tiles,
-                    self.width,
-                    self.height,
-                    tile_x as usize,
-                    tile_y as usize,
-                    tile,
-                );
-                assets.render_tile(
-                    screen,
-                    tile,
-                    data,
-                    tile_x * TILE_SIZE - camera_x,
-                    tile_y * TILE_SIZE - camera_y,
-                    frame,
-                    connected,
-                );
-                let light_radius = tile.light_radius();
-                if light_radius > 0 {
-                    lights.push((
-                        tile_x * TILE_SIZE + 8 - camera_x,
-                        tile_y * TILE_SIZE + 8 - camera_y,
-                        light_radius * light_scale,
-                    ));
-                }
-            }
-        }
-
-        let mut entities = self.levels[self.current_level]
-            .entities
-            .entities()
-            .iter()
-            .collect::<Vec<_>>();
-        entities.sort_by_key(|entity| (entity.y, entity.id));
-        for entity in entities
-            .iter()
-            .copied()
-            .take_while(|entity| entity.y <= self.player.y)
-        {
-            render_entity(screen, assets, entity, camera_x, camera_y, self.tick);
-        }
-
-        let (source_x, flip) =
-            player_sprite_frame(self.player.direction, self.player.walk_distance);
-        let player_x = self.player.x - 8 - camera_x;
-        let player_y = self.player.y - 11 - camera_y;
-        screen.blit_region(
-            &assets.skin,
-            player_x,
-            player_y,
-            source_x,
-            assets.skin_row,
-            16,
-            16,
-            flip,
-        );
-        if self.player.attack_time > 0 {
-            render_attack_slash(
-                screen,
-                &assets.hud,
-                player_x,
-                player_y,
-                self.player.attack_direction,
-            );
-            let image = self.player.attack_item.and_then(|active| match active {
-                ActiveItem::Stack(item) => Some(assets.item(item)),
-                ActiveItem::Tool(index) => self
-                    .player
-                    .inventory
-                    .tools()
-                    .get(index)
-                    .map(|tool| assets.tool(*tool)),
-            });
-            let (held_x, held_y, flip_item) = match self.player.attack_direction {
-                Direction::Up => (player_x + 4, player_y - 4, true),
-                Direction::Left => (player_x - 4, player_y + 4, true),
-                Direction::Right => (player_x + 12, player_y + 4, false),
-                Direction::Down => (player_x + 4, player_y + 12, false),
-            };
-            if let Some(image) = image {
-                screen.blit_region(
-                    image,
-                    held_x,
-                    held_y,
-                    0,
-                    0,
-                    image.width,
-                    image.height,
-                    flip_item,
-                );
-            }
-        }
-        for entity in entities
-            .iter()
-            .copied()
-            .skip_while(|entity| entity.y <= self.player.y)
-        {
-            render_entity(screen, assets, entity, camera_x, camera_y, self.tick);
-        }
-
-        let depth = self.levels[self.current_level].depth;
-        let darkness = if self.mode == GameMode::Creative {
-            0
-        } else if depth == 0 {
-            surface_darkness(self.day_tick)
-        } else {
-            176
-        };
-        screen.darken_with_lights(&lights, darkness);
-
-        render_hud(
-            screen,
-            assets,
-            &self.player,
-            self.mode,
-            self.seed,
-            depth,
-            self.day_tick,
-            self.days,
-        );
-        if self.mode == GameMode::Score {
-            render_score_overlay(
-                screen,
-                assets,
-                self.score_ticks,
-                self.score,
-                self.score_multiplier,
-            );
-        }
-        let mut potion_offset = 0;
-        if self.show_quests && (self.tutorials_enabled || self.quests_enabled) {
-            let inventory = self.inventory_progress();
-            let progress = if self.tutorials_enabled {
-                self.progress.current_tutorial().map(|step| {
-                    format!(
-                        "TUTORIAL {}",
-                        short_progress_id(&step.id).to_ascii_uppercase()
-                    )
-                })
-            } else {
-                None
-            }
-            .or_else(|| {
-                self.quests_enabled.then(|| {
-                    self.progress.current_quest(&inventory).map(|quest| {
-                        format!(
-                            "QUEST {}",
-                            short_progress_id(&quest.id).to_ascii_uppercase()
-                        )
-                    })
-                })?
-            });
-            if let Some(progress) = progress {
-                render_quest_overlay(screen, assets, &progress);
-                potion_offset = 33;
-            }
-        }
-        render_potion_overlay(screen, assets, &self.player, potion_offset);
-        if let Some((health, max_health)) = self.current_boss_health() {
-            render_boss_bar(
-                screen,
-                assets,
-                health,
-                max_health,
-                if depth == 1 {
-                    "Air wizard"
-                } else {
-                    "Obsidian Knight"
-                },
-            );
-        }
-        if self.story_complete {
-            screen.rect(WIDTH as i32 - 82, 33, 80, 10, 0x101018);
-            screen.text(&assets.font, "VICTORY", WIDTH as i32 - 76, 34);
-        }
-        if let Some((message, _)) = &self.notification {
-            screen.centered_text(&assets.font, message, HEIGHT as i32 * 2 / 5);
-        }
-        if self.inventory_open {
-            render_inventory(
-                screen,
-                assets,
-                &self.player,
-                self.inventory_item_selection,
-                self.inventory_selection,
-                self.inventory_pane,
-                self.crafting_station,
-                self.personal_crafting,
-                self.mode,
-            );
-        }
-        if self.paused {
-            render_pause(screen, assets, self);
-        }
-        if let Some((book, page)) = self.book_open {
-            render_world_book(screen, assets, book, page);
-        }
-        if let Some(editor) = &self.sign_editor {
-            render_sign_editor(screen, assets, &editor.text);
-        }
-        if self.sleeping > 0 {
-            screen.rect(0, 0, WIDTH as i32, HEIGHT as i32, 0x080812);
-            screen.centered_text(&assets.font, "SLEEPING...", HEIGHT as i32 / 2);
-        }
-        if self.game_over {
-            screen.rect(54, 76, WIDTH as i32 - 108, 74, 0x101018);
-            screen.centered_text(
-                &assets.font,
-                if self.mode == GameMode::Hardcore {
-                    "HARDCORE WORLD ENDED"
-                } else {
-                    "TIME IS UP"
-                },
-                91,
-            );
-            if self.mode == GameMode::Score {
-                screen.centered_text(&assets.font, &format!("FINAL SCORE {}", self.score), 108);
-            }
-            screen.centered_text(&assets.font, "SELECT TO RETURN", 132);
-        }
     }
 }
 
@@ -3829,6 +3984,26 @@ fn try_queue_natural_spawn(
     days: u32,
     random: &mut random::JavaRandom,
 ) {
+    try_queue_natural_spawn_for_player(
+        level,
+        width,
+        height,
+        Some((player_x, player_y)),
+        day_tick,
+        days,
+        random,
+    );
+}
+
+fn try_queue_natural_spawn_for_player(
+    level: &mut Level,
+    width: usize,
+    height: usize,
+    player: Option<(i32, i32)>,
+    day_tick: u32,
+    days: u32,
+    random: &mut random::JavaRandom,
+) {
     let mob_count = level.entities.mob_count() + level.pending_spawns.len();
     if mob_count >= level.max_mob_count {
         return;
@@ -3837,6 +4012,11 @@ fn try_queue_natural_spawn(
     if skip > 0 && random.next_int(skip.min(i32::MAX as usize) as i32) != 0 {
         return;
     }
+    // Java Level.trySpawn performs the skip roll before iterating players.
+    // An empty player set consumes no species or coordinate random draws.
+    let Some((player_x, player_y)) = player else {
+        return;
+    };
     for _ in 0..30 {
         let roll = random.next_int(100);
         let x = random.next_int(width as i32) as usize;
@@ -3924,11 +4104,11 @@ fn render_attack_slash(
 fn render_score_overlay(
     screen: &mut Screen,
     assets: &Assets,
-    ticks: u32,
+    ticks: i32,
     score: u32,
     multiplier: u8,
 ) {
-    let total_seconds = ticks.div_ceil(60);
+    let total_seconds = (f64::from(ticks) / 60.0).ceil() as i32;
     let total_minutes = total_seconds / 60;
     let hours = total_minutes / 60;
     let minutes = total_minutes % 60;
@@ -4044,17 +4224,24 @@ fn render_hud(
 
     if let Some(active) = player.active_item {
         let (image, label) = match active {
-            ActiveItem::Stack(item) => (Some(assets.item(item)), item.display_name().to_owned()),
+            ActiveItem::Stack(item) => (
+                Some(assets.item(item)),
+                format!(
+                    " {} {}",
+                    player.inventory.count(item).clamp(1, 999),
+                    item.display_name()
+                ),
+            ),
             ActiveItem::Tool(index) => player
                 .inventory
                 .tools()
                 .get(index)
-                .map(|tool| (assets.tool(*tool), tool.display_name()))
+                .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name())))
                 .map_or((None, String::new()), |(image, label)| (Some(image), label)),
         };
         if let Some(image) = image {
             screen.blit(image, 80, bottom - 8);
-            screen.text(&assets.font, &label, 88, bottom - 8);
+            draw_hud_text_background(screen, assets, &label, 88, bottom - 8, 0xFFFFFF);
         }
     }
 
@@ -4062,20 +4249,36 @@ fn render_hud(
         && let Some(tool) = player.inventory.tools().get(index)
     {
         let durability = u32::from(tool.durability) * 100 / u32::from(tool.max_durability.max(1));
-        screen.text(&assets.font, &format!("{durability}%"), 164, bottom - 16);
+        draw_hud_text_background(
+            screen,
+            assets,
+            &format!("{durability}%"),
+            164,
+            bottom - 16,
+            hud_percentage_color(durability),
+        );
         if tool.kind == ToolKind::Bow {
-            screen.text(
-                &assets.font,
+            draw_hud_text_background(
+                screen,
+                assets,
                 &format!(" x{}", player.inventory.count(ItemId::Arrow)),
                 84,
                 bottom - 16,
+                0xFFFFFF,
             );
             screen.blit_region(&assets.hud, 84, bottom - 16, 32, 8, 8, 8, false);
         }
     }
     if player.active_item == Some(ActiveItem::Stack(ItemId::WateringCan)) {
         let content = u32::from(player.watering_content) * 100 / 1_800;
-        screen.text(&assets.font, &format!("{content}%"), 164, bottom - 16);
+        draw_hud_text_background(
+            screen,
+            assets,
+            &format!("{content}%"),
+            164,
+            bottom - 16,
+            hud_percentage_color(content),
+        );
     }
 
     let effects = PotionKind::ALL
@@ -4170,6 +4373,39 @@ fn render_hud(
     }
 }
 
+fn draw_hud_text_background(
+    screen: &mut Screen,
+    assets: &Assets,
+    text: &str,
+    x: i32,
+    y: i32,
+    color: u32,
+) {
+    for (index, _) in text.chars().enumerate() {
+        screen.blit_region(&assets.hud, x + index as i32 * 8, y, 40, 16, 8, 8, false);
+    }
+    screen.text_colored(&assets.font, text, x, y, color);
+}
+
+fn hud_percentage_color(percent: u32) -> u32 {
+    let green = (percent.min(100) as f32 * 2.55) as u32;
+    (255 - green) << 16 | green << 8
+}
+
+/// Renders only the live gameplay HUD for deterministic pixel comparison.
+pub(crate) fn render_hud_parity(screen: &mut Screen, assets: &Assets, world: &World) {
+    render_hud(
+        screen,
+        assets,
+        &world.player,
+        world.mode,
+        world.seed,
+        world.levels[world.current_level].depth,
+        world.clock.get().day_tick,
+        world.days,
+    );
+}
+
 fn surface_darkness(tick: u32) -> u8 {
     let quarter = DAY_LENGTH / 4;
     match tick {
@@ -4199,11 +4435,20 @@ fn render_inventory(
     craft_selection: usize,
     pane: usize,
     station: Option<FurnitureKind>,
+    crafting_order: &[usize],
     personal_crafting: bool,
     mode: GameMode,
 ) {
     if personal_crafting || station.is_some() {
-        render_crafting_menu(screen, assets, player, station, craft_selection);
+        render_crafting_menu(
+            screen,
+            assets,
+            player,
+            station,
+            craft_selection,
+            mode == GameMode::Creative,
+            crafting_order,
+        );
         return;
     }
 
@@ -4226,13 +4471,13 @@ fn render_inventory(
             .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name()))),
     );
 
-    let player_width = inventory_panel_width(&player_entries, "INVENTORY");
+    let player_width = inventory_panel_width(&player_entries, "Inventory");
     if mode != GameMode::Creative || pane == 0 {
         render_inventory_panel(
             screen,
             assets,
             &player_entries,
-            "INVENTORY",
+            "Inventory",
             9,
             Some(item_selection),
         );
@@ -4244,8 +4489,11 @@ fn render_inventory(
             player_entries.len(),
             player.inventory.capacity(),
         );
-        if mode != GameMode::Creative {
-            screen.text_colored(&assets.font, "Z: Crafting", 17, 97, 0x686868);
+        if mode != GameMode::Creative
+            && let Some(description) = inventory_description(player, item_selection)
+        {
+            render_inventory_description(screen, assets, &description, 10, 105);
+            screen.text(&assets.font, "(SHIFT-F) to search.", 12, 137);
         }
         return;
     }
@@ -4258,15 +4506,15 @@ fn render_inventory(
             CreativeEntry::Tool(tool) => (assets.tool(*tool), format!(" {}", tool.display_name())),
         })
         .collect::<Vec<_>>();
-    let creative_width = inventory_panel_width(&creative_entries, "ITEMS");
+    let creative_width = inventory_panel_width(&creative_entries, "Items");
     let creative_x = WIDTH as i32 - 10 - creative_width;
     let player_x = creative_x - 10 - player_width;
-    render_inventory_panel(screen, assets, &player_entries, "INVENTORY", player_x, None);
+    render_inventory_panel(screen, assets, &player_entries, "Inventory", player_x, None);
     render_inventory_panel(
         screen,
         assets,
         &creative_entries,
-        "ITEMS",
+        "Items",
         creative_x,
         Some(craft_selection),
     );
@@ -4307,6 +4555,29 @@ fn inventory_panel_width(entries: &[(&crate::gfx::Image, String)], title: &str) 
     ((content_width + 48).clamp(80, WIDTH as i32 - 18) / 8) * 8
 }
 
+fn inventory_description(player: &Player, selection: usize) -> Option<String> {
+    if let Some(stack) = player.inventory.slots().get(selection) {
+        return Some(stack.item.display_name().to_owned());
+    }
+    player
+        .inventory
+        .tools()
+        .get(selection.saturating_sub(player.inventory.slots().len()))
+        .map(|tool| tool.display_name())
+}
+
+fn render_inventory_description(
+    screen: &mut Screen,
+    assets: &Assets,
+    description: &str,
+    x: i32,
+    y: i32,
+) {
+    let width = ((description.chars().count() as i32 * 8 + 16).max(32) + 7) / 8 * 8;
+    render_menu_frame(screen, &assets.hud, x, y, width, 24);
+    screen.text(&assets.font, description, x + 8, y + 8);
+}
+
 fn render_inventory_panel(
     screen: &mut Screen,
     assets: &Assets,
@@ -4316,9 +4587,9 @@ fn render_inventory_panel(
     selection: Option<usize>,
 ) {
     let width = inventory_panel_width(entries, title);
-    let (y, height) = (9, 104);
+    let (y, height) = (9, 88);
     render_menu_frame(screen, &assets.hud, x, y, width, height);
-    render_menu_title(screen, assets, title, x, y, width, 0xFFFFFF);
+    render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
 
     let selected = selection.unwrap_or(0);
     let first = selected
@@ -4329,10 +4600,10 @@ fn render_inventory_panel(
         let entry_x = x + 24;
         let entry_y = y + 8 + row as i32 * 8;
         if selection == Some(index) {
-            screen.text(&assets.font, ">", entry_x - 8, entry_y);
+            screen.text(&assets.font, "> ", entry_x - 16, entry_y);
             screen.text(
                 &assets.font,
-                "<",
+                " <",
                 entry_x + label.chars().count() as i32 * 8,
                 entry_y,
             );
@@ -4342,18 +4613,36 @@ fn render_inventory_panel(
     }
 }
 
+/// Renders the live inventory overlay without a world background for pixel parity.
+pub(crate) fn render_inventory_parity(screen: &mut Screen, assets: &Assets, world: &World) {
+    render_inventory(
+        screen,
+        assets,
+        &world.player,
+        world.inventory_item_selection,
+        world.inventory_selection,
+        world.inventory_pane,
+        world.crafting_station,
+        &world.crafting_order,
+        world.personal_crafting,
+        world.mode,
+    );
+}
+
 fn render_crafting_menu(
     screen: &mut Screen,
     assets: &Assets,
     player: &Player,
     station: Option<FurnitureKind>,
     selection: usize,
+    creative: bool,
+    crafting_order: &[usize],
 ) {
-    let recipes = recipe_views(station);
+    let recipes = ordered_recipe_views(station, &player.inventory, creative, crafting_order);
     let title = station.map_or("Crafting", FurnitureKind::display_name);
     let content_width = recipes
         .iter()
-        .map(|(output, _)| output.chars().count())
+        .map(|recipe| recipe.label().chars().count())
         .chain([title.len()])
         .max()
         .unwrap_or(title.len()) as i32
@@ -4361,129 +4650,93 @@ fn render_crafting_menu(
     let width = (content_width + 48).clamp(96, 176);
     let (x, y, height) = (9, 9, 88);
     render_menu_frame(screen, &assets.hud, x, y, width, height);
-    render_menu_title(screen, assets, title, x, y, width, 0xFFFFFF);
+    render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
     let first = selection
         .saturating_sub(4)
         .min(recipes.len().saturating_sub(9));
-    for (row, (output, _)) in recipes.iter().skip(first).take(9).enumerate() {
+    for (row, recipe) in recipes.iter().skip(first).take(9).enumerate() {
         let index = first + row;
         let entry_x = x + 24;
         let entry_y = y + 8 + row as i32 * 8;
+        let output = recipe.label();
         if index == selection {
-            screen.text(&assets.font, ">", entry_x - 8, entry_y);
+            screen.text(&assets.font, "> ", entry_x - 16, entry_y);
             screen.text(
                 &assets.font,
-                "<",
+                " <",
                 entry_x + output.chars().count() as i32 * 8,
                 entry_y,
             );
         }
-        screen.text(&assets.font, output, entry_x, entry_y);
+        let craftable = creative
+            || (recipe
+                .costs
+                .iter()
+                .all(|cost| player.inventory.count(cost.item) >= cost.count)
+                && recipe.tool_cost.is_none_or(|(kind, tier)| {
+                    player
+                        .inventory
+                        .tools()
+                        .iter()
+                        .any(|tool| tool.kind == kind && tool.tier == tier)
+                }));
+        screen.text_colored(
+            &assets.font,
+            &output,
+            entry_x,
+            entry_y,
+            if craftable { 0xFFFFFF } else { 0x999999 },
+        );
+        screen.blit(recipe.image(assets), entry_x, entry_y);
     }
 
-    if let Some((output, costs)) = recipes.get(selection) {
+    if let Some(recipe) = recipes.get(selection) {
+        let costs = recipe.costs;
         let panel_x = x + width + 8;
-        let panel_width = ((WIDTH as i32 - panel_x - 9) / 8) * 8;
-        if panel_width >= 56 {
-            render_menu_frame(screen, &assets.hud, panel_x, y, panel_width, 32);
-            render_menu_title(screen, assets, "HAVE", panel_x, y, panel_width, 0xFFFFFF);
-            screen.text(
-                &assets.font,
-                &format!("{} {}", output_count(player, output), output),
-                panel_x + 8,
-                y + 12,
-            );
-            let cost_height = (costs.len().max(1) as i32 * 8 + 16).max(32);
+        let available_width = ((WIDTH as i32 - panel_x - 9) / 8) * 8;
+        let have_label = format!(" {}", recipe.output_count(player));
+        let have_width =
+            (("Have:".len().max(have_label.len()) as i32 * 8) + 16).min(available_width);
+        if have_width >= 56 {
+            render_menu_frame(screen, &assets.hud, panel_x, y, have_width, 24);
+            render_menu_title_left(screen, assets, "Have:", panel_x, y, 0xFFFF00);
+            screen.blit(recipe.image(assets), panel_x + 8, y + 8);
+            screen.text(&assets.font, &have_label, panel_x + 8, y + 8);
+            let cost_width = costs
+                .iter()
+                .map(|cost| format!(" {}/{}", player.inventory.count(cost.item), cost.count).len())
+                .chain(["Cost:".len()])
+                .max()
+                .unwrap_or("Cost:".len()) as i32
+                * 8
+                + 16;
+            let cost_width = cost_width.min(available_width);
+            let cost_height = costs.len().max(1) as i32 * 8 + 16;
+            let cost_y = y + height - cost_height;
             render_menu_frame(
                 screen,
                 &assets.hud,
                 panel_x,
-                y + 40,
-                panel_width,
+                cost_y,
+                cost_width,
                 cost_height,
             );
-            render_menu_title(
-                screen,
-                assets,
-                "COST",
-                panel_x,
-                y + 40,
-                panel_width,
-                0xFFFFFF,
-            );
+            render_menu_title_left(screen, assets, "Cost:", panel_x, cost_y, 0xFFFF00);
             for (row, cost) in costs.iter().enumerate() {
-                screen.blit(assets.item(cost.item), panel_x + 8, y + 52 + row as i32 * 8);
+                let entry_y = cost_y + 8 + row as i32 * 8;
+                screen.blit(assets.item(cost.item), panel_x + 8, entry_y);
                 screen.text(
                     &assets.font,
                     &format!(" {}/{}", player.inventory.count(cost.item), cost.count),
                     panel_x + 8,
-                    y + 52 + row as i32 * 8,
+                    entry_y,
                 );
             }
         }
     }
 }
 
-fn output_count(player: &Player, output: &str) -> usize {
-    let tool_count = player
-        .inventory
-        .tools()
-        .iter()
-        .filter(|tool| tool.display_name() == output)
-        .count();
-    if tool_count > 0 {
-        return tool_count;
-    }
-    ItemId::ALL
-        .iter()
-        .copied()
-        .filter(|item| {
-            output == item.display_name()
-                || output
-                    .strip_prefix(item.display_name())
-                    .is_some_and(|suffix| suffix.starts_with(" x"))
-        })
-        .max_by_key(|item| item.display_name().len())
-        .map_or(0, |item| usize::from(player.inventory.count(item)))
-}
-
-fn render_menu_frame(
-    screen: &mut Screen,
-    hud: &crate::gfx::Image,
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-) {
-    let right = x + width - 8;
-    let bottom = y + height - 8;
-    for draw_y in (y..=bottom).step_by(8) {
-        for draw_x in (x..=right).step_by(8) {
-            let edge_x = draw_x == x || draw_x == right;
-            let edge_y = draw_y == y || draw_y == bottom;
-            let source_x = if edge_x && edge_y {
-                0
-            } else if edge_y {
-                8
-            } else if edge_x {
-                16
-            } else {
-                24
-            };
-            screen.blit_region_transformed(
-                hud,
-                source_x,
-                48,
-                8,
-                8,
-                draw_x,
-                draw_y,
-                draw_x == right,
-                draw_y == bottom,
-            );
-        }
-    }
-}
+pub(crate) use minicraft_client::gfx::gui::render_menu_frame;
 
 fn render_menu_title(
     screen: &mut Screen,
@@ -4496,10 +4749,35 @@ fn render_menu_title(
 ) {
     let title_width = title.chars().count() as i32 * 8;
     let title_x = x + (width - title_width) / 2;
-    for offset in (0..title_width).step_by(8) {
-        screen.blit_region(&assets.hud, title_x + offset, y, 24, 48, 8, 8, false);
-    }
-    screen.text_colored(&assets.font, title, title_x, y, color);
+    minicraft_client::gfx::gui::render_title(
+        screen,
+        &assets.hud,
+        &assets.font,
+        title,
+        title_x,
+        y,
+        color,
+    );
+}
+
+fn render_menu_title_left(
+    screen: &mut Screen,
+    assets: &Assets,
+    title: &str,
+    x: i32,
+    y: i32,
+    color: u32,
+) {
+    let title_x = x + 8;
+    minicraft_client::gfx::gui::render_title(
+        screen,
+        &assets.hud,
+        &assets.font,
+        title,
+        title_x,
+        y,
+        color,
+    );
 }
 
 fn render_inventory_counter(
@@ -4510,18 +4788,13 @@ fn render_inventory_counter(
     size: usize,
     capacity: usize,
 ) {
-    let background_x = if size < 10 { right - 16 } else { right - 21 };
-    let background_width = if size < 10 { 18 } else { 23 };
-    screen.blit_region(
-        counter,
-        background_x,
-        top - 3,
-        56 - background_width as usize,
-        12,
-        background_width as usize,
-        13,
-        false,
-    );
+    if size < 10 {
+        screen.blit_region(counter, right - 16, top - 3, 12, 12, 3, 13, false);
+        screen.blit_region(counter, right - 13, top - 3, 20, 12, 15, 13, false);
+    } else {
+        screen.blit_region(counter, right - 21, top - 3, 12, 12, 23, 13, false);
+    }
+    let current_color = inventory_counter_color(size, capacity, true);
     render_counter_digits(
         screen,
         counter,
@@ -4531,8 +4804,19 @@ fn render_inventory_counter(
         5,
         7,
         size,
+        current_color,
     );
-    render_counter_digits(screen, counter, right - 8, top + 3, 0, 4, 5, capacity);
+    render_counter_digits(
+        screen,
+        counter,
+        right - 8,
+        top + 3,
+        0,
+        4,
+        5,
+        capacity,
+        0x999999,
+    );
 }
 
 fn render_inventory_counter_minimized(
@@ -4545,10 +4829,30 @@ fn render_inventory_counter_minimized(
     if size < 10 {
         screen.blit_region(counter, right - 12, top - 1, 0, 12, 4, 9, false);
         screen.blit_region(counter, right - 8, top - 1, 8, 12, 4, 9, false);
-        render_counter_digits(screen, counter, right - 10, top + 1, 0, 4, 5, size);
+        render_counter_digits(
+            screen,
+            counter,
+            right - 10,
+            top + 1,
+            0,
+            4,
+            5,
+            size,
+            inventory_counter_faded_color(size, 27),
+        );
     } else {
         screen.blit_region(counter, right - 16, top - 1, 0, 12, 12, 9, false);
-        render_counter_digits(screen, counter, right - 14, top + 1, 0, 4, 5, size);
+        render_counter_digits(
+            screen,
+            counter,
+            right - 14,
+            top + 1,
+            0,
+            4,
+            5,
+            size,
+            inventory_counter_faded_color(size, 27),
+        );
     }
 }
 
@@ -4562,9 +4866,10 @@ fn render_counter_digits(
     width: usize,
     height: usize,
     number: usize,
+    color: u32,
 ) {
     for (index, digit) in number.to_string().bytes().enumerate() {
-        screen.blit_region(
+        screen.blit_region_tinted(
             counter,
             x + index as i32 * width as i32,
             y,
@@ -4572,25 +4877,112 @@ fn render_counter_digits(
             source_y,
             width,
             height,
-            false,
+            color,
         );
     }
 }
 
-fn recipe_views(station: Option<FurnitureKind>) -> Vec<(String, &'static [ItemStack])> {
-    let stack = |recipe: &crate::item::Recipe| {
-        (
-            format!("{} x{}", recipe.output.item, recipe.output.count),
-            recipe.costs,
-        )
+fn inventory_counter_color(size: usize, capacity: usize, main: bool) -> u32 {
+    let capacity = capacity.max(1) as f32;
+    let inner = (size as f32 / capacity).clamp(0.0, 1.0) - 1.0;
+    let heaviness = (-(inner * inner) + 1.0).clamp(0.0, 1.0);
+    if main {
+        if heaviness < 0.5 {
+            ((heaviness / 0.5 * 255.0) as u32) << 16 | 0x00FF00
+        } else {
+            (((1.0 - heaviness) / 0.5 * 255.0) as u32) << 8 | 0xFF0000
+        }
+    } else if heaviness < 0.3 {
+        (heaviness / 0.3 * 255.0) as u32 | 0xFFFF00
+    } else {
+        (((1.0 - heaviness) / 0.7 * 255.0) as u32) << 8 | 0xFF0000
+    }
+}
+
+fn inventory_counter_faded_color(size: usize, capacity: usize) -> u32 {
+    let color = inventory_counter_color(size, capacity, false);
+    let blend = |background: u32, foreground: u32| {
+        (background as i32 + ((foreground as i32 - background as i32) as f32 * 0.35) as i32) as u32
     };
-    let tool = |recipe: &crate::item::ToolRecipe| (recipe.output.display_name(), recipe.costs);
+    let red = blend(0x2A, (color >> 16) & 0xFF);
+    let green = blend(0x32, (color >> 8) & 0xFF);
+    let blue = blend(0x99, color & 0xFF);
+    red << 16 | green << 8 | blue
+}
+
+#[derive(Clone, Copy)]
+enum RecipeOutput {
+    Stack(ItemStack),
+    Tool(ToolItem),
+}
+
+#[derive(Clone, Copy)]
+struct RecipeView {
+    output: RecipeOutput,
+    costs: &'static [ItemStack],
+    tool_cost: Option<(crate::item::ToolKind, crate::item::ToolTier)>,
+}
+
+impl RecipeView {
+    fn product_name(&self) -> String {
+        match self.output {
+            RecipeOutput::Stack(stack) => stack.item.display_name().to_owned(),
+            RecipeOutput::Tool(tool) => tool.display_name(),
+        }
+    }
+
+    fn label(&self) -> String {
+        match self.output {
+            RecipeOutput::Stack(stack) => {
+                let suffix = if stack.count > 1 {
+                    format!(" x{}", stack.count)
+                } else {
+                    String::new()
+                };
+                format!(" {}{}", stack.item.display_name(), suffix)
+            }
+            RecipeOutput::Tool(tool) => format!(" {}", tool.display_name()),
+        }
+    }
+
+    fn image<'a>(&self, assets: &'a Assets) -> &'a crate::gfx::Image {
+        match self.output {
+            RecipeOutput::Stack(stack) => assets.item(stack.item),
+            RecipeOutput::Tool(tool) => assets.tool(tool),
+        }
+    }
+
+    fn output_count(&self, player: &Player) -> usize {
+        match self.output {
+            RecipeOutput::Stack(stack) => usize::from(player.inventory.count(stack.item)),
+            RecipeOutput::Tool(expected) => player
+                .inventory
+                .tools()
+                .iter()
+                .filter(|tool| tool.kind == expected.kind && tool.tier == expected.tier)
+                .count(),
+        }
+    }
+}
+
+fn recipe_views(station: Option<FurnitureKind>) -> Vec<RecipeView> {
+    let stack = |recipe: &crate::item::Recipe| RecipeView {
+        output: RecipeOutput::Stack(recipe.output),
+        costs: recipe.costs,
+        tool_cost: None,
+    };
+    let tool = |recipe: &crate::item::ToolRecipe| RecipeView {
+        output: RecipeOutput::Tool(recipe.output),
+        costs: recipe.costs,
+        tool_cost: recipe.tool_cost,
+    };
     match station {
         None => HAND_RECIPES.iter().map(stack).collect(),
-        Some(FurnitureKind::Workbench) => WORKBENCH_STATION_RECIPES
+        Some(FurnitureKind::Workbench) => WORKBENCH_STATION_RECIPES[..28]
             .iter()
             .map(stack)
             .chain(WORKBENCH_TOOL_RECIPES.iter().map(tool))
+            .chain(WORKBENCH_STATION_RECIPES[28..].iter().map(stack))
             .collect(),
         Some(FurnitureKind::Oven) => OVEN_RECIPES.iter().map(stack).collect(),
         Some(FurnitureKind::Furnace) => FURNACE_RECIPES.iter().map(stack).collect(),
@@ -4603,6 +4995,51 @@ fn recipe_views(station: Option<FurnitureKind>) -> Vec<(String, &'static [ItemSt
         Some(FurnitureKind::Loom) => LOOM_RECIPES.iter().map(stack).collect(),
         _ => Vec::new(),
     }
+}
+
+fn sorted_recipe_views(
+    station: Option<FurnitureKind>,
+    inventory: &crate::item::Inventory,
+    creative: bool,
+) -> Vec<RecipeView> {
+    let mut recipes = recipe_views(station);
+    recipes.sort_by(|left, right| {
+        recipe_can_craft(right, inventory, creative)
+            .cmp(&recipe_can_craft(left, inventory, creative))
+    });
+    recipes
+}
+
+fn ordered_recipe_views(
+    station: Option<FurnitureKind>,
+    inventory: &crate::item::Inventory,
+    creative: bool,
+    order: &[usize],
+) -> Vec<RecipeView> {
+    let recipes = recipe_views(station);
+    if order.len() == recipes.len() && order.iter().all(|&index| index < recipes.len()) {
+        order.iter().map(|&index| recipes[index]).collect()
+    } else {
+        sorted_recipe_views(station, inventory, creative)
+    }
+}
+
+fn recipe_can_craft(
+    recipe: &RecipeView,
+    inventory: &crate::item::Inventory,
+    creative: bool,
+) -> bool {
+    creative
+        || (recipe
+            .costs
+            .iter()
+            .all(|cost| inventory.count(cost.item) >= cost.count)
+            && recipe.tool_cost.is_none_or(|(kind, tier)| {
+                inventory
+                    .tools()
+                    .iter()
+                    .any(|tool| tool.kind == kind && tool.tier == tier)
+            }))
 }
 
 fn render_entity(
@@ -4764,10 +5201,32 @@ fn text_particle_motion(id: u64, age: u32) -> (i32, i32, i32) {
     (x as i32, y as i32, z as i32)
 }
 
-fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
-    let (x, y, width, height) = (48, 32, 192, 128);
+pub(crate) fn render_pause(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    world: &World,
+) {
+    if matches!(
+        world.pause.render_view().page,
+        PausePage::Quests
+            | PausePage::QuestSeriesInfo
+            | PausePage::QuestSeriesViewer
+            | PausePage::QuestDetail
+    ) {
+        render_quest_display(screen, assets, localization, world);
+        return;
+    }
+    // Java Menu.Builder derives the frame from nine 8px entries with 4px
+    // spacing. The non-selectable help line is the widest entry, but the
+    // selectable cursor inset removes 32px from its width contribution.
+    let entry_count = if world.quests_enabled { 10 } else { 9 };
+    let width = 184;
+    let height = entry_count * 12 + 12;
+    let x = (WIDTH as i32 - width) / 2;
+    let y = (HEIGHT as i32 - height) / 2;
     render_menu_frame(screen, &assets.hud, x, y, width, height);
-    let (title, labels): (&str, Vec<String>) = match world.pause_page {
+    let (title, labels): (&str, Vec<String>) = match world.pause.render_view().page {
         PausePage::Main => (
             "Paused",
             pause_actions(world.quests_enabled)
@@ -4812,79 +5271,478 @@ fn render_pause(screen: &mut Screen, assets: &Assets, world: &World) {
                 "ENTER OR ESC TO RETURN".to_owned(),
             ],
         ),
-        PausePage::Quests => (
-            "Quests",
-            vec![
-                format!(
-                    "TUTORIALS: {}/{}",
-                    world.progress.tutorial_completed_count(),
-                    world.progress.tutorial_count()
-                ),
-                format!(
-                    "QUESTS: {}/{}",
-                    world.progress.quest_completed_count(),
-                    world.progress.quest_count()
-                ),
-                "ENTER OR ESC TO RETURN".to_owned(),
-            ],
-        ),
+        PausePage::Quests
+        | PausePage::QuestSeriesInfo
+        | PausePage::QuestSeriesViewer
+        | PausePage::QuestDetail => unreachable!(),
     };
     render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
     for (index, label) in labels.iter().enumerate() {
-        let draw_y = y + 24 + index as i32 * 12;
+        // The first Java entry is BlankEntry; selectable entries begin on row 1.
+        let draw_y = y + 20 + index as i32 * 12;
         let draw_x = x + (width - label.chars().count() as i32 * 8) / 2;
-        if index == world.pause_selection
-            && matches!(world.pause_page, PausePage::Main | PausePage::Options)
+        let selected = if world.pause.render_view().confirm
+            && world.pause.render_view().page == PausePage::Main
         {
-            screen.text(&assets.font, ">", draw_x - 8, draw_y);
+            labels.len().saturating_sub(1)
+        } else {
+            world.pause.render_view().selection
+        };
+        if index == selected
+            && matches!(
+                world.pause.render_view().page,
+                PausePage::Main | PausePage::Options
+            )
+        {
+            screen.text(&assets.font, "> ", draw_x - 16, draw_y);
             screen.text(
                 &assets.font,
-                "<",
+                " <",
                 draw_x + label.chars().count() as i32 * 8,
                 draw_y,
             );
         }
-        screen.text(&assets.font, label, draw_x, draw_y);
+        let selectable = matches!(
+            world.pause.render_view().page,
+            PausePage::Main | PausePage::Options
+        );
+        screen.text_colored(
+            &assets.font,
+            label,
+            draw_x,
+            draw_y,
+            if selectable && index != selected {
+                0x999999
+            } else {
+                0xFFFFFF
+            },
+        );
     }
-    if world.pause_page == PausePage::Main {
+    if world.pause.render_view().page == PausePage::Main {
+        let help_y = y + 20 + labels.len() as i32 * 12 + 12;
         screen.text_colored(
             &assets.font,
             "UP and DOWN to Scroll",
             (WIDTH as i32 - 21 * 8) / 2,
-            y + height - 24,
-            0x686868,
+            help_y,
+            0x999999,
         );
         screen.text_colored(
             &assets.font,
             "ENTER: Choose",
             (WIDTH as i32 - 13 * 8) / 2,
-            y + height - 14,
-            0x686868,
+            help_y + 12,
+            0x999999,
         );
     }
-    if world.pause_confirm {
-        let (popup_x, popup_y, popup_width, popup_height) = (20, 56, 248, 80);
-        screen.rect(popup_x, popup_y, popup_width, popup_height, 0x08080C);
-        screen.frame(popup_x, popup_y, popup_width, popup_height, 0xC8C8C8);
-        screen.centered_text(&assets.font, "Are you sure you want to", popup_y + 8);
-        screen.centered_text(&assets.font, "exit the game?", popup_y + 18);
+    if world.pause.render_view().confirm {
+        // PopupDisplay ignores PopupConfig.entrySpacing and uses Menu's default
+        // zero spacing. Six entries therefore produce this centered 280x64 box.
+        let (popup_x, popup_y, popup_width, popup_height) = (4, 64, 280, 64);
+        render_menu_frame(
+            screen,
+            &assets.hud,
+            popup_x,
+            popup_y,
+            popup_width,
+            popup_height,
+        );
+        screen.centered_text(
+            &assets.font,
+            "Are you sure you want to exit the",
+            popup_y + 8,
+        );
+        screen.centered_text(&assets.font, "game?", popup_y + 16);
         let warning = "All unsaved progress will be lost";
         screen.text_colored(
             &assets.font,
             warning,
             (WIDTH as i32 - warning.chars().count() as i32 * 8) / 2,
-            popup_y + 30,
-            0xFF3030,
+            popup_y + 24,
+            0xC62C2C,
         );
         for (index, label) in ["Cancel", "Quit without saving"].iter().enumerate() {
-            let draw_y = popup_y + 48 + index as i32 * 12;
+            let draw_y = popup_y + 40 + index as i32 * 8;
             let draw_x = (WIDTH as i32 - label.len() as i32 * 8) / 2;
-            if index == world.pause_selection {
-                screen.text(&assets.font, ">", draw_x - 8, draw_y);
-                screen.text(&assets.font, "<", draw_x + label.len() as i32 * 8, draw_y);
+            if index == world.pause.render_view().selection {
+                screen.text(&assets.font, "> ", draw_x - 16, draw_y);
+                screen.text(&assets.font, " <", draw_x + label.len() as i32 * 8, draw_y);
             }
-            screen.text(&assets.font, label, draw_x, draw_y);
+            screen.text_colored(
+                &assets.font,
+                label,
+                draw_x,
+                draw_y,
+                if index == world.pause.render_view().selection {
+                    0xFFFFFF
+                } else {
+                    0x999999
+                },
+            );
         }
+    }
+}
+
+fn quest_description_lines(text: &str) -> Vec<String> {
+    // StringEntry.useLines uses Screen.w - 20 pixels and 8px glyphs.
+    crate::content::paginate(text, (WIDTH - 20) / 8, HEIGHT / 4)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn render_quest_root(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    world: &World,
+    selection: usize,
+) {
+    // QuestsDisplay(clearScreen=true), including when drawn as a parent.
+    screen.clear(0);
+    screen.centered_text(
+        &assets.font,
+        &format!(
+            "{}: {}",
+            localization.text("minicraft.settings.quests"),
+            if world.quests_enabled { "On" } else { "Off" }
+        ),
+        6,
+    );
+    let unlocked = localization.text("minicraft.displays.quests.display.header.unlocked");
+    let completed = localization.text("minicraft.displays.quests.display.header.completed");
+    screen.text_colored(
+        &assets.font,
+        unlocked,
+        WIDTH as i32 / 2 - unlocked.chars().count() as i32 * 8 - 16,
+        26,
+        if world.pause.render_view().quest_tab == 0 {
+            0xFFFFFF
+        } else {
+            0x999999
+        },
+    );
+    screen.text_colored(
+        &assets.font,
+        completed,
+        WIDTH as i32 / 2 + 16,
+        26,
+        if world.pause.render_view().quest_tab == 1 {
+            0xFFFFFF
+        } else {
+            0x999999
+        },
+    );
+    let groups = world.progress.quest_group_views(
+        &world.inventory_progress(),
+        world.pause.render_view().quest_tab == 1,
+    );
+    let first = selection
+        .saturating_sub(2)
+        .min(groups.len().saturating_sub(5));
+    // The menu is built empty with displayLength=5. setEntries does not
+    // recalculate its fixed 44px-high entry bounds, centered at (144,76).
+    for (row, group) in groups.iter().skip(first).take(5).enumerate() {
+        let label = localization.text(&group.id);
+        let width = label.chars().count() as i32 * 8;
+        let x = (WIDTH as i32 - width) / 2;
+        let y = 54 + row as i32 * 9;
+        if first + row == selection {
+            screen.text(&assets.font, "> ", x - 16, y);
+            screen.text(&assets.font, " <", x + width, y);
+        }
+        screen.text_colored(
+            &assets.font,
+            label,
+            x,
+            y,
+            if group.completed {
+                quest_tree::GREEN
+            } else {
+                0xFFFFFF
+            },
+        );
+    }
+    let description = groups
+        .get(selection)
+        .map(|group| localization.text(&group.description))
+        .unwrap_or_else(|| localization.text("minicraft.displays.quests.display.no_quest_desc"));
+    for (row, line) in quest_description_lines(description).iter().enumerate() {
+        screen.centered_text(&assets.font, line, 127 + row as i32 * 8);
+    }
+}
+
+/// Menu.Builder(true, spacing, CENTER) anchored at (Screen.w/2, top), BOTTOM.
+/// Titles here are StringEntry rows inside separate panels, not yellow frame titles.
+fn render_quest_info_panel(
+    screen: &mut Screen,
+    assets: &Assets,
+    top: i32,
+    spacing: i32,
+    entries: &[(String, u32, bool)],
+) {
+    let selectable = entries.iter().any(|entry| entry.2);
+    let cursor_inset = if selectable { 32 } else { 0 };
+    let content_width = entries
+        .iter()
+        .map(|(text, _, select)| {
+            (text.chars().count() as i32 * 8
+                - if selectable && !select {
+                    cursor_inset
+                } else {
+                    0
+                })
+            .max(0)
+        })
+        .max()
+        .unwrap_or(0);
+    let width = content_width + cursor_inset + 16;
+    let step = 8 + spacing;
+    let visible = ((HEIGHT as i32 - top - 16 + spacing) / step).max(0) as usize;
+    let count = entries.len().min(visible);
+    let height = count as i32 * step - spacing + 16;
+    render_menu_frame(
+        screen,
+        &assets.hud,
+        (WIDTH as i32 - width) / 2,
+        top,
+        width,
+        height,
+    );
+    for (row, (text, color, select)) in entries.iter().take(count).enumerate() {
+        let x = (WIDTH as i32 - text.chars().count() as i32 * 8) / 2;
+        let y = top + 8 + row as i32 * step;
+        screen.text_colored(&assets.font, text, x, y, *color);
+        if *select {
+            screen.text(&assets.font, "> ", x - 16, y);
+            screen.text(&assets.font, " <", x + text.chars().count() as i32 * 8, y);
+        }
+    }
+}
+
+fn render_quest_display(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    world: &World,
+) {
+    render_quest_page(
+        screen,
+        assets,
+        localization,
+        world,
+        world.pause.render_view().page,
+    );
+}
+
+fn render_quest_page(
+    screen: &mut Screen,
+    assets: &Assets,
+    localization: &Localization,
+    world: &World,
+    page: PausePage,
+) {
+    match page {
+        PausePage::Quests => {
+            render_quest_root(
+                screen,
+                assets,
+                localization,
+                world,
+                world.pause.render_view().selection,
+            );
+        }
+        PausePage::QuestSeriesInfo => {
+            render_quest_root(
+                screen,
+                assets,
+                localization,
+                world,
+                world.pause.render_view().quest_series_selection,
+            );
+            let Some(group) = world
+                .progress
+                .quest_group_views(&world.inventory_progress(), false)
+                .into_iter()
+                .find(|group| group.index == world.pause.render_view().quest_group)
+            else {
+                return;
+            };
+            render_quest_info_panel(
+                screen,
+                assets,
+                5,
+                0,
+                &[(localization.text(&group.id).to_owned(), 0xFFFFFF, false)],
+            );
+            let status_key = if group.completed {
+                "minicraft.displays.quests.quest_info.display.status.completed"
+            } else {
+                "minicraft.displays.quests.quest_info.display.status.unlocked"
+            };
+            let mut entries = vec![
+                (
+                    localization.format(
+                        "minicraft.displays.quests.quest_info.display.status",
+                        &[localization.text(status_key)],
+                    ),
+                    if group.completed {
+                        quest_tree::GREEN
+                    } else {
+                        0xFFFFFF
+                    },
+                    false,
+                ),
+                (
+                    localization.format(
+                        "minicraft.displays.quests.quest_info.display.quests_completed_count",
+                        &[&group.completed_quests.to_string()],
+                    ),
+                    0xFFFFFF,
+                    false,
+                ),
+            ];
+            let description = localization.format(
+                "minicraft.displays.quests.quest_info.display.description",
+                &[localization.text(&group.description)],
+            );
+            entries.extend(
+                quest_description_lines(&description)
+                    .into_iter()
+                    .map(|line| (line, 0xFFFFFF, false)),
+            );
+            entries.push((
+                localization.format(
+                    "minicraft.displays.quests.quest_info.display.ongoing_quests",
+                    &[&group.ongoing_quests.to_string()],
+                ),
+                0xFFFFFF,
+                false,
+            ));
+            entries.push((String::new(), 0xFFFFFF, false));
+            entries.push((
+                localization
+                    .text("minicraft.displays.quests.quest_info.view_quests")
+                    .to_owned(),
+                0xFFFFFF,
+                true,
+            ));
+            render_quest_info_panel(screen, assets, 30, 2, &entries);
+        }
+        PausePage::QuestSeriesViewer | PausePage::QuestDetail => {
+            let quests = world.progress.quest_views(
+                world.pause.render_view().quest_group,
+                &world.inventory_progress(),
+            );
+            let Some(group) = world
+                .progress
+                .quest_group_views(&world.inventory_progress(), false)
+                .into_iter()
+                .find(|group| group.index == world.pause.render_view().quest_group)
+            else {
+                return;
+            };
+            if page == PausePage::QuestSeriesViewer {
+                render_quest_page(
+                    screen,
+                    assets,
+                    localization,
+                    world,
+                    PausePage::QuestSeriesInfo,
+                );
+                render_quest_info_panel(
+                    screen,
+                    assets,
+                    6,
+                    0,
+                    &[
+                        (
+                            localization.text("minicraft.displays.quests").to_owned(),
+                            0xFFFFFF,
+                            false,
+                        ),
+                        (localization.text(&group.id).to_owned(), 0xFFFFFF, false),
+                    ],
+                );
+                render_menu_frame(
+                    screen,
+                    &assets.hud,
+                    8,
+                    40,
+                    WIDTH as i32 - 16,
+                    HEIGHT as i32 - 60,
+                );
+                let tree = quest_tree::Tree::new(&quests, |id| localization.text(id).to_owned());
+                tree.render(
+                    screen,
+                    &assets.font,
+                    &quests,
+                    world.pause.render_view().selection,
+                    &world.quest_tree_state,
+                    localization.text("minicraft.displays.quests.display.no_quest"),
+                );
+            } else {
+                render_quest_page(
+                    screen,
+                    assets,
+                    localization,
+                    world,
+                    PausePage::QuestSeriesViewer,
+                );
+                if let Some(quest) = quests.get(world.pause.render_view().quest_item) {
+                    let status_key = if quest.completed {
+                        "minicraft.displays.quests.quest_info.display.status.completed"
+                    } else {
+                        "minicraft.displays.quests.quest_info.display.status.unlocked"
+                    };
+                    let progress = if quest.has_requirements {
+                        localization
+                            .text(
+                                "minicraft.displays.quests.quest_info.display.progress_uncompleted",
+                            )
+                            .to_owned()
+                    } else {
+                        localization.format(
+                            "minicraft.displays.quests.quest_info.display.progress",
+                            &[
+                                &quest.criteria_completed.to_string(),
+                                &quest.criteria_total.to_string(),
+                            ],
+                        )
+                    };
+                    render_quest_info_panel(
+                        screen,
+                        assets,
+                        5,
+                        1,
+                        &[
+                            (localization.text(&group.id).to_owned(), 0xFFFFFF, false),
+                            (
+                                format!(
+                                    "{}: {}",
+                                    localization.text(&quest.id),
+                                    localization.text(status_key)
+                                ),
+                                if quest.completed {
+                                    quest_tree::GREEN
+                                } else {
+                                    0xFFFFFF
+                                },
+                                false,
+                            ),
+                            (progress, 0xFFFFFF, false),
+                        ],
+                    );
+                    let entries: Vec<_> =
+                        quest_description_lines(localization.text(&quest.description))
+                            .into_iter()
+                            .map(|line| (line, 0xFFFFFF, false))
+                            .collect();
+                    render_quest_info_panel(screen, assets, 52, 2, &entries);
+                }
+            }
+        }
+        PausePage::Main | PausePage::Options | PausePage::Achievements => unreachable!(),
     }
 }
 
@@ -5035,26 +5893,25 @@ fn find_stair_site(tiles: &[Tile], width: usize, height: usize, origin: usize) -
 }
 
 #[cfg(test)]
-mod registry_tests {
+pub(crate) mod registry_tests {
     use super::{
         ActiveItem, DAY_LENGTH, Direction, FurnitureKind, GameMode, HUNGER_STAMINA_STEPS, Level,
-        MAX_HUNGER_TICKS, PausePage, Player, STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World,
-        creative_entries,
+        MAX_HUNGER_TICKS, PausePage, PauseSession, Player, RecipeOutput, RecipeView,
+        STARVATION_HEALTH_FLOORS, TILE_SIZE, Tile, World, creative_entries,
         entity::{EntityArena, EntityKind},
-        player_sprite_frame,
+        inventory_counter_color, pause_actions, player_sprite_frame,
         random::JavaRandom,
-        spawn, surface_darkness, time_name, try_queue_natural_spawn,
+        recipe_can_craft, recipe_views, sorted_recipe_views, spawn, surface_darkness, time_name,
+        try_queue_natural_spawn,
     };
     use crate::{
         audio::SoundEffect,
         input::Input,
-        item::{
-            ArmorKind, Inventory, ItemId, PotionKind, ToolItem, ToolKind, ToolTier,
-            WORKBENCH_STATION_RECIPES,
-        },
+        item::{ArmorKind, Inventory, ItemId, PotionKind, ToolItem, ToolKind, ToolTier},
     };
+    use minicraft_client::core::updater::Updater;
 
-    fn tiny_world() -> World {
+    pub(crate) fn tiny_world() -> World {
         World {
             width: 16,
             height: 16,
@@ -5101,7 +5958,9 @@ mod registry_tests {
             },
             seed: 1,
             tick: 0,
-            day_tick: 0,
+            clock: Default::default(),
+            render_gui: true,
+            updater: Default::default(),
             days: 1,
             difficulty: 1,
             mode: super::GameMode::Survival,
@@ -5110,8 +5969,12 @@ mod registry_tests {
             score_multiplier: 1,
             multiplier_ticks: 300,
             game_over: false,
+            end_game: None,
             story_complete: false,
             sleeping: 0,
+            bed_level: None,
+            respawn_tile: None,
+            sleep_speed: 1,
             tutorials_enabled: true,
             quests_enabled: true,
             show_quests: true,
@@ -5119,22 +5982,57 @@ mod registry_tests {
             signs: vec![std::collections::HashMap::new()],
             sign_editor: None,
             book_open: None,
-            paused: false,
-            pause_selection: 0,
-            pause_page: PausePage::Main,
-            pause_confirm: false,
+            pause: PauseSession::default(),
             inventory_open: false,
+            quest_tree_state: super::quest_tree::State::default(),
             inventory_selection: 0,
             inventory_item_selection: 0,
             inventory_pane: 0,
             crafting_station: None,
+            crafting_order: Vec::new(),
             personal_crafting: false,
-            notification: None,
+            notifications: super::Notifications::default(),
+            notification_context: super::notifications::Context::default(),
             air_wizard_defeated: false,
             obsidian_knight_defeated: false,
             random: JavaRandom::new(1),
             sound_events: Vec::new(),
         }
+    }
+
+    #[test]
+    fn inventory_counter_uses_java_heaviness_colors() {
+        assert_eq!(inventory_counter_color(0, 27, true), 0x00FF00);
+        assert_eq!(inventory_counter_color(27, 27, true), 0xFF0000);
+    }
+
+    #[test]
+    fn cactus_bump_hurts_and_blocks_the_player() {
+        let mut world = tiny_world();
+        let start_x = world.player.x;
+        world.levels[0].tiles[9 + 8 * 16] = Tile::Cactus;
+
+        assert!(!world.move_player(5, 0));
+        assert_eq!(world.player.x, start_x);
+        assert_eq!(world.player.health, 9);
+        assert_eq!(world.player.hurt_time, 30);
+
+        assert!(!world.move_player(5, 0));
+        assert_eq!(world.player.health, 9);
+    }
+
+    #[test]
+    fn hard_cactus_and_lava_brick_use_java_bump_damage() {
+        let mut hard = tiny_world();
+        hard.difficulty = 2;
+        hard.levels[0].tiles[9 + 8 * 16] = Tile::Cactus;
+        assert!(!hard.move_player(5, 0));
+        assert_eq!(hard.player.health, 8);
+
+        let mut lava_brick = tiny_world();
+        lava_brick.levels[0].tiles[9 + 8 * 16] = Tile::LavaBrick;
+        assert!(lava_brick.move_player(5, 0));
+        assert_eq!(lava_brick.player.health, 7);
     }
 
     #[test]
@@ -5147,6 +6045,48 @@ mod registry_tests {
         assert_eq!(player_sprite_frame(Direction::Left, 8), (48, true));
         assert_eq!(player_sprite_frame(Direction::Right, 0), (32, false));
         assert_eq!(player_sprite_frame(Direction::Right, 8), (48, false));
+    }
+
+    #[test]
+    fn player_motion_matches_java_direction_collision_and_exhaustion_rules() {
+        let mut opposing = tiny_world();
+        let start_x = opposing.player.x;
+        opposing.tick(&Input {
+            left: true,
+            right: true,
+            ..Input::default()
+        });
+        assert_eq!(opposing.player.x, start_x);
+        assert!(matches!(opposing.player.direction, Direction::Right));
+        assert_eq!(opposing.player.walk_distance, 0);
+
+        let mut blocked = tiny_world();
+        blocked.player.x = 9 * TILE_SIZE - 5;
+        blocked.levels[0].tiles[9 + 8 * 16] = Tile::Rock;
+        let blocked_x = blocked.player.x;
+        blocked.tick(&Input {
+            right: true,
+            ..Input::default()
+        });
+        assert_eq!(blocked.player.x, blocked_x);
+        assert_eq!(blocked.player.walk_distance, 1);
+        assert_eq!(blocked.player.step_count, 0);
+
+        let mut exhausted = tiny_world();
+        exhausted.player.stamina = 0;
+        let exhausted_x = exhausted.player.x;
+        exhausted.tick(&Input {
+            right: true,
+            ..Input::default()
+        });
+        assert_eq!(exhausted.player.stamina_recharge_delay, 39);
+        assert_eq!(exhausted.player.x, exhausted_x);
+        exhausted.tick(&Input {
+            right: true,
+            ..Input::default()
+        });
+        assert_eq!(exhausted.player.stamina_recharge_delay, 38);
+        assert_eq!(exhausted.player.x, exhausted_x + 1);
     }
 
     #[test]
@@ -5220,12 +6160,27 @@ mod registry_tests {
         assert!(world.inventory_open);
         assert!(world.personal_crafting);
         assert_eq!(world.crafting_station, None);
-        world.tick(&Input {
+        world.inventory_selection = sorted_recipe_views(
+            None,
+            &world.player.inventory,
+            false,
+        )
+        .iter()
+        .position(|recipe| {
+            matches!(recipe.output, RecipeOutput::Stack(stack) if stack.item == ItemId::Workbench)
+        })
+        .unwrap();
+        let craft = Input {
             select: true,
             ..Input::default()
-        });
+        };
+        assert_eq!(
+            world.immediate_menu_sounds(&craft),
+            vec![SoundEffect::Craft]
+        );
+        world.tick(&craft);
         assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
-        assert!(world.take_sound_events().contains(&SoundEffect::Craft));
+        assert!(world.take_sound_events().is_empty());
     }
 
     #[test]
@@ -5243,6 +6198,16 @@ mod registry_tests {
             ..Input::default()
         });
         assert!(world.inventory_open && world.personal_crafting);
+        world.inventory_selection = sorted_recipe_views(
+            None,
+            &world.player.inventory,
+            false,
+        )
+        .iter()
+        .position(|recipe| {
+            matches!(recipe.output, RecipeOutput::Stack(stack) if stack.item == ItemId::Workbench)
+        })
+        .unwrap();
         world.tick(&Input {
             select: true,
             ..Input::default()
@@ -5251,9 +6216,10 @@ mod registry_tests {
         assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
         assert!(
             world
-                .notification
-                .as_ref()
-                .is_none_or(|(message, _)| !message.starts_with("CRAFTED"))
+                .notifications
+                .messages()
+                .iter()
+                .all(|message| !message.starts_with("CRAFTED"))
         );
     }
 
@@ -5283,13 +6249,13 @@ mod registry_tests {
         let mut world = tiny_world();
         world.tutorials_enabled = false;
         world.quests_enabled = false;
-        world.notification = None;
+        world.notifications.clear();
         world.tick(&Input {
             pickup: true,
             ..Input::default()
         });
         assert_eq!(world.player.attack_time, 5);
-        assert!(world.notification.is_none());
+        assert!(world.notifications.messages().is_empty());
 
         world.levels[0].entities.spawn_furniture(
             FurnitureKind::Workbench,
@@ -5305,12 +6271,12 @@ mod registry_tests {
             Some(ActiveItem::Stack(ItemId::Workbench))
         );
         assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
-        assert!(world.notification.is_none());
+        assert!(world.notifications.messages().is_empty());
         assert!(world.take_sound_events().contains(&SoundEffect::Pickup));
     }
 
     #[test]
-    fn pause_navigation_is_available_to_the_render_frame_without_a_tick_delay() {
+    fn pause_audio_is_available_to_the_input_frame_without_a_tick_delay() {
         let mut world = tiny_world();
         world.tick(&Input {
             exit: true,
@@ -5320,18 +6286,295 @@ mod registry_tests {
             down_pressed: true,
             ..Input::default()
         };
-        assert_eq!(world.immediate_menu_sound(&down), Some(SoundEffect::Select));
+        assert_eq!(
+            world.immediate_menu_sounds(&down),
+            vec![SoundEffect::Select]
+        );
         world.tick(&down);
         let confirm = Input {
             select: true,
             ..Input::default()
         };
         assert_eq!(
-            world.immediate_menu_sound(&confirm),
-            Some(SoundEffect::Confirm)
+            world.immediate_menu_sounds(&confirm),
+            vec![SoundEffect::Confirm]
         );
         world.tick(&confirm);
         assert!(world.take_sound_events().is_empty());
+    }
+
+    #[test]
+    fn closing_pause_uses_the_java_display_exit_sound() {
+        let mut world = tiny_world();
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                exit: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Craft]
+        );
+    }
+
+    #[test]
+    fn canceling_pause_quit_plays_confirm_then_display_exit() {
+        let mut world = tiny_world();
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        world.pause.view_mut().selection = pause_actions(world.quests_enabled).len() - 1;
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                select: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Confirm, SoundEffect::Craft]
+        );
+    }
+
+    #[test]
+    fn pause_achievements_use_null_entries_and_java_on_exit_sound_order() {
+        let mut world = tiny_world();
+        world.prepare_pause_audio_parity();
+        world.pause.view_mut().selection = 2;
+        world.pause.push(PausePage::Achievements, 0);
+        world.pause.begin_tick();
+        assert!(
+            world
+                .immediate_menu_sounds(&Input {
+                    select: true,
+                    ..Input::default()
+                })
+                .is_empty()
+        );
+        world.tick(&Input {
+            select: true,
+            ..Input::default()
+        });
+        assert_eq!(world.pause.view().page, PausePage::Achievements);
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                exit: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Craft, SoundEffect::Confirm]
+        );
+    }
+
+    #[test]
+    fn quest_root_tabs_and_nested_displays_follow_java_stack() {
+        let mut world = tiny_world();
+        world.prepare_quests_audio_parity();
+        assert_eq!(world.audio_menu_state_for_parity(), ("quests", 0));
+
+        let select = Input {
+            select: true,
+            ..Input::default()
+        };
+        assert_eq!(
+            world.immediate_menu_sounds(&select),
+            vec![SoundEffect::Confirm]
+        );
+        world.tick(&select);
+        assert_eq!(
+            world.audio_menu_state_for_parity(),
+            ("quest_series_info", 0)
+        );
+        world.tick(&select);
+        assert_eq!(
+            world.audio_menu_state_for_parity(),
+            ("quest_series_viewer", 0)
+        );
+        world.tick(&select);
+        assert_eq!(world.audio_menu_state_for_parity(), ("quest_detail", 0));
+
+        let exit = Input {
+            exit: true,
+            ..Input::default()
+        };
+        for expected in ["quest_series_viewer", "quest_series_info", "quests"] {
+            assert_eq!(world.immediate_menu_sounds(&exit), vec![SoundEffect::Craft]);
+            world.tick(&exit);
+            assert_eq!(world.audio_menu_state_for_parity().0, expected);
+        }
+
+        let right = Input {
+            right_pressed: true,
+            ..Input::default()
+        };
+        assert!(world.immediate_menu_sounds(&right).is_empty());
+        world.tick(&right);
+        assert_eq!(world.audio_menu_state_for_parity(), ("quests", 1));
+        assert!(world.immediate_menu_sounds(&select).is_empty());
+    }
+
+    #[test]
+    fn quest_tree_navigation_and_detail_return_preserve_cursor_and_viewport() {
+        let mut world = tiny_world();
+        world.prepare_quests_audio_parity();
+        world.complete_hoe_quest_for_parity();
+        let select = Input {
+            select: true,
+            ..Input::default()
+        };
+        world.tick(&select);
+        world.prepare_quest_layout(&crate::localization::Localization::load("en-us", &[]));
+        world.tick(&select);
+        let right = Input {
+            right_pressed: true,
+            ..Input::default()
+        };
+        assert!(world.immediate_menu_sounds(&right).is_empty());
+        world.tick(&right);
+        assert_eq!(world.pause.view().selection, 0); // Children are below, not to the right.
+        let down = Input {
+            down_pressed: true,
+            ..Input::default()
+        };
+        assert_eq!(
+            world.immediate_menu_sounds(&down),
+            vec![SoundEffect::Select]
+        );
+        world.tick(&down);
+        assert_eq!(world.pause.view().selection, 1);
+        assert!(world.immediate_menu_sounds(&down).is_empty());
+
+        let browsing = Input {
+            shift: true,
+            down_pressed: true,
+            select: true,
+            ..Input::default()
+        };
+        assert!(world.immediate_menu_sounds(&browsing).is_empty());
+        world.tick(&browsing);
+        assert_eq!(world.pause.view().page, PausePage::QuestSeriesViewer);
+        assert_eq!(world.quest_tree_state.y_scroll, 3);
+        assert_eq!(world.pause.view().selection, 1);
+        world.tick(&select); // Release Shift; current node is already visible.
+        assert_eq!(world.pause.view().page, PausePage::QuestDetail);
+        assert_eq!(world.pause.view().quest_item, 1);
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        assert_eq!(world.pause.view().page, PausePage::QuestSeriesViewer);
+        assert_eq!(
+            (
+                world.pause.view().selection,
+                world.quest_tree_state.y_scroll
+            ),
+            (1, 3)
+        );
+        assert!(world.take_sound_events().is_empty());
+
+        world.tick(&Input {
+            exit: true,
+            ..Input::default()
+        });
+        world.tick(&select); // A newly constructed viewer resets its scroll/cursor.
+        assert_eq!(
+            (
+                world.pause.view().selection,
+                world.quest_tree_state.y_scroll
+            ),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn inventory_equip_and_exit_use_the_java_display_exit_sound_immediately() {
+        let mut world = tiny_world();
+        world.prepare_inventory_audio_parity();
+        let select = Input {
+            select: true,
+            ..Input::default()
+        };
+        assert_eq!(
+            world.immediate_menu_sounds(&select),
+            vec![SoundEffect::Craft]
+        );
+        world.tick(&select);
+        assert!(world.take_sound_events().is_empty());
+        assert_eq!(world.audio_menu_state_for_parity().0, "gameplay");
+
+        world.prepare_inventory_audio_parity();
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                exit: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Craft]
+        );
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                menu: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Craft]
+        );
+    }
+
+    #[test]
+    fn successful_crafting_sound_is_not_deferred_or_duplicated() {
+        let mut world = tiny_world();
+        world.prepare_crafting_parity(false, 10, 0, 0, 0);
+        let select = Input {
+            select: true,
+            ..Input::default()
+        };
+        assert_eq!(
+            world.immediate_menu_sounds(&select),
+            vec![SoundEffect::Craft]
+        );
+        world.tick(&select);
+        assert!(world.take_sound_events().is_empty());
+        assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
+
+        assert_eq!(
+            world.immediate_menu_sounds(&Input {
+                craft: true,
+                ..Input::default()
+            }),
+            vec![SoundEffect::Craft]
+        );
+    }
+
+    #[test]
+    fn crafting_list_stably_partitions_craftable_recipes_like_java() {
+        let mut inventory = Inventory::new(27);
+        inventory.add(ItemId::Wood, 10);
+        let recipes = sorted_recipe_views(None, &inventory, false);
+        let craftable: Vec<bool> = recipes
+            .iter()
+            .map(|recipe| recipe_can_craft(recipe, &inventory, false))
+            .collect();
+        assert!(craftable.windows(2).all(|pair| pair[0] || !pair[1]));
+
+        let original = recipe_views(None);
+        let mut expected = Vec::new();
+        for wanted in [true, false] {
+            expected.extend(
+                original
+                    .iter()
+                    .filter(|recipe| recipe_can_craft(recipe, &inventory, false) == wanted)
+                    .map(RecipeView::product_name),
+            );
+        }
+        assert_eq!(
+            recipes
+                .iter()
+                .map(RecipeView::product_name)
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 
     #[test]
@@ -5344,8 +6587,8 @@ mod registry_tests {
             }),
             super::WorldAction::None
         ));
-        assert!(world.paused);
-        world.pause_selection = 4;
+        assert!(world.pause.is_open());
+        world.pause.view_mut().selection = 4;
         assert!(matches!(
             world.tick(&Input {
                 select: true,
@@ -5353,18 +6596,18 @@ mod registry_tests {
             }),
             super::WorldAction::SaveGame
         ));
-        assert!(!world.paused);
+        assert!(!world.pause.is_open());
 
         world.tick(&Input {
             exit: true,
             ..Input::default()
         });
-        world.pause_selection = 5;
+        world.pause.view_mut().selection = 5;
         world.tick(&Input {
             select: true,
             ..Input::default()
         });
-        assert!(world.pause_confirm);
+        assert!(world.pause.view().confirm);
         world.tick(&Input {
             down_pressed: true,
             ..Input::default()
@@ -5379,8 +6622,823 @@ mod registry_tests {
     }
 
     #[test]
+    fn pause_parent_selection_and_world_clock_follow_update_boundaries() {
+        let mut world = tiny_world();
+        let exit = Input {
+            exit: true,
+            ..Default::default()
+        };
+        let select = Input {
+            select: true,
+            ..Default::default()
+        };
+        world.tick(&exit);
+        assert!(!world.pause.is_rendering());
+        world.tick(&Input {
+            down_pressed: true,
+            ..Default::default()
+        });
+        assert_eq!(world.pause.render_view().selection, 1);
+        world.tick(&select);
+        assert_eq!(world.pause.view().page, PausePage::Options);
+        assert_eq!(world.pause.render_view().page, PausePage::Main);
+        world.tick(&exit);
+        assert_eq!(world.pause.view().selection, 1);
+        assert_eq!(world.pause.render_view().page, PausePage::Options);
+        world.tick(&Input::default());
+        assert_eq!(world.tick, 0);
+        assert_eq!(world.pause.render_view().selection, 1);
+        world.tick(&exit);
+        assert!(!world.pause.is_open());
+        assert!(world.pause.is_rendering());
+        world.tick(&Input::default());
+        assert_eq!(world.tick, 1);
+        assert!(!world.pause.is_rendering());
+        assert!(world.take_sound_events().is_empty());
+    }
+
+    #[test]
+    fn focus_loss_advances_calendar_but_not_player_and_reconciles_pause() {
+        let mut world = tiny_world();
+        world.tick(&Input::default());
+        assert_eq!((world.tick, world.clock.get().day_tick), (1, 0));
+        let position = (world.player.x, world.player.y, world.player.stamina);
+        for _ in 0..10 {
+            world.begin_display_tick();
+            world.tick_after_display(
+                false,
+                &Input {
+                    exit: true,
+                    attack: true,
+                    right: true,
+                    ..Default::default()
+                },
+            );
+        }
+        assert_eq!((world.tick, world.clock.get().day_tick), (1, 10));
+        assert_eq!(
+            (world.player.x, world.player.y, world.player.stamina),
+            position
+        );
+        assert!(!world.pause.is_open());
+        world.tick(&Input {
+            exit: true,
+            ..Default::default()
+        });
+        assert!(!world.pause.is_rendering());
+        world.begin_display_tick();
+        world.tick_after_display(false, &Input::default());
+        assert!(world.pause.is_rendering());
+        assert_eq!(world.clock.get().day_tick, 12); // Paused is not overwritten without focus.
+        world.tick(&Input::default());
+        assert_eq!(world.clock.get().day_tick, 13);
+        for _ in 0..10 {
+            world.begin_display_tick();
+            world.tick_after_display(false, &Input::default());
+        }
+        assert_eq!(world.clock.get().day_tick, 13);
+        world.tick(&Input {
+            exit: true,
+            ..Default::default()
+        });
+        world.tick(&Input::default());
+        assert_eq!(world.clock.get().day_tick, 13); // Resume uses previous paused=true.
+        world.tick(&Input::default());
+        assert_eq!(world.clock.get().day_tick, 14);
+        assert!(world.take_sound_events().is_empty());
+    }
+
+    #[test]
+    fn game_time_advances_in_inventory_but_not_without_focus() {
+        let mut world = tiny_world();
+        world.inventory_open = true;
+        for _ in 0..5 {
+            world.tick(&Input::default());
+        }
+        assert_eq!(
+            (
+                world.clock.get().game_time,
+                world.tick,
+                world.clock.get().day_tick
+            ),
+            (5, 0, 0)
+        );
+        world.tick_after_display(false, &Input::default());
+        assert_eq!(world.clock.get().game_time, 5);
+        let restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        assert_eq!((restored.clock.get().game_time, restored.tick), (5, 0));
+    }
+
+    #[test]
+    fn missing_legacy_game_time_starts_a_new_counter() {
+        let mut world = tiny_world();
+        world.tick = 123;
+        let mut saved: serde_json::Value =
+            serde_json::from_str(&world.to_save_string().unwrap()).unwrap();
+        saved["world"].as_object_mut().unwrap().remove("game_time");
+        let restored = World::from_save_string(&saved.to_string()).unwrap();
+        assert_eq!((restored.clock.get().game_time, restored.tick), (0, 123));
+    }
+
+    #[test]
+    fn focused_and_unfocused_frames_produce_identical_live_worlds_at_four_fps() {
+        use minicraft_client::core::game_loop::GameLoopClock;
+        use std::time::{Duration, Instant};
+        let mut expected = None;
+        for fps in [30_u64, 60, 120, 300] {
+            let mut world = tiny_world();
+            let start = Instant::now();
+            let mut clock = GameLoopClock::starting_at(start);
+            let input = Input {
+                right: true,
+                ..Default::default()
+            };
+            for frame in 1..=fps * 3 {
+                // One second playing, one unfocused, one playing. Timestamps
+                // are exact fixtures; this does not test OS event sampling.
+                let focused = frame <= fps || frame > fps * 2;
+                for _ in
+                    0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
+                {
+                    world.begin_display_tick();
+                    world.tick_after_display(focused, &input);
+                }
+            }
+            assert_eq!((world.tick, world.clock.get().day_tick), (120, 179));
+            let state: serde_json::Value =
+                serde_json::from_str(&world.to_save_string().unwrap()).unwrap();
+            if let Some(expected) = &expected {
+                assert_eq!(&state, expected);
+            } else {
+                expected = Some(state);
+            }
+        }
+    }
+
+    #[test]
+    fn save_resume_preserves_previous_pause_gate_and_calendar_rollover() {
+        let mut world = tiny_world();
+        world.tick(&Input::default());
+        world.clock.set_day_tick(DAY_LENGTH - 1);
+        let saved = world.to_save_string().unwrap();
+        let mut restored = World::from_save_string(&saved).unwrap();
+        for target in [&mut world, &mut restored] {
+            target.begin_display_tick();
+            target.tick_after_display(false, &Input::default());
+            assert_eq!(
+                (target.days, target.clock.get().day_tick, target.tick),
+                (2, 0, 1)
+            );
+        }
+        let as_value = |world: &World| {
+            serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap()).unwrap()
+        };
+        assert_eq!(as_value(&world), as_value(&restored));
+        let mut legacy: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        legacy["world"].as_object_mut().unwrap().remove("updater");
+        assert!(World::from_save_string(&legacy.to_string()).is_ok());
+    }
+
+    #[test]
+    fn core_prelude_autosave_captures_before_calendar_score_and_input() {
+        let mut world = tiny_world();
+        world.updater = Updater::from_state(false, 7_200);
+        world.mode = GameMode::Score;
+        world.score_ticks = 0;
+        world.clock.set_day_tick(42);
+        let position = (world.player.x, world.player.y);
+        let input = Input {
+            right: true,
+            ..Default::default()
+        };
+        let failure = world.tick_with_autosave(false, &input, true, |_| Err("write failed".into()));
+        assert!(matches!(failure, Err(error) if error == "write failed"));
+        assert_eq!(
+            (
+                world.updater.autosave_ticks(),
+                world.clock.get().day_tick,
+                world.score_ticks
+            ),
+            (7_200, 42, 0)
+        );
+        let mut saved = None;
+        world
+            .tick_with_autosave(false, &input, true, |snapshot| {
+                saved = Some(snapshot.to_save_string()?);
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = World::from_save_string(&saved.unwrap()).unwrap();
+        assert_eq!(
+            (
+                snapshot.clock.get().day_tick,
+                snapshot.score_ticks,
+                snapshot.game_over
+            ),
+            (42, 0, false)
+        );
+        assert_eq!(
+            (
+                world.clock.get().day_tick,
+                world.score_ticks,
+                world.game_over
+            ),
+            (43, -1, true)
+        );
+        assert_eq!(world.updater.autosave_ticks(), 0);
+        assert_eq!(world.tick, 0);
+        assert_eq!((world.player.x, world.player.y), position);
+    }
+
+    #[test]
+    fn core_prelude_autosave_gates_dead_disabled_and_game_over_and_resets_manual_save() {
+        for (enabled, alive, over) in [
+            (true, true, false),
+            (false, true, false),
+            (true, false, false),
+            (true, true, true),
+        ] {
+            let mut world = tiny_world();
+            world.updater = Updater::from_state(false, 7_199);
+            world.player.health = if alive { 10 } else { 0 };
+            world.game_over = over;
+            let mut saves = 0;
+            world
+                .tick_with_autosave(false, &Input::default(), enabled, |_| {
+                    saves += 1;
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(saves, 0);
+            assert_eq!(world.updater.autosave_ticks(), 7_200);
+            world
+                .tick_with_autosave(false, &Input::default(), enabled, |_| {
+                    saves += 1;
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(saves, usize::from(enabled && alive && !over));
+            assert_eq!(world.updater.autosave_ticks(), 0);
+            world.tick_after_display(false, &Input::default());
+            world.reset_autosave();
+            assert_eq!(world.updater.autosave_ticks(), 0);
+        }
+    }
+
+    #[test]
+    fn core_prelude_score_uses_previous_pause_even_when_focus_is_lost() {
+        let mut world = tiny_world();
+        world.mode = GameMode::Score;
+        world.score_ticks = 2;
+        world.tick(&Input::default()); // Java initially paused=true.
+        assert_eq!(world.score_ticks, 2);
+        world.pause.open();
+        world.tick(&Input::default()); // Pause boundary still uses old false.
+        assert_eq!(world.score_ticks, 1);
+        world.tick_after_display(false, &Input::default());
+        assert_eq!(world.score_ticks, 1);
+        world.pause.close();
+        world.tick(&Input::default()); // Resume uses old true.
+        assert_eq!(world.score_ticks, 1);
+        world.tick_after_display(false, &Input::default());
+        assert_eq!((world.score_ticks, world.game_over), (0, false));
+        world.tick_after_display(false, &Input::default());
+        assert_eq!((world.score_ticks, world.game_over), (-1, true));
+        world.tick_after_display(false, &Input::default());
+        assert_eq!(world.score_ticks, -1);
+    }
+
+    #[test]
+    fn core_prelude_save_continuation_and_legacy_boolean_updater_are_supported() {
+        let mut world = tiny_world();
+        world.updater = Updater::from_state(false, 7_200);
+        world.mode = GameMode::Score;
+        world.score_ticks = 0;
+        let saved = world.to_save_string().unwrap();
+        let mut restored = World::from_save_string(&saved).unwrap();
+        for target in [&mut world, &mut restored] {
+            let mut saves = 0;
+            target
+                .tick_with_autosave(false, &Input::default(), true, |_| {
+                    saves += 1;
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(saves, 1);
+        }
+        let value = |world: &World| {
+            serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap()).unwrap()
+        };
+        assert_eq!(value(&world), value(&restored));
+        assert_eq!(
+            World::from_save_string(&world.to_save_string().unwrap())
+                .unwrap()
+                .score_ticks,
+            -1
+        );
+        for paused in [false, true] {
+            let mut legacy: serde_json::Value = serde_json::from_str(&saved).unwrap();
+            legacy["world"]["updater"] = paused.into();
+            let old = World::from_save_string(&legacy.to_string()).unwrap();
+            assert_eq!(old.updater, Updater::from_paused(paused));
+        }
+    }
+
+    #[test]
+    fn core_prelude_autosave_and_score_are_identical_at_four_render_rates() {
+        use minicraft_client::core::game_loop::GameLoopClock;
+        use std::time::{Duration, Instant};
+        let mut expected = None;
+        for fps in [30_u64, 60, 120, 300] {
+            let mut world = tiny_world();
+            world.updater = Updater::from_state(false, 7_190);
+            world.mode = GameMode::Score;
+            world.score_ticks = 120;
+            let start = Instant::now();
+            let mut clock = GameLoopClock::starting_at(start);
+            let mut saves = Vec::new();
+            for frame in 1..=fps {
+                for _ in
+                    0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
+                {
+                    world.begin_display_tick();
+                    world
+                        .tick_with_autosave(false, &Input::default(), true, |snapshot| {
+                            saves.push(
+                                serde_json::from_str::<serde_json::Value>(
+                                    &snapshot.to_save_string().unwrap(),
+                                )
+                                .unwrap(),
+                            );
+                            Ok(())
+                        })
+                        .unwrap();
+                }
+            }
+            assert_eq!(
+                (world.score_ticks, world.updater.autosave_ticks()),
+                (60, 49)
+            );
+            assert_eq!(saves.len(), 1);
+            let state = (
+                saves,
+                serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap())
+                    .unwrap(),
+            );
+            if let Some(expected) = &expected {
+                assert_eq!(&state, expected);
+            } else {
+                expected = Some(state);
+            }
+        }
+    }
+
+    #[test]
+    fn score_end_game_is_deferred_focus_gated_and_save_resumable() {
+        let mut world = tiny_world();
+        world.mode = GameMode::Score;
+        world.updater = Updater::from_paused(false);
+        world.score_ticks = 0;
+        assert!(matches!(
+            world.tick(&Input {
+                select: true,
+                ..Default::default()
+            }),
+            super::WorldAction::None
+        ));
+        assert!(!world.end_game.unwrap().active);
+        assert!(!world.end_game_visible());
+        world.begin_display_tick();
+        world.tick_after_display(
+            false,
+            &Input {
+                select: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(world.end_game.unwrap().display_timer, 60);
+        for _ in 0..59 {
+            world.tick(&Input::default());
+        }
+        assert!(!world.end_game_visible());
+        let mut loaded = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        loaded.tick(&Input::default());
+        assert!(loaded.end_game_visible());
+        assert_eq!(loaded.end_game.unwrap().input_delay, 30);
+        assert!(matches!(
+            loaded.tick(&Input {
+                exit: true,
+                ..Default::default()
+            }),
+            super::WorldAction::None
+        ));
+        assert!(matches!(
+            loaded.tick(&Input {
+                select: true,
+                ..Default::default()
+            }),
+            super::WorldAction::ReturnToTitle
+        ));
+    }
+
+    #[test]
+    fn score_end_game_accepts_select_while_hidden_after_activation() {
+        let mut world = tiny_world();
+        world.mode = GameMode::Score;
+        world.updater = Updater::from_paused(false);
+        world.score_ticks = 0;
+        world.tick(&Input::default());
+        world.book_open = Some((crate::content::Book::ALL[0], 0));
+        assert!(matches!(
+            world.tick(&Input {
+                select: true,
+                ..Default::default()
+            }),
+            super::WorldAction::ReturnToTitle
+        ));
+        assert!(!world.end_game_visible());
+    }
+
+    #[test]
+    fn player_display_gate_freezes_player_and_ignores_hud_on_menu_close_tick() {
+        let mut world = tiny_world();
+        world.inventory_open = true;
+        world.player.attack_time = 7;
+        world.player.hurt_time = 9;
+        world.player.stamina = 3;
+        world.player.potion_effects[0] = 100;
+        let before = serde_json::to_value(&world.player).unwrap();
+        world.tick(&Input {
+            toggle_hud: true,
+            attack: true,
+            right: true,
+            ..Default::default()
+        });
+        assert_eq!(serde_json::to_value(&world.player).unwrap(), before);
+        assert!(world.render_gui);
+        world.tick(&Input {
+            exit: true,
+            toggle_hud: true,
+            ..Default::default()
+        });
+        assert!(!world.inventory_open);
+        assert!(world.render_gui); // Controls run before this tick closes Display.
+        world.tick(&Input {
+            toggle_hud: true,
+            ..Default::default()
+        });
+        assert!(!world.render_gui);
+    }
+
+    #[test]
+    fn renderer_hud_toggle_keeps_menu_and_notification_feedback() {
+        let mut world = tiny_world();
+        let assets = crate::assets::Assets::load(&[]).unwrap();
+        let locale = crate::localization::Localization::load("en-us", &[]);
+        let mut visible = crate::gfx::Screen::new();
+        let mut hidden = crate::gfx::Screen::new();
+        world.notify("HUD notice", 181);
+        let mut input = Input::default();
+        input.latch(Input {
+            toggle_hud: true,
+            ..Default::default()
+        });
+        world.tick(&input.take_tick());
+        assert!(!world.render_gui);
+        world.tick(&input.take_tick());
+        assert!(!world.render_gui); // A latched press is consumed once.
+        world.pause.open();
+        world.begin_display_tick();
+        world.render(&mut hidden, &assets, &locale);
+        assert_eq!(world.notifications.messages(), ["HUD notice"]);
+        assert_eq!(world.notifications.ticks(), 181); // GUI did not run.
+        world.tick_after_display(
+            false,
+            &Input {
+                toggle_hud: true,
+                ..Default::default()
+            },
+        );
+        assert!(!world.render_gui); // Unfocused keys cannot toggle.
+        world.tick(&Input {
+            toggle_hud: true,
+            ..Default::default()
+        });
+        assert!(!world.render_gui); // Player.tick returns before HUD controls in menus.
+        world.render_gui = true; // Independently test Renderer gate combinations.
+        world.render(&mut visible, &assets, &locale);
+        assert!(world.notifications.messages().is_empty());
+        // The same opaque Pause frame must be present with either HUD setting.
+        let mut menu = crate::gfx::Screen::new();
+        super::render_pause(&mut menu, &assets, &locale, &world);
+        for (index, &pixel) in menu.pixels().iter().enumerate() {
+            if pixel != 0 {
+                assert_eq!(hidden.pixels()[index], pixel);
+                assert_eq!(visible.pixels()[index], pixel);
+            }
+        }
+        world.render_gui = false;
+        assert!(
+            World::from_save_string(&world.to_save_string().unwrap())
+                .unwrap()
+                .render_gui
+        );
+    }
+
+    #[test]
+    fn notifications_follow_gui_feedback_even_while_paused_and_unfocused() {
+        let mut world = tiny_world();
+        let assets = crate::assets::Assets::load(&[]).unwrap();
+        let locale = crate::localization::Localization::load("en-us", &[]);
+        let mut screen = crate::gfx::Screen::new();
+        world.add_notification("First notice");
+        world.tick_after_display(false, &Input::default());
+        assert_eq!(world.notifications.ticks(), 0);
+        world.pause.open();
+        world.begin_display_tick();
+        world.render(&mut screen, &assets, &locale);
+        for _ in 0..180 {
+            world.tick_after_display(false, &Input::default());
+        }
+        assert_eq!(world.notifications.ticks(), 180);
+        world.render(&mut screen, &assets, &locale);
+        assert_eq!(world.notifications.messages(), ["First notice"]);
+        world.tick_after_display(false, &Input::default());
+        world.render(&mut screen, &assets, &locale);
+        assert!(world.notifications.messages().is_empty());
+        assert_eq!(world.tick, 0);
+    }
+
+    #[test]
+    fn notifications_are_hidden_and_frozen_by_sleep_status_on_render() {
+        let mut world = tiny_world();
+        let assets = crate::assets::Assets::load(&[]).unwrap();
+        let locale = crate::localization::Localization::load("en-us", &[]);
+        let mut screen = crate::gfx::Screen::new();
+        world.notify("Keep this notice", 170);
+        world.render(&mut screen, &assets, &locale);
+        world.sleeping = 120;
+        world.render(&mut screen, &assets, &locale);
+        assert!(!world.notifications.ticking());
+        for _ in 0..100 {
+            world.tick_after_display(false, &Input::default());
+        }
+        assert_eq!(world.notifications.ticks(), 170);
+        world.sleeping = 0;
+        world.render(&mut screen, &assets, &locale);
+        assert_eq!(world.notifications.messages(), ["Keep this notice"]);
+        assert!(world.notifications.ticking());
+        for (day_tick, days, allowed) in [
+            (0, 1, false),
+            (40_499, 1, false),
+            (40_500, 1, true),
+            (8_099, 2, true),
+            (8_100, 2, false),
+            (64_799, 1, true),
+        ] {
+            let mut world = tiny_world();
+            world.clock.set_day_tick(day_tick);
+            world.days = days;
+            world.player.direction = super::Direction::Down;
+            world.levels[0].entities.spawn_furniture(
+                FurnitureKind::Bed,
+                world.player.x,
+                world.player.y + 12,
+            );
+            world.use_target();
+            assert_eq!(world.sleeping > 0, allowed, "day {days}, tick {day_tick}");
+            assert_eq!(world.notifications.messages().is_empty(), allowed);
+            if day_tick == 40_499 {
+                assert_eq!(
+                    world.notifications.messages(),
+                    ["Can't sleep! 0Min 1 Sec left!"]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn notifications_save_success_is_once_only_and_failure_is_silent() {
+        let mut world = tiny_world();
+        world.updater = Updater::from_state(false, 7_200);
+        assert!(
+            world
+                .tick_with_autosave(false, &Input::default(), true, |_| Err("disk".into()))
+                .is_err()
+        );
+        assert!(world.notifications.messages().is_empty());
+        let mut snapshot = String::new();
+        world
+            .tick_with_autosave(false, &Input::default(), true, |saved| {
+                snapshot = saved.to_save_string()?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(
+            World::from_save_string(&snapshot)
+                .unwrap()
+                .notifications
+                .messages()
+                .is_empty()
+        );
+        assert_eq!(world.notifications.messages(), ["World Saved!"]);
+        world
+            .tick_with_autosave(false, &Input::default(), true, |_| panic!("duplicate save"))
+            .unwrap();
+        assert_eq!(world.notifications.messages().len(), 1);
+        world.record_save_success();
+        assert_eq!(
+            world.notifications.messages(),
+            ["World Saved!", "World Saved!"]
+        );
+        assert_eq!(
+            (world.notifications.ticks(), world.updater.autosave_ticks()),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn notifications_localize_at_enqueue_and_preserve_java_boss_order() {
+        use std::sync::Arc;
+        let mut world = tiny_world();
+        let french = Arc::new(crate::localization::Localization::load("fr-fr", &[]));
+        let saved_text = french.text("minicraft.notification.world_saved").to_owned();
+        world.set_notification_context(french, "Q");
+        world.record_save_success();
+        world.set_notification_context(
+            Arc::new(crate::localization::Localization::load("en-us", &[])),
+            "ESCAPE",
+        );
+        assert_eq!(world.notifications.messages(), [saved_text]);
+        world.notifications.clear();
+        world.handle_defeated_mob(super::spawn::NaturalMob::AirWizard);
+        let messages = world.notifications.messages();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0], "Air Wizard Defeated!");
+        assert!(messages[1].starts_with("Achivement unlocked: ")); // Java locale typo retained.
+        assert_eq!(messages[2], "The Dungeon is now open!");
+        assert_eq!(world.notifications.ticks(), -400);
+        world.notifications.clear();
+        world.handle_defeated_mob(super::spawn::NaturalMob::AirWizard);
+        assert_eq!(world.notifications.messages(), ["Air Wizard Defeated!"]);
+        assert_eq!(world.notifications.ticks(), 0);
+    }
+
+    #[test]
+    fn notifications_save_restores_queue_feedback_and_reads_legacy_slot() {
+        let mut world = tiny_world();
+        world.notifications =
+            super::Notifications::from_state(vec!["One".into(), "Two".into()], -123, true);
+        let saved = world.to_save_string().unwrap();
+        let mut restored = World::from_save_string(&saved).unwrap();
+        for target in [&mut world, &mut restored] {
+            target.tick_after_display(false, &Input::default());
+        }
+        assert_eq!(world.notifications, restored.notifications);
+        assert_eq!(restored.notifications.ticks(), -122);
+        let mut old: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        old["world"]["notification"] = serde_json::json!(["Legacy notice", 60]);
+        let restored = World::from_save_string(&old.to_string()).unwrap();
+        assert_eq!(restored.notifications.messages(), ["Legacy notice"]);
+        assert_eq!(restored.notifications.ticks(), 121);
+        old["world"]["notification"] = serde_json::Value::Null;
+        assert!(
+            World::from_save_string(&old.to_string())
+                .unwrap()
+                .notifications
+                .messages()
+                .is_empty()
+        );
+        old["world"].as_object_mut().unwrap().remove("notification");
+        assert!(
+            World::from_save_string(&old.to_string())
+                .unwrap()
+                .notifications
+                .messages()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn pause_render_keeps_old_page_until_lifecycle_update() {
+        let mut world = tiny_world();
+        world.populate_pause_preview();
+        let assets = crate::assets::Assets::load(&[]).unwrap();
+        let localization = crate::localization::Localization::load("en-us", &[]);
+        let draw = |world: &World| {
+            let mut screen = crate::gfx::Screen::new();
+            super::render_pause(&mut screen, &assets, &localization, world);
+            screen.pixels().to_vec()
+        };
+        let parent = draw(&world);
+        world.tick(&Input {
+            select: true,
+            ..Default::default()
+        });
+        assert_eq!(draw(&world), parent);
+        world.tick(&Input::default());
+        let options = draw(&world);
+        assert_ne!(options, parent);
+        world.tick(&Input {
+            exit: true,
+            ..Default::default()
+        });
+        assert_eq!(draw(&world), options);
+        world.tick(&Input::default());
+        assert_eq!(draw(&world), parent);
+    }
+
+    #[test]
+    fn pause_pending_child_save_restores_parent_and_reads_legacy_keys() {
+        let mut world = tiny_world();
+        world.populate_pause_preview();
+        world.tick(&Input {
+            select: true,
+            ..Default::default()
+        });
+        let saved = world.to_save_string().unwrap();
+        let mut restored = World::from_save_string(&saved).unwrap();
+        assert_eq!(restored.pause.view().page, PausePage::Options);
+        restored.tick(&Input {
+            exit: true,
+            ..Default::default()
+        });
+        assert_eq!(restored.pause.view().selection, 1);
+        let mut legacy: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        legacy["world"]
+            .as_object_mut()
+            .unwrap()
+            .remove("pause_frames");
+        let mut restored = World::from_save_string(&legacy.to_string()).unwrap();
+        restored.tick(&Input {
+            exit: true,
+            ..Default::default()
+        });
+        assert_eq!(restored.pause.view().selection, 1);
+        // Data added in this batch is not allowed to create arbitrary cycles or roots.
+        let mut malformed: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        malformed["world"]["pause_frames"][0]["page"] = "QuestDetail".into();
+        assert!(World::from_save_string(&malformed.to_string()).is_err());
+    }
+
+    #[test]
+    fn legacy_pause_confirm_cancel_uses_actual_main_menu_length() {
+        for quests in [false, true] {
+            let mut world = tiny_world();
+            world.quests_enabled = quests;
+            world.prepare_pause_audio_parity();
+            let last = pause_actions(quests).len() - 1;
+            world.pause.view_mut().selection = last;
+            world.tick(&Input {
+                select: true,
+                ..Default::default()
+            });
+            let mut legacy: serde_json::Value =
+                serde_json::from_str(&world.to_save_string().unwrap()).unwrap();
+            legacy["world"]
+                .as_object_mut()
+                .unwrap()
+                .remove("pause_frames");
+            let mut restored = World::from_save_string(&legacy.to_string()).unwrap();
+            restored.tick(&Input {
+                exit: true,
+                ..Default::default()
+            });
+            assert_eq!(restored.pause.view().selection, last);
+            assert!(!restored.pause.view().confirm);
+        }
+    }
+
+    #[test]
+    fn quest_nested_return_restores_pause_parent_without_world_progress() {
+        let mut world = tiny_world();
+        world.prepare_quests_audio_parity();
+        let select = Input {
+            select: true,
+            ..Default::default()
+        };
+        for _ in 0..3 {
+            world.tick(&select);
+        }
+        assert_eq!(world.pause.frames().len(), 5);
+        let mut restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        for _ in 0..4 {
+            restored.tick(&Input {
+                exit: true,
+                ..Default::default()
+            });
+        }
+        assert_eq!(restored.pause.view().page, PausePage::Main);
+        assert_eq!(restored.pause.view().selection, 3);
+        assert_eq!(restored.tick, 0);
+    }
+
+    #[test]
     fn ordinary_tile_hit_uses_java_damage_timing_and_tool_wear() {
         let mut world = tiny_world();
+        let seed = 47_227;
+        world.random = JavaRandom::new(seed);
+        let expected_damage = (JavaRandom::new(seed).next_int(3) + 1) as u16;
         let target = 9 + 8 * world.width;
         world.levels[0].tiles[target] = Tile::Tree;
         world
@@ -5391,7 +7449,7 @@ mod registry_tests {
 
         world.attack();
 
-        assert!((1..=3).contains(&world.levels[0].data[target]));
+        assert_eq!(world.levels[0].data[target], expected_damage);
         assert_eq!(world.player.inventory.tools()[0].durability, 51);
         assert_eq!(world.player.attack_time, 5);
         assert_eq!(world.player.walk_distance, 8);
@@ -5405,6 +7463,9 @@ mod registry_tests {
     #[test]
     fn successful_tool_tile_interaction_keeps_java_ten_tick_slash() {
         let mut world = tiny_world();
+        let seed = 47_227;
+        world.random = JavaRandom::new(seed);
+        let expected_damage = (JavaRandom::new(seed).next_int(5) + 10) as u16;
         let target = 9 + 8 * world.width;
         world.levels[0].tiles[target] = Tile::Tree;
         world
@@ -5415,7 +7476,7 @@ mod registry_tests {
 
         world.attack();
 
-        assert!((10..=14).contains(&world.levels[0].data[target]));
+        assert_eq!(world.levels[0].data[target], expected_damage);
         assert_eq!(world.player.inventory.tools()[0].durability, 33);
         assert_eq!(world.player.attack_time, 10);
         assert_eq!(
@@ -5436,12 +7497,21 @@ mod registry_tests {
             Some(FurnitureKind::Workbench)
         );
 
+        world.player.inventory.add(ItemId::Wood, 5);
         world.use_target();
         assert!(world.inventory_open);
         assert_eq!(world.crafting_station, Some(FurnitureKind::Workbench));
 
-        world.player.inventory.add(ItemId::Wood, 5);
-        world.inventory_selection = WORKBENCH_STATION_RECIPES.len() + 1;
+        world.inventory_selection = sorted_recipe_views(
+            Some(FurnitureKind::Workbench),
+            &world.player.inventory,
+            false,
+        )
+        .iter()
+        .position(|recipe| {
+            matches!(recipe.output, RecipeOutput::Tool(tool) if tool.kind == ToolKind::Axe)
+        })
+        .unwrap();
         world.tick(&Input {
             select: true,
             ..Input::default()
@@ -5515,7 +7585,7 @@ mod registry_tests {
         assert_eq!(world.player.hunger, 8);
         assert_eq!(world.player.stamina, 7);
         assert_eq!(world.player.inventory.count(ItemId::CookedPork), 1);
-        assert!(world.notification.is_none());
+        assert!(world.notifications.messages().is_empty());
     }
 
     #[test]
@@ -5811,7 +7881,7 @@ mod registry_tests {
             9 * TILE_SIZE + 8,
             8 * TILE_SIZE + 8,
         );
-        world.day_tick = 48_600;
+        world.clock.set_day_tick(48_600);
         world.use_target();
         assert_eq!(world.sleeping, 120);
 
@@ -5843,7 +7913,7 @@ mod registry_tests {
     fn versioned_world_snapshot_round_trips_complete_runtime_state() {
         let mut world = tiny_world();
         world.tick = 1_801;
-        world.day_tick = 49_000;
+        world.clock.set_day_tick(49_000);
         world.days = 7;
         world.mode = GameMode::Score;
         world.score = 4_321;
@@ -5862,7 +7932,7 @@ mod registry_tests {
         let text = world.to_save_string().unwrap();
         let mut loaded = World::from_save_string(&text).unwrap();
         assert_eq!(loaded.tick, 1_801);
-        assert_eq!(loaded.day_tick, 49_000);
+        assert_eq!(loaded.clock.get().day_tick, 49_000);
         assert_eq!(loaded.days, 7);
         assert_eq!(loaded.mode, GameMode::Score);
         assert_eq!(loaded.score, 4_321);
@@ -5979,8 +8049,13 @@ mod registry_tests {
             continuous.tick(&Input::default());
         }
         assert_eq!(continuous.tick, u64::from(DAY_LENGTH) * 2);
+        // Updater starts paused: the first gameplay dispatch does not advance
+        // the calendar prelude. Two calendar days require one additional tick.
+        assert_eq!(continuous.days, 2);
+        assert_eq!(continuous.clock.get().day_tick, DAY_LENGTH - 1);
+        continuous.tick(&Input::default());
         assert_eq!(continuous.days, 3);
-        assert_eq!(continuous.day_tick, 0);
+        assert_eq!(continuous.clock.get().day_tick, 0);
         assert!(
             started.elapsed() < std::time::Duration::from_secs(15),
             "headless two-day soak exceeded the generous regression budget"

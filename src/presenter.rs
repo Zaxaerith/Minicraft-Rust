@@ -299,7 +299,7 @@ mod windows_gl {
             if pixels.len() != WIDTH * HEIGHT {
                 return Err("OpenGL presenter received an invalid framebuffer size".to_owned());
             }
-            for (source, target) in pixels.iter().zip(self.rgba.chunks_exact_mut(4)) {
+            for (source, target) in pixels.iter().zip(self.rgba.as_chunks_mut::<4>().0) {
                 target[0] = (source >> 16) as u8;
                 target[1] = (source >> 8) as u8;
                 target[2] = *source as u8;

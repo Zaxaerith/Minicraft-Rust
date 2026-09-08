@@ -84,6 +84,8 @@ pub struct Quest {
     pub description: String,
     pub parent: Option<String>,
     pub rewards: Vec<String>,
+    #[serde(default)]
+    has_requirements: bool,
     criteria: Vec<Criterion>,
     unlocking: Vec<Criterion>,
 }
@@ -102,6 +104,29 @@ pub struct ProgressUpdate {
     pub completed_tutorials: Vec<String>,
     pub completed_quests: Vec<String>,
     pub rewards: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestGroupView {
+    pub index: usize,
+    pub id: String,
+    pub description: String,
+    pub completed: bool,
+    pub completed_quests: usize,
+    pub ongoing_quests: usize,
+    pub total_quests: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestView {
+    pub index: usize,
+    pub id: String,
+    pub description: String,
+    pub parent: Option<String>,
+    pub has_requirements: bool,
+    pub completed: bool,
+    pub criteria_completed: usize,
+    pub criteria_total: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,6 +307,102 @@ impl ProgressState {
             .sum()
     }
 
+    pub fn quest_group_views(
+        &self,
+        inventory: &HashMap<String, u16>,
+        completed_tab: bool,
+    ) -> Vec<QuestGroupView> {
+        self.quest_groups
+            .iter()
+            .enumerate()
+            .filter_map(|(index, group)| {
+                let unlocked = self.group_is_unlocked(group, inventory);
+                let completed_quests = group
+                    .quests
+                    .iter()
+                    .filter(|quest| self.quest_completed.contains(&quest.id))
+                    .count();
+                let completed = !group.quests.is_empty() && completed_quests == group.quests.len();
+                (unlocked && (!completed_tab || completed)).then(|| QuestGroupView {
+                    index,
+                    id: group.id.clone(),
+                    description: group.description.clone(),
+                    completed,
+                    completed_quests,
+                    ongoing_quests: group
+                        .quests
+                        .iter()
+                        .filter(|quest| {
+                            self.quest_is_unlocked(group, quest, inventory)
+                                && !self.quest_completed.contains(&quest.id)
+                        })
+                        .count(),
+                    total_quests: group.quests.len(),
+                })
+            })
+            .collect()
+    }
+
+    pub fn quest_views(
+        &self,
+        group_index: usize,
+        inventory: &HashMap<String, u16>,
+    ) -> Vec<QuestView> {
+        let Some(group) = self.quest_groups.get(group_index) else {
+            return Vec::new();
+        };
+        group
+            .quests
+            .iter()
+            .enumerate()
+            .filter(|(_, quest)| self.quest_is_unlocked(group, quest, inventory))
+            .map(|(index, quest)| QuestView {
+                index,
+                id: quest.id.clone(),
+                description: quest.description.clone(),
+                parent: quest.parent.clone(),
+                has_requirements: quest.has_requirements,
+                completed: self.quest_completed.contains(&quest.id),
+                criteria_completed: quest
+                    .criteria
+                    .iter()
+                    .filter(|criterion| {
+                        criterion.matches(&ProgressEvent::InventoryChanged, inventory)
+                            || self
+                                .criterion_hits
+                                .contains(&format!("{}:{}", quest.id, criterion.name))
+                    })
+                    .count(),
+                criteria_total: quest.criteria.len(),
+            })
+            .collect()
+    }
+
+    fn group_is_unlocked(&self, group: &QuestGroup, inventory: &HashMap<String, u16>) -> bool {
+        self.group_unlocked.contains(&group.id)
+            || group
+                .unlocking
+                .iter()
+                .all(|criterion| criterion.matches(&ProgressEvent::InventoryChanged, inventory))
+    }
+
+    fn quest_is_unlocked(
+        &self,
+        group: &QuestGroup,
+        quest: &Quest,
+        inventory: &HashMap<String, u16>,
+    ) -> bool {
+        self.group_is_unlocked(group, inventory)
+            && quest
+                .parent
+                .as_ref()
+                .is_none_or(|parent| self.quest_completed.contains(parent))
+            && (self.quest_unlocked.contains(&quest.id)
+                || quest.unlocking.iter().all(|criterion| {
+                    criterion.matches(&ProgressEvent::InventoryChanged, inventory)
+                }))
+    }
+
     fn record_event_hits(
         &mut self,
         event: &ProgressEvent,
@@ -403,6 +524,9 @@ pub fn quests() -> Result<Vec<QuestGroup>, String> {
                         id: quest_id.clone(),
                         description: required_string(quest, "description")?,
                         parent: quest["parent"].as_str().map(str::to_owned),
+                        has_requirements: quest["requirements"]
+                            .as_array()
+                            .is_some_and(|requirements| !requirements.is_empty()),
                         rewards: quest["rewards"]["items"]
                             .as_array()
                             .map(|items| {
@@ -604,12 +728,27 @@ mod tests {
             ("wheat seeds".to_owned(), 5),
             ("wood hoe".to_owned(), 1),
         ]);
+        let groups = progress.quest_group_views(&inventory, false);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].id, "minicraft.quest.farming");
+        assert_eq!(progress.quest_views(groups[0].index, &inventory).len(), 1);
+        assert!(progress.quest_group_views(&inventory, true).is_empty());
         let update = progress.update(&ProgressEvent::InventoryChanged, &inventory);
         assert!(
             update
                 .completed_quests
                 .contains(&"minicraft.quest.farming.crafting_hoe".to_owned())
         );
+        assert_eq!(progress.quest_views(groups[0].index, &inventory).len(), 2);
+        let groups_after = progress.quest_group_views(&inventory, false);
+        assert_eq!(groups_after[0].completed_quests, 1);
+        assert_eq!(groups_after[0].ongoing_quests, 1);
+        let views = progress.quest_views(groups[0].index, &inventory);
+        assert_eq!(
+            views[1].parent.as_deref(),
+            Some("minicraft.quest.farming.crafting_hoe")
+        );
+        assert!(!views[0].has_requirements);
 
         let update = progress.update(
             &ProgressEvent::ItemUsedOnTile {

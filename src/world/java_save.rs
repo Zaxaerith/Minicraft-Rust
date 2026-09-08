@@ -86,10 +86,14 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     world.height = height;
     world.seed = seed;
     let day_tick = parse::<u64>(field(&game, 3, "tick count")?, "tick count")?;
-    let game_time = parse::<u64>(field(&game, 4, "game time")?, "game time")?;
-    world.tick = game_time;
-    world.day_tick = (day_tick % super::DAY_LENGTH as u64) as u32;
-    world.days = (game_time / super::DAY_LENGTH as u64) as u32 + 1;
+    let game_time = parse::<i32>(field(&game, 4, "game time")?, "game time")?;
+    world.clock.set_game_time(game_time);
+    world
+        .clock
+        .set_day_tick((day_tick % super::DAY_LENGTH as u64) as u32);
+    // Compatibility day estimate; Java gameTime can wrap negative. Do not
+    // seed simulation cadence with this focused (including menu) counter.
+    world.days = game_time.max(0) as u32 / super::DAY_LENGTH + 1;
     world.difficulty = difficulty;
     world.mode = mode;
     world.score_ticks = score_ticks;
@@ -165,12 +169,13 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     import_signs(directory, &mut world)?;
     import_unlocks(directory, &mut world)?;
 
-    world.paused = false;
+    world.pause.close();
+    world.pause.begin_tick();
     world.inventory_open = false;
     world.sign_editor = None;
     world.book_open = None;
     world.crafting_station = None;
-    world.notification = None;
+    world.notifications.clear();
     world.validate_save()?;
     Ok(world)
 }
@@ -446,7 +451,7 @@ fn require_version(game: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_mode(text: &str) -> Result<(GameMode, u32, usize), String> {
+fn parse_mode(text: &str) -> Result<(GameMode, i32, usize), String> {
     let fields: Vec<&str> = text.split(';').collect();
     let mode = GameMode::from_index(parse::<usize>(fields[0], "game mode")?);
     let score_ticks = fields
@@ -778,6 +783,14 @@ mod tests {
         let world = import_java_save(&directory).unwrap();
         assert_eq!((world.width, world.height, world.seed), (2, 2, 42));
         assert_eq!((world.mode, world.score_ticks), (GameMode::Score, 600));
+        assert_eq!(
+            (
+                world.clock.get().game_time,
+                world.tick,
+                world.clock.get().day_tick
+            ),
+            (65_000, 0, 123)
+        );
         assert_eq!((world.player.health, world.player.max_health), (7, 15));
         assert_eq!(world.player.inventory.count(ItemId::Wood), 3);
         assert_eq!(world.player.inventory.tools()[0].durability, 70);

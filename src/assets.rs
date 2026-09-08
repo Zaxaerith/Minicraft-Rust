@@ -15,6 +15,8 @@ struct Connection {
 
 pub struct Assets {
     pub font: Image,
+    pub default_pack_logo: Image,
+    pub fallback_pack_logo: Image,
     pub title: Image,
     pub hud: Image,
     pub inventory_counter: Image,
@@ -33,6 +35,8 @@ pub struct Assets {
 impl Assets {
     pub fn load(packs: &[ResourcePack]) -> Result<Self, String> {
         let mut assets = Self {
+            default_pack_logo: png(include_bytes!("../assets/pack.png"))?,
+            fallback_pack_logo: png(include_bytes!("../assets/resources/default_pack.png"))?,
             font: png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/font.png"

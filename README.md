@@ -78,7 +78,45 @@ pixel canvas and copied 2.2.4 artwork. It includes:
   Rust relay server, login/presence/state/heartbeat handling, and a client
   connectivity probe.
 
-The eight-phase reconstruction plan is complete.
+## Recent development / 最近更新（2026-09-08）
+
+目标是对 Java 2.2.4 的行为和结构进行 1:1 Rust 重构，目前尚未完成全面等价验收。
+早期可玩版本的功能覆盖不代表所有行为已经与原版一致。
+
+- 阶段 0–2：基线梳理、模块映射与工作区骨架已完成。
+- 阶段 3：核心循环和生命周期已迁移一部分，遗留项暂缓，不能视为完成。
+  Game 与 World 共享单一 Clock 和 Updater；逻辑更新维持 60 TPS，
+  与渲染 FPS 解耦；Display 转场、暂停父级、通知、计分结算与睡眠流程已有迁移。
+- 阶段 4：输入与音频已迁移一部分，遗留项暂缓。
+  物理按键、组合键、文本与手柄边沿接入帧到逻辑 tick 的输入缓冲，
+  失焦清空输入。PCM 混音核心迁入客户端模块；Windows 保留 WASAPI 后端。
+  Title、Play、Options、Language、Skins 音效已按 tick 结果触发，
+  其余菜单的音效事件归属仍待迁移。
+- 阶段 5：图形基础迁移进行中。Image、Screen、字体字符表已迁入
+  `crates/minicraft-client/src/gfx/`；共享菜单边框与标题背景绘制迁入
+  `gfx/gui.rs`，根包保留布局适配。
+
+后续工作包括完整字体/精灵/光照迁移、死亡与换层生命周期、Player/Level
+更新顺序、床与玩家实体归属，以及其余输入和菜单音效迁移。
+画面、操作和系统的完整 1:1 验收仍未完成。最近迁移采用编译检查，
+游戏效果由维护者手动试玩；历史对照结果不代表当前全部代码重新通过测试。
+
+The root package remains the runnable compatibility client. See
+[workspace layout](crates/README.md) for the migration boundaries.
+Stages 3 and 4 have deferred gaps; stage 5 is active, not complete.
+
+## Repository and distribution scope
+
+Only Windows x64 is packaged by the release workflows. Linux and macOS users
+build from source; those platforms are not covered by the current CI matrix.
+
+This repository includes game source, Cargo manifests and lockfile, copied runtime
+assets, license, Windows workflows, and the packaging script. Local `tests/`,
+`tools/`, Java reference copies, internal audit/plan notes, save data, logs,
+generated images, and build/package output are excluded. Existing Rust inline
+unit tests and workspace adapter source remain part of the source tree:
+`minicraft-parity` depends on the published game modules, but its local Java
+oracle tools and trace fixtures are not distributed here.
 
 ## Build and run
 
@@ -86,11 +124,17 @@ The eight-phase reconstruction plan is complete.
 cargo run --release
 ```
 
-The release executable can validate all embedded runtime data without opening a
-window:
+The release executable can validate all embedded runtime data and the shared PCM
+command path without opening a window or audio device:
 
 ```powershell
 cargo run --release -- --self-check --savedir .\test-data
+```
+
+On Windows, test actual device refill timing silently (no microphone or system-audio recording):
+
+```powershell
+cargo run --release -- --audio-probe
 ```
 
 To run the standalone multiplayer service and verify it from another process:
@@ -135,6 +179,7 @@ cargo run --release -- --render-ui-preview options options.png --savedir .\test-
 cargo run --release -- --render-world-preview score.png --score-ui --progress-ui --savedir .\test-data
 cargo run --release -- --render-world-preview book.png --book-ui --savedir .\test-data
 cargo run --release -- --render-world-preview sign.png --sign-ui --savedir .\test-data
+cargo run --release -- --render-world-preview quests.png --quest-ui --savedir .\test-data
 ```
 
 ## Controls

@@ -54,7 +54,16 @@ impl Localization {
     pub fn format(&self, key: &str, arguments: &[&str]) -> String {
         let mut result = self.text(key).to_owned();
         for argument in arguments {
-            result = result.replacen("%s", argument, 1);
+            let string = result.find("%s");
+            let number = result.find("%d");
+            let position = match (string, number) {
+                (Some(string), Some(number)) => Some(string.min(number)),
+                (Some(position), None) | (None, Some(position)) => Some(position),
+                (None, None) => None,
+            };
+            if let Some(position) = position {
+                result.replace_range(position..position + 2, argument);
+            }
         }
         result
     }
@@ -168,6 +177,13 @@ mod tests {
         assert_eq!(
             localization.format("minicraft.displays.title.display.version", &["2.2.4"]),
             "Version 2.2.4"
+        );
+        assert_eq!(
+            localization.format(
+                "minicraft.displays.quests.quest_info.display.progress",
+                &["1", "3"]
+            ),
+            "Progress: (1/3)"
         );
     }
 }

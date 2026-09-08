@@ -7,3 +7,24 @@
 /docs/
 /scripts/audit_official.py
 
+# Local verification and private migration working notes
+/tests/
+/tools/
+/AUDIO_DEVICE_VALIDATION.md
+/BASELINE_AUDIT.md
+/JAVA_PARITY_RUST_REARCHITECTURE_PLAN.md
+/JAVA_TO_RUST_MAPPING.md
+/PARITY_HARNESS.md
+
+# Local runtime data, generated previews, packaging and editor state
+/dist/
+/test-data/
+/saves/
+/savedir/
+/*.png
+/.env
+/.env.*
+/.codex/
+/.agents/
+/.idea/
+/.vscode/

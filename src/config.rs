@@ -30,26 +30,38 @@ impl Default for KeyBindings {
             right: "D".to_owned(),
             select: "ENTER".to_owned(),
             exit: "ESCAPE".to_owned(),
-            attack: "C".to_owned(),
-            menu: "X".to_owned(),
-            craft: "Z".to_owned(),
-            pickup: "V".to_owned(),
+            attack: "C|SPACE|ENTER".to_owned(),
+            menu: "X|E".to_owned(),
+            craft: "Z|SHIFT-E".to_owned(),
+            pickup: "V|P".to_owned(),
         }
     }
 }
 
 impl KeyBindings {
+    pub fn mapping(&self, action: &str) -> Option<String> {
+        if let Some(index) = Self::LABELS.iter().position(|label| *label == action) {
+            return Some(self.value(index).to_owned());
+        }
+        match action {
+            "CURSOR-UP" => Some("UP".into()),
+            "CURSOR-DOWN" => Some("DOWN".into()),
+            "CURSOR-LEFT" => Some("LEFT".into()),
+            "CURSOR-RIGHT" => Some("RIGHT".into()),
+            _ => None,
+        }
+    }
     pub const LABELS: [&'static str; 10] = [
-        "MOVE UP",
-        "MOVE DOWN",
-        "MOVE LEFT",
-        "MOVE RIGHT",
+        "MOVE-UP",
+        "MOVE-DOWN",
+        "MOVE-LEFT",
+        "MOVE-RIGHT",
         "SELECT",
-        "EXIT / PAUSE",
+        "EXIT",
         "ATTACK",
-        "INVENTORY",
-        "CRAFTING",
-        "PICK UP",
+        "MENU",
+        "CRAFT",
+        "PICKUP",
     ];
 
     pub fn value(&self, index: usize) -> &str {
@@ -81,6 +93,43 @@ impl KeyBindings {
             _ => self.pickup = value,
         }
     }
+
+    pub fn add(&mut self, index: usize, value: String) {
+        let current = self.value(index);
+        if current
+            .split('|')
+            .any(|key| key.eq_ignore_ascii_case(&value))
+        {
+            return;
+        }
+        self.set(index, format!("{current}|{value}"));
+    }
+
+    pub fn display_value(&self, index: usize) -> String {
+        self.value(index).to_owned()
+    }
+
+    fn legacy_display_value(&self, index: usize) -> String {
+        let configured = self.value(index);
+        let aliases: &[&str] = match index {
+            0 => &["UP"],
+            1 => &["DOWN"],
+            2 => &["LEFT"],
+            3 => &["RIGHT"],
+            6 => &["SPACE", "ENTER"],
+            7 => &["E"],
+            8 => &["SHIFT-E"],
+            9 => &["P"],
+            _ => &[],
+        };
+        let mut values: Vec<&str> = configured.split('|').collect();
+        for alias in aliases {
+            if !values.iter().any(|value| value.eq_ignore_ascii_case(alias)) {
+                values.push(alias);
+            }
+        }
+        values.join("|")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +145,8 @@ pub struct Settings {
     pub terrain_type: usize,
     pub game_mode: usize,
     pub score_minutes: usize,
+    pub score_time_10_unlocked: bool,
+    pub score_time_120_unlocked: bool,
     pub tutorials: bool,
     pub quests: bool,
     pub show_quests: bool,
@@ -118,6 +169,8 @@ impl Default for Settings {
             terrain_type: 0,
             game_mode: 0,
             score_minutes: 20,
+            score_time_10_unlocked: false,
+            score_time_120_unlocked: false,
             tutorials: false,
             quests: false,
             show_quests: true,
@@ -169,12 +222,15 @@ impl Config {
             "terrain_type": self.settings.terrain_type,
             "game_mode": self.settings.game_mode,
             "score_minutes": self.settings.score_minutes,
+            "score_time_10_unlocked": self.settings.score_time_10_unlocked,
+            "score_time_120_unlocked": self.settings.score_time_120_unlocked,
             "tutorials": self.settings.tutorials,
             "quests": self.settings.quests,
             "show_quests": self.settings.show_quests,
             "selected_skin": self.settings.selected_skin,
             "resource_packs": self.settings.resource_packs,
             "key_bindings": {
+                "format": 2,
                 "up": self.settings.key_bindings.up,
                 "down": self.settings.key_bindings.down,
                 "left": self.settings.key_bindings.left,
@@ -252,6 +308,18 @@ fn parse_settings(text: &str) -> Option<Settings> {
         _ => 20,
     };
     settings.tutorials = boolean(&value, "tutorials", settings.tutorials);
+    // Preserve a previously selected legacy duration without unlocking every
+    // duration that the old Rust menu incorrectly exposed.
+    settings.score_time_10_unlocked = boolean(
+        &value,
+        "score_time_10_unlocked",
+        settings.score_minutes == 10,
+    );
+    settings.score_time_120_unlocked = boolean(
+        &value,
+        "score_time_120_unlocked",
+        settings.score_minutes == 120,
+    );
     settings.quests = boolean(&value, "quests", settings.quests);
     settings.show_quests = boolean(&value, "show_quests", settings.show_quests);
     settings.selected_skin = string(&value, "selected_skin", &settings.selected_skin);
@@ -275,13 +343,30 @@ fn parse_settings(text: &str) -> Option<Settings> {
     settings.key_bindings.menu = binding(bindings, "menu", &settings.key_bindings.menu);
     settings.key_bindings.craft = binding(bindings, "craft", &settings.key_bindings.craft);
     settings.key_bindings.pickup = binding(bindings, "pickup", &settings.key_bindings.pickup);
+    if bindings.is_object() && bindings["format"].as_u64().unwrap_or(1) < 2 {
+        // Old clients imposed aliases outside the stored binding. Preserve
+        // that effective configuration once, then allow real replacement.
+        for index in 0..10 {
+            let effective = settings.key_bindings.legacy_display_value(index);
+            settings.key_bindings.set(index, effective);
+        }
+    }
     Some(settings)
 }
 
 fn binding(value: &Value, key: &str, default: &str) -> String {
     value[key]
         .as_str()
-        .filter(|name| crate::input::key_from_name(name).is_some())
+        .filter(|name| {
+            !name.is_empty()
+                && name.to_ascii_uppercase().split('|').all(|alternative| {
+                    !alternative.is_empty()
+                        && alternative.split(['-', '+']).all(|key| {
+                            matches!(key, "SHIFT" | "CTRL" | "ALT")
+                                || crate::input::key_from_name(key).is_some()
+                        })
+                })
+        })
         .unwrap_or(default)
         .to_owned()
 }
@@ -303,7 +388,7 @@ fn boolean(value: &Value, key: &str, default: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_settings;
+    use super::{KeyBindings, parse_settings};
 
     #[test]
     fn invalid_settings_are_clamped() {
@@ -326,5 +411,15 @@ mod tests {
         assert!(phase_six.tutorials);
         assert!(phase_six.quests);
         assert!(!phase_six.show_quests);
+    }
+
+    #[test]
+    fn key_bindings_support_java_style_alternatives_and_display_aliases() {
+        let mut bindings = KeyBindings::default();
+        bindings.add(0, "I".to_owned());
+        bindings.add(0, "I".to_owned());
+        assert_eq!(bindings.up, "W|I");
+        assert_eq!(bindings.display_value(0), "W|I|UP");
+        assert_eq!(bindings.display_value(6), "C|SPACE|ENTER");
     }
 }

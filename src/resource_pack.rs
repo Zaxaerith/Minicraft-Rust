@@ -1,3 +1,7 @@
+pub(crate) mod display;
+
+use crate::gfx::Image;
+
 use std::{
     fs::{self, File},
     io::Read,
@@ -10,6 +14,7 @@ const MAX_PACK_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 enum Source {
+    Fixture,
     Folder(PathBuf),
     Zip(PathBuf),
 }
@@ -18,12 +23,25 @@ enum Source {
 pub struct ResourcePack {
     pub id: String,
     pub name: String,
+    pub description: String,
+    pub logo: Option<Image>,
     source: Source,
 }
 
 impl ResourcePack {
+    pub(crate) fn parity_fixture(id: &str, name: &str, logo: Option<Image>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            description: "No description".into(),
+            logo,
+            source: Source::Fixture,
+        }
+    }
+
     pub fn read(&self, relative_path: &str) -> Result<Option<Vec<u8>>, String> {
         match &self.source {
+            Source::Fixture => Ok(None),
             Source::Folder(root) => {
                 let path = root.join(relative_path.replace('/', std::path::MAIN_SEPARATOR_STR));
                 match fs::metadata(&path) {
@@ -112,6 +130,8 @@ pub fn discover(game_dir: &Path) -> (Vec<ResourcePack>, Vec<String>) {
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| fallback_name.clone()),
             name: fallback_name.clone(),
+            description: "No description".to_owned(),
+            logo: None,
             source,
         };
         let metadata = match candidate.read("pack.json") {
@@ -139,9 +159,27 @@ pub fn discover(game_dir: &Path) -> (Vec<ResourcePack>, Vec<String>) {
             ));
             continue;
         }
+        let logo = match candidate
+            .read("pack.png")
+            .and_then(|bytes| bytes.map(|bytes| decode_logo(&bytes)).transpose())
+        {
+            Ok(logo) => logo,
+            Err(error) => {
+                warnings.push(format!(
+                    "{}: invalid pack logo; using default: {error}",
+                    path.display()
+                ));
+                None
+            }
+        };
         packs.push(ResourcePack {
             id: candidate.id,
             name: value["name"].as_str().unwrap_or(&fallback_name).to_owned(),
+            description: value["description"]
+                .as_str()
+                .unwrap_or("No description")
+                .to_owned(),
+            logo,
             source: candidate.source,
         });
     }
@@ -153,6 +191,26 @@ fn has_zip_extension(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
 }
 
+fn decode_logo(bytes: &[u8]) -> Result<Image, String> {
+    // Reject dimensions before allocating decoded pixels (Java accepts <=288x32, 8px aligned).
+    let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    let reader = decoder.read_info().map_err(|error| error.to_string())?;
+    let info = reader.info();
+    if info.width == 0
+        || info.height == 0
+        || info.width > 288
+        || info.height > 32
+        || !info.width.is_multiple_of(8)
+        || !info.height.is_multiple_of(8)
+    {
+        return Err(format!(
+            "unacceptable logo size: {}x{}",
+            info.width, info.height
+        ));
+    }
+    Image::from_png(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{discover, has_zip_extension};
@@ -162,6 +220,16 @@ mod tests {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn logo_dimensions_follow_java_limits_before_pixel_decode() {
+        let logo = super::decode_logo(include_bytes!("../assets/pack.png")).unwrap();
+        assert!(logo.width <= 288 && logo.height <= 32);
+        assert!(
+            super::decode_logo(include_bytes!("../assets/assets/textures/gui/font.png")).is_err()
+        );
+        assert!(super::decode_logo(b"not png").is_err());
+    }
 
     #[test]
     fn zip_extension_is_case_insensitive() {
@@ -186,7 +254,7 @@ mod tests {
         fs::create_dir_all(&broken).unwrap();
         fs::write(
             folder.join("pack.json"),
-            r#"{"pack_format":1,"name":"Folder"}"#,
+            r#"{"pack_format":1,"name":"Folder","description":"Folder description"}"#,
         )
         .unwrap();
         fs::write(broken.join("pack.json"), "not json").unwrap();
@@ -207,6 +275,9 @@ mod tests {
             .map(|pack| pack.name.as_str())
             .collect::<Vec<_>>();
         assert_eq!(names, ["Folder", "Zip"]);
+        assert_eq!(loaded[0].description, "Folder description");
+        assert_eq!(loaded[1].description, "No description");
+        assert!(loaded.iter().all(|pack| pack.logo.is_none()));
         assert_eq!(warnings.len(), 1);
         fs::remove_dir_all(root).unwrap();
     }

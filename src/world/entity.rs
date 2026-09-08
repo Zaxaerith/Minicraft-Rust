@@ -156,30 +156,30 @@ impl FurnitureKind {
 
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Workbench => "WORKBENCH",
-            Self::Oven => "OVEN",
-            Self::Furnace => "FURNACE",
-            Self::Anvil => "ANVIL",
-            Self::Enchanter => "ENCHANTER",
-            Self::Loom => "LOOM",
-            Self::Chest => "CHEST",
-            Self::DungeonChest => "DUNGEON CHEST",
-            Self::Lantern => "LANTERN",
-            Self::IronLantern => "IRON LANTERN",
-            Self::GoldLantern => "GOLD LANTERN",
+            Self::Workbench => "Workbench",
+            Self::Oven => "Oven",
+            Self::Furnace => "Furnace",
+            Self::Anvil => "Anvil",
+            Self::Enchanter => "Enchanter",
+            Self::Loom => "Loom",
+            Self::Chest => "Chest",
+            Self::DungeonChest => "Dungeon Chest",
+            Self::Lantern => "Lantern",
+            Self::IronLantern => "Iron Lantern",
+            Self::GoldLantern => "Gold Lantern",
             Self::Tnt => "TNT",
-            Self::Bed => "BED",
-            Self::Composter => "COMPOSTER",
-            Self::KnightStatue => "KNIGHT STATUE",
-            Self::CowSpawner => "COW SPAWNER",
-            Self::PigSpawner => "PIG SPAWNER",
-            Self::SheepSpawner => "SHEEP SPAWNER",
-            Self::SlimeSpawner => "SLIME SPAWNER",
-            Self::ZombieSpawner => "ZOMBIE SPAWNER",
-            Self::CreeperSpawner => "CREEPER SPAWNER",
-            Self::SkeletonSpawner => "SKELETON SPAWNER",
-            Self::SnakeSpawner => "SNAKE SPAWNER",
-            Self::KnightSpawner => "KNIGHT SPAWNER",
+            Self::Bed => "Bed",
+            Self::Composter => "Composter",
+            Self::KnightStatue => "Knight Statue",
+            Self::CowSpawner => "Cow Spawner",
+            Self::PigSpawner => "Pig Spawner",
+            Self::SheepSpawner => "Sheep Spawner",
+            Self::SlimeSpawner => "Slime Spawner",
+            Self::ZombieSpawner => "Zombie Spawner",
+            Self::CreeperSpawner => "Creeper Spawner",
+            Self::SkeletonSpawner => "Skeleton Spawner",
+            Self::SnakeSpawner => "Snake Spawner",
+            Self::KnightSpawner => "Knight Spawner",
         }
     }
 
@@ -554,6 +554,7 @@ impl EntityArena {
         id
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
@@ -567,6 +568,34 @@ impl EntityArena {
         player_passive: bool,
         random: &mut JavaRandom,
     ) -> TickOutcome {
+        self.tick_with_player(
+            tiles,
+            data,
+            width,
+            height,
+            Some((player_x, player_y)),
+            time_slowed,
+            player_passive,
+            random,
+        )
+    }
+
+    /// None represents a player removed from the level (including Bed.use),
+    /// not a creative/passive player at an invented off-map coordinate.
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick_with_player(
+        &mut self,
+        tiles: &mut [Tile],
+        data: &[u16],
+        width: usize,
+        height: usize,
+        player: Option<(i32, i32)>,
+        time_slowed: bool,
+        player_passive: bool,
+        random: &mut JavaRandom,
+    ) -> TickOutcome {
+        let (player_x, player_y) = player.unwrap_or_default();
+        let player_passive = player_passive || player.is_none();
         let mut outcome = TickOutcome::default();
         let mut queued_projectiles = Vec::new();
         let mut queued_mobs = Vec::new();
@@ -637,7 +666,9 @@ impl EntityArena {
                         continue;
                     }
                     if projectile.hostile {
-                        if squared_distance(entity.x, entity.y, player_x, player_y) <= 7 * 7 {
+                        if player.is_some()
+                            && squared_distance(entity.x, entity.y, player_x, player_y) <= 7 * 7
+                        {
                             outcome.player_damage = outcome.player_damage.max(projectile.damage);
                             entity.removed = true;
                         }
@@ -647,6 +678,7 @@ impl EntityArena {
                 }
                 EntityKind::Furniture(kind) => {
                     if let Some(species) = kind.spawner_mob()
+                        && player.is_some()
                         && entity.age.is_multiple_of(300)
                         && squared_distance(entity.x, entity.y, player_x, player_y) <= 128 * 128
                     {
@@ -656,7 +688,10 @@ impl EntityArena {
                         entity.state -= 1;
                         if entity.state == 0 {
                             outcome.explosions.push((entity.x, entity.y, 2, true));
-                            if squared_distance(entity.x, entity.y, player_x, player_y) <= 32 * 32 {
+                            if player.is_some()
+                                && squared_distance(entity.x, entity.y, player_x, player_y)
+                                    <= 32 * 32
+                            {
                                 outcome.player_damage = outcome.player_damage.max(4);
                             }
                             entity.removed = true;
@@ -669,6 +704,7 @@ impl EntityArena {
                     }
                     mob.hurt_time = mob.hurt_time.saturating_sub(1);
                     if entity.age > DESPAWN_AGE
+                        && player.is_some()
                         && !matches!(
                             mob.species,
                             NaturalMob::AirWizard | NaturalMob::ObsidianKnight

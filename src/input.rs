@@ -2,8 +2,116 @@ use minifb::{Key, KeyRepeat, Window};
 
 use crate::config::KeyBindings;
 
+/// The sole frame-to-tick buffer, including raw key-binding capture events.
+#[derive(Default)]
+pub struct InputBuffer {
+    input: Input,
+    raw_keys: Vec<Key>,
+    keyboard: std::collections::BTreeMap<String, minicraft_client::io::input::PhysicalKey>,
+    bindings: Option<KeyBindings>,
+}
+
+impl InputBuffer {
+    pub fn frame(&mut self, focused: bool, input: Input, raw_keys: Vec<Key>) {
+        if focused {
+            self.input.latch(input);
+            self.raw_keys.extend(raw_keys);
+        } else {
+            self.input = Input::default();
+            self.raw_keys.clear();
+            for key in self.keyboard.values_mut() {
+                key.release();
+            }
+        }
+    }
+
+    pub fn tick(&mut self) -> (Input, Vec<Key>) {
+        for key in self.keyboard.values_mut() {
+            key.tick();
+        }
+        let mut input = self.input.take_tick();
+        if let Some(bindings) = &self.bindings {
+            let clicked = |binding: &str| {
+                minicraft_client::io::input::action_state(
+                    binding,
+                    |action| bindings.mapping(action),
+                    |name| {
+                        self.keyboard
+                            .get(name)
+                            .map(|key| key.state())
+                            .unwrap_or_default()
+                    },
+                )
+                .clicked
+            };
+            // Keyboard action clicks come exclusively from PhysicalKey tick.
+            // Retain independently latched controller edges, not frame previews.
+            let pad = input.controller_edges;
+            input.up_pressed = clicked("MOVE-UP|CURSOR-UP") || pad[0];
+            input.down_pressed = clicked("MOVE-DOWN|CURSOR-DOWN") || pad[1];
+            input.left_pressed = clicked("MOVE-LEFT|CURSOR-LEFT") || pad[2];
+            input.right_pressed = clicked("MOVE-RIGHT|CURSOR-RIGHT") || pad[3];
+            input.select = clicked("SELECT") || pad[4];
+            input.exit = clicked("EXIT") || pad[5];
+            input.attack = clicked("ATTACK") || pad[6];
+            input.menu = clicked("MENU") || pad[7];
+            input.craft = clicked("CRAFT");
+            input.pickup = clicked("PICKUP") || pad[8];
+            input.backspace = clicked("BACKSPACE");
+        }
+        (input, std::mem::take(&mut self.raw_keys))
+    }
+
+    pub fn sample_keyboard(&mut self, window: &Window, bindings: &KeyBindings) {
+        self.bindings = Some(bindings.clone());
+        let name = |key| match key {
+            Key::LeftShift | Key::RightShift => Some("SHIFT"),
+            Key::LeftCtrl | Key::RightCtrl => Some("CTRL"),
+            Key::LeftAlt | Key::RightAlt => Some("ALT"),
+            _ => key_name(key),
+        };
+        let down: std::collections::BTreeSet<_> =
+            window.get_keys().into_iter().filter_map(name).collect();
+        for name in &down {
+            self.keyboard
+                .entry((*name).to_owned())
+                .or_default()
+                .set_down(true);
+        }
+        for (name, key) in &mut self.keyboard {
+            if !down.contains(name.as_str()) {
+                key.toggle(false);
+            }
+        }
+        let fresh = window.get_keys_pressed(KeyRepeat::No);
+        let shifted = down.contains("SHIFT");
+        for key in window.get_keys_pressed(KeyRepeat::Yes) {
+            // Initial text was already captured by the frame poll. Append
+            // repeat events only, preserving their event order across frames.
+            if !fresh.contains(&key)
+                && let Some(character) = text_character(key, shifted)
+            {
+                self.input.text.push(character);
+            }
+            if let Some(name) = name(key) {
+                let state = self.keyboard.entry(name.to_owned()).or_default();
+                state.toggle(true);
+                if !down.contains(name) {
+                    state.toggle(false);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct Input {
+    /// Controller-only edges: up/down/left/right/select/exit/attack/menu/pickup.
+    pub controller_edges: [bool; 9],
+    pub toggle_hud: bool,
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
     pub up: bool,
     pub down: bool,
     pub left: bool,
@@ -27,6 +135,17 @@ pub struct Input {
 
 impl Input {
     pub fn latch(&mut self, latest: Self) {
+        for (pending, latest) in self
+            .controller_edges
+            .iter_mut()
+            .zip(latest.controller_edges)
+        {
+            *pending |= latest;
+        }
+        self.toggle_hud |= latest.toggle_hud;
+        self.shift = latest.shift;
+        self.ctrl = latest.ctrl;
+        self.alt = latest.alt;
         self.up = latest.up;
         self.down = latest.down;
         self.left = latest.left;
@@ -50,6 +169,8 @@ impl Input {
 
     pub fn take_tick(&mut self) -> Self {
         let tick = self.clone();
+        self.controller_edges.fill(false);
+        self.toggle_hud = false;
         self.up_pressed = false;
         self.down_pressed = false;
         self.left_pressed = false;
@@ -74,16 +195,6 @@ impl Input {
         raw_keys: &[Key],
         gamepad: &mut Gamepad,
     ) -> Self {
-        let up = key_from_name(&bindings.up).unwrap_or(Key::W);
-        let down = key_from_name(&bindings.down).unwrap_or(Key::S);
-        let left = key_from_name(&bindings.left).unwrap_or(Key::A);
-        let right = key_from_name(&bindings.right).unwrap_or(Key::D);
-        let select = key_from_name(&bindings.select).unwrap_or(Key::Enter);
-        let exit = key_from_name(&bindings.exit).unwrap_or(Key::Escape);
-        let attack = key_from_name(&bindings.attack).unwrap_or(Key::C);
-        let menu = key_from_name(&bindings.menu).unwrap_or(Key::X);
-        let craft = key_from_name(&bindings.craft).unwrap_or(Key::Z);
-        let pickup = key_from_name(&bindings.pickup).unwrap_or(Key::V);
         let shifted = window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
         let text = raw_keys
             .iter()
@@ -92,22 +203,45 @@ impl Input {
             .collect();
         let pad = gamepad.poll();
         Self {
-            up: window.is_key_down(up) || window.is_key_down(Key::Up) || pad.up,
-            down: window.is_key_down(down) || window.is_key_down(Key::Down) || pad.down,
-            left: window.is_key_down(left) || window.is_key_down(Key::Left) || pad.left,
-            right: window.is_key_down(right) || window.is_key_down(Key::Right) || pad.right,
-            up_pressed: pressed(window, up) || pressed(window, Key::Up) || pad.up_pressed,
-            down_pressed: pressed(window, down) || pressed(window, Key::Down) || pad.down_pressed,
-            left_pressed: pressed(window, left) || pressed(window, Key::Left) || pad.left_pressed,
-            right_pressed: pressed(window, right)
+            controller_edges: [
+                pad.up_pressed,
+                pad.down_pressed,
+                pad.left_pressed,
+                pad.right_pressed,
+                pad.select,
+                pad.exit,
+                pad.attack,
+                pad.menu,
+                pad.pickup,
+            ],
+            shift: shifted,
+            ctrl: window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl),
+            alt: window.is_key_down(Key::LeftAlt) || window.is_key_down(Key::RightAlt),
+            toggle_hud: window.is_key_pressed(Key::F1, KeyRepeat::No),
+            up: binding_down(window, &bindings.up) || window.is_key_down(Key::Up) || pad.up,
+            down: binding_down(window, &bindings.down) || window.is_key_down(Key::Down) || pad.down,
+            left: binding_down(window, &bindings.left) || window.is_key_down(Key::Left) || pad.left,
+            right: binding_down(window, &bindings.right)
+                || window.is_key_down(Key::Right)
+                || pad.right,
+            up_pressed: binding_pressed(window, &bindings.up)
+                || pressed(window, Key::Up)
+                || pad.up_pressed,
+            down_pressed: binding_pressed(window, &bindings.down)
+                || pressed(window, Key::Down)
+                || pad.down_pressed,
+            left_pressed: binding_pressed(window, &bindings.left)
+                || pressed(window, Key::Left)
+                || pad.left_pressed,
+            right_pressed: binding_pressed(window, &bindings.right)
                 || pressed(window, Key::Right)
                 || pad.right_pressed,
-            select: pressed(window, select) || pad.select,
-            exit: pressed(window, exit) || pad.exit,
-            attack: pressed(window, attack) || pressed(window, Key::Space) || pad.attack,
-            menu: pressed(window, menu) || (!shifted && pressed(window, Key::E)) || pad.menu,
-            craft: pressed(window, craft) || (shifted && pressed(window, Key::E)),
-            pickup: pressed(window, pickup) || pressed(window, Key::P) || pad.pickup,
+            select: binding_pressed(window, &bindings.select) || pad.select,
+            exit: binding_pressed(window, &bindings.exit) || pad.exit,
+            attack: binding_pressed(window, &bindings.attack) || pad.attack,
+            menu: binding_pressed(window, &bindings.menu) || pad.menu,
+            craft: binding_pressed(window, &bindings.craft),
+            pickup: binding_pressed(window, &bindings.pickup) || pad.pickup,
             world_copy: shifted && raw_keys.contains(&Key::C),
             world_rename: shifted && raw_keys.contains(&Key::R),
             world_delete: shifted && raw_keys.contains(&Key::D),
@@ -115,6 +249,38 @@ impl Input {
             text,
         }
     }
+}
+
+fn binding_down(window: &Window, binding: &str) -> bool {
+    binding_state(window, binding).down
+}
+
+fn binding_pressed(window: &Window, binding: &str) -> bool {
+    binding_state(window, binding).clicked
+}
+
+fn binding_state(window: &Window, binding: &str) -> minicraft_client::io::input::KeyState {
+    use minicraft_client::io::input::{KeyState, mapped_state};
+    mapped_state(binding, |name| {
+        let modifiers = match name {
+            "SHIFT" => Some((Key::LeftShift, Key::RightShift)),
+            "CTRL" => Some((Key::LeftCtrl, Key::RightCtrl)),
+            "ALT" => Some((Key::LeftAlt, Key::RightAlt)),
+            _ => None,
+        };
+        if let Some((left, right)) = modifiers {
+            // Frame preview only; authoritative PhysicalKey clicks run at tick.
+            KeyState {
+                down: window.is_key_down(left) || window.is_key_down(right),
+                clicked: pressed(window, left) || pressed(window, right),
+            }
+        } else {
+            key_from_name(name).map_or_else(KeyState::default, |key| KeyState {
+                down: window.is_key_down(key),
+                clicked: pressed(window, key),
+            })
+        }
+    })
 }
 
 pub struct Gamepad {
@@ -193,6 +359,22 @@ mod tests {
         assert!(!next.attack);
         assert!(!next.craft);
         assert!(next.text.is_empty());
+    }
+
+    #[test]
+    fn shift_is_held_across_ticks_but_not_latched_after_release() {
+        let mut latch = Input::default();
+        latch.latch(Input {
+            shift: true,
+            down_pressed: true,
+            ..Input::default()
+        });
+        let first = latch.take_tick();
+        assert!(first.shift && first.down_pressed);
+        let held = latch.take_tick();
+        assert!(held.shift && !held.down_pressed);
+        latch.latch(Input::default());
+        assert!(!latch.take_tick().shift);
     }
 
     #[test]

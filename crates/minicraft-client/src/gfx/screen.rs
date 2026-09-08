@@ -4,16 +4,7 @@ use std::{fs::File, io::BufWriter, path::Path};
 pub const WIDTH: usize = 288;
 pub const HEIGHT: usize = 192;
 
-const FONT_CHARS: &str = concat!(
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345",
-    "6789.,!?'\"-+=/\\%()<>:;^@ÁÉÍÓÚÑ¿¡",
-    "ÃÊÇÔÕĞÇÜİÖŞÆØÅŰŐ[]#|{}_АБВГДЕЁЖЗ",
-    "ИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯÀÂÄÈÎÌÏÒ",
-    "ÙÛÝ*«»£$&€§ªºabcdefghijklmnopqrs",
-    "tuvwxyzáàãâäéèêëíìîïóòõôöúùûüçñý",
-    "ÿабвгдеёжзийклмнопрстуфхцчшщъыьэ",
-    "юяışő✓"
-);
+use super::font::FONT_CHARS;
 
 pub struct Screen {
     pixels: Vec<u32>,
@@ -35,10 +26,16 @@ impl Screen {
     }
 
     pub fn rect(&mut self, x: i32, y: i32, width: i32, height: i32, color: u32) {
+        if width <= 0 || height <= 0 {
+            return;
+        }
         let left = x.max(0);
         let top = y.max(0);
-        let right = (x + width).min(WIDTH as i32);
-        let bottom = (y + height).min(HEIGHT as i32);
+        let right = x.saturating_add(width).min(WIDTH as i32);
+        let bottom = y.saturating_add(height).min(HEIGHT as i32);
+        if right <= left || bottom <= top {
+            return;
+        }
         for yy in top..bottom {
             let start = left as usize + yy as usize * WIDTH;
             self.pixels[start..start + (right - left) as usize].fill(color);
@@ -158,7 +155,7 @@ impl Screen {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn blit_region_tinted(
+    pub fn blit_region_tinted(
         &mut self,
         image: &Image,
         x: i32,

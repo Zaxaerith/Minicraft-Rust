@@ -1,0 +1,13 @@
+[package]
+name = "minicraft-client"
+version = "2.2.4"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+minicraft-common = { path = "../minicraft-common" }
+png = "=0.17.16"
