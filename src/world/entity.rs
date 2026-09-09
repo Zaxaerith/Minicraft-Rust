@@ -121,10 +121,6 @@ impl FurnitureKind {
         Self::KnightSpawner,
     ];
 
-    pub const fn id(self) -> usize {
-        self as usize
-    }
-
     pub const fn asset_name(self) -> &'static str {
         match self {
             Self::Workbench => "workbench",

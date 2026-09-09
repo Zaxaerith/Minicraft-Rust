@@ -78,7 +78,7 @@ pixel canvas and copied 2.2.4 artwork. It includes:
   Rust relay server, login/presence/state/heartbeat handling, and a client
   connectivity probe.
 
-## Recent development / 最近更新（2026-09-08）
+## Recent development / 最近更新（2026-09-09）
 
 目标是对 Java 2.2.4 的行为和结构进行 1:1 Rust 重构，目前尚未完成全面等价验收。
 早期可玩版本的功能覆盖不代表所有行为已经与原版一致。
@@ -95,6 +95,21 @@ pixel canvas and copied 2.2.4 artwork. It includes:
 - 阶段 5：图形基础迁移进行中。Image、Screen、字体字符表已迁入
   `crates/minicraft-client/src/gfx/`；共享菜单边框与标题背景绘制迁入
   `gfx/gui.rs`，根包保留布局适配。
+  普通字形绘制与文本宽度测量已集中到 `gfx/font.rs`，菜单及 HUD 的
+  直接宽度计算开始使用 Java UTF-16/颜色标记计量规则。已新增内嵌颜色
+  编解码接口、字体白色像素替换和单行阴影样式，通知字幕接入共享样式。
+  相对定位、整段排版和 Java 像素宽度自动断行已接入任务描述与详情；
+  书籍已接入 Java 像素分页与强制换页规则；书籍外观仍为兼容适配。
+  普通精灵与字体共用像素绘制入口，统一镜像、白色替换及 fullbright
+  参数优先级，并按 Java 使用二值透明规则。旧乘色调用、Sprite 组合、
+  光照、富文本菜单及其余文字界面仍待迁移，尚未完成视觉验收。
+
+阶段 5 已设为当前持续完成目标。多图块 Sprite/Px 组合接口已加入，
+SpriteLinker 分类资源注册表已统一物品、工具、生物和家具的加载、资源包
+覆盖与生产查询，移除四组旧数组；方块变体、连接边框和角图也已按资源键
+统一持有；GUI、击中特效和当前皮肤也已移入注册表，绘制通过借用接口访问。
+背包容量数字已接入白色替换；资源键绑定、动画、光照及组合接口的完整
+生产接入仍在推进，不能把这些接口的存在视为阶段完成。
 
 后续工作包括完整字体/精灵/光照迁移、死亡与换层生命周期、Player/Level
 更新顺序、床与玩家实体归属，以及其余输入和菜单音效迁移。

@@ -28,15 +28,15 @@ pub(crate) fn render_info(
         .collect();
     let width = lines
         .iter()
-        .map(|line| line.chars().count() as i32 * 8)
+        .map(|line| minicraft_client::gfx::font::text_width(&line))
         .max()
         .unwrap_or(0)
         + 16;
     let height = lines.len() as i32 * 8 + 16;
     let top = (192 - height) / 2;
-    crate::world::render_menu_frame(screen, &assets.hud, (288 - width) / 2, top, width, height);
+    crate::world::render_menu_frame(screen, assets.hud(), (288 - width) / 2, top, width, height);
     for (row, line) in lines.iter().enumerate() {
-        screen.centered_text(&assets.font, line, top + 8 + row as i32 * 8);
+        screen.centered_text(assets.font(), line, top + 8 + row as i32 * 8);
     }
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn render(
         let default = index == packs.len();
         if default || enabled.contains(&packs[index].id) {
             screen.text_colored(
-                &assets.font,
+                assets.font(),
                 "✓",
                 20,
                 60 + index as i32 * 10,
@@ -77,20 +77,25 @@ pub(crate) fn render(
         let selected = index == selection;
         let y = 60 + (index - offset) as i32 * 10;
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             name,
             x,
             y,
             if selected { 0xFFFFFF } else { 0x999999 },
         );
         if selected && index < packs.len() {
-            screen.text(&assets.font, "> ", x - 16, y);
-            screen.text(&assets.font, " <", x + name.chars().count() as i32 * 8, y);
+            screen.text(assets.font(), "> ", x - 16, y);
+            screen.text(
+                assets.font(),
+                " <",
+                x + minicraft_client::gfx::font::text_width(&name),
+                y,
+            );
         }
     }
     // Render order is menus, title/help, then logo; help can cover long menus in Java.
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.resource_packs.display.title"),
         6,
     );
@@ -110,9 +115,9 @@ pub(crate) fn render(
             &arguments,
         );
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             &text,
-            (WIDTH as i32 - text.chars().count() as i32 * 8) / 2,
+            (WIDTH as i32 - minicraft_client::gfx::font::text_width(&text)) / 2,
             y,
             0x333333,
         );

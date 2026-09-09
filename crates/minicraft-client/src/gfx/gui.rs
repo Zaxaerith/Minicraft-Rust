@@ -61,7 +61,7 @@ pub fn render_title(
     y: i32,
     color: u32,
 ) {
-    for offset in (0..title.chars().count() as i32 * 8).step_by(8) {
+    for offset in (0..title.encode_utf16().count() as i32 * 8).step_by(8) {
         screen.blit_region(hud, x + offset, y, 24, 48, 8, 8, false);
     }
     screen.text_colored(font, title, x, y, color);

@@ -32,10 +32,6 @@ impl NaturalMob {
         Self::AirWizard,
         Self::ObsidianKnight,
     ];
-
-    pub fn id(self) -> usize {
-        self as usize
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -1859,28 +1859,28 @@ pub(crate) fn render_title(
     ticks: u64,
 ) {
     screen.blit(
-        &assets.title,
-        (WIDTH as i32 - assets.title.width as i32) / 2,
-        26 - assets.title.height as i32 / 2,
+        assets.title(),
+        (WIDTH as i32 - assets.title().width as i32) / 2,
+        26 - assets.title().height as i32 / 2,
     );
     let phase = ticks % 50;
     let count = if phase < 25 { phase + 1 } else { 49 - phase };
     let brightness = 5_u64.saturating_sub(count / 5);
     let splash_color = ((brightness * 51) << 16) | ((brightness * 51) << 8) | (brightness * 25);
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         "Now with skins!",
-        (WIDTH as i32 - "Now with skins!".chars().count() as i32 * 8) / 2,
+        (WIDTH as i32 - minicraft_client::gfx::font::text_width(&"Now with skins!")) / 2,
         HEIGHT as i32 / 2 - 44,
         splash_color as u32,
     );
     let version = localization.format("minicraft.displays.title.display.version", &["2.2.4"]);
-    screen.text_colored(&assets.font, &version, 1, 1, 0x333333);
+    screen.text_colored(assets.font(), &version, 1, 1, 0x333333);
     let latest = localization.text("minicraft.displays.title.display.latest_already");
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         latest,
-        (WIDTH as i32 - latest.chars().count() as i32 * 8) / 2,
+        (WIDTH as i32 - minicraft_client::gfx::font::text_width(&latest)) / 2,
         76,
         0x333333,
     );
@@ -1888,14 +1888,14 @@ pub(crate) fn render_title(
         let item = localization.text(key);
         let y = 96 + index as i32 * 10;
         if index == selection {
-            let width = item.chars().count() as i32 * 8;
+            let width = minicraft_client::gfx::font::text_width(&item);
             let x = (WIDTH as i32 - width) / 2;
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + width, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(assets.font(), "<", x + width, y);
         }
-        let x = (WIDTH as i32 - item.chars().count() as i32 * 8) / 2;
+        let x = (WIDTH as i32 - minicraft_client::gfx::font::text_width(&item)) / 2;
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             item,
             x,
             y,
@@ -1921,9 +1921,9 @@ pub(crate) fn render_title(
         ),
     ] {
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             &message,
-            (WIDTH as i32 - message.chars().count() as i32 * 8) / 2,
+            (WIDTH as i32 - minicraft_client::gfx::font::text_width(&message)) / 2,
             y,
             0x333333,
         );
@@ -1938,7 +1938,7 @@ fn render_options(
     selection: usize,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.options_main_menu"),
         35,
     );
@@ -1986,11 +1986,16 @@ fn render_options(
     for (index, label) in labels.iter().enumerate() {
         let y = 51 + index as i32 * 14;
         if index == selection {
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + label.chars().count() as i32 * 8, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(
+                assets.font(),
+                "<",
+                x + minicraft_client::gfx::font::text_width(&label),
+                y,
+            );
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             x,
             y,
@@ -2139,7 +2144,7 @@ fn render_new_world(
         ),
     ]);
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.world_gen.title"),
         52,
     );
@@ -2162,11 +2167,16 @@ fn render_new_world(
     for (row, (index, label)) in entries.iter().skip(first).take(5).enumerate() {
         let y = 68 + row as i32 * 18;
         if *index == selection {
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + label.chars().count() as i32 * 8, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(
+                assets.font(),
+                "<",
+                x + minicraft_client::gfx::font::text_width(&label),
+                y,
+            );
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             x,
             y,
@@ -2189,12 +2199,12 @@ fn render_worlds(
     popup: Option<&WorldPopup>,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.world_select.select_world"),
         0,
     );
     if worlds.is_empty() {
-        screen.centered_text(&assets.font, "NO WORLDS FOUND", 92);
+        screen.centered_text(assets.font(), "NO WORLDS FOUND", 92);
     } else {
         let first = selection
             .saturating_sub(2)
@@ -2204,15 +2214,15 @@ fn render_worlds(
             let label = &world.name;
             let y = 76 + row as i32 * 10;
             if index == selection {
-                let width = label.chars().count() as i32 * 8;
+                let width = minicraft_client::gfx::font::text_width(&label);
                 let x = (WIDTH as i32 - width) / 2;
-                screen.text(&assets.font, ">", x - 8, y);
-                screen.text(&assets.font, "<", x + width, y);
+                screen.text(assets.font(), ">", x - 8, y);
+                screen.text(assets.font(), "<", x + width, y);
             }
-            screen.centered_text(&assets.font, label, y);
+            screen.centered_text(assets.font(), label, y);
         }
         screen.centered_text(
-            &assets.font,
+            assets.font(),
             &localization.format(
                 "minicraft.displays.world_select.display.world_version",
                 &["2.2.4"],
@@ -2252,7 +2262,7 @@ fn render_worlds(
             HEIGHT as i32 - 16,
             HEIGHT as i32 - 8,
         ][row];
-        screen.centered_text(&assets.font, text, y);
+        screen.centered_text(assets.font(), text, y);
     }
     if let Some(dialog) = popup {
         render_world_popup(screen, assets, localization, worlds, selection, dialog);
@@ -2273,31 +2283,31 @@ fn render_world_popup(
     match popup.kind {
         WorldPopupKind::Copy | WorldPopupKind::Rename => {
             screen.centered_text(
-                &assets.font,
+                assets.font(),
                 localization.text("minicraft.displays.world_select.popups.display.change"),
                 y + 12,
             );
-            screen.centered_text(&assets.font, &format!("{}{}", popup.text, "_"), y + 30);
+            screen.centered_text(assets.font(), &format!("{}{}", popup.text, "_"), y + 30);
         }
         WorldPopupKind::Delete => {
-            screen.centered_text(&assets.font, "ARE YOU SURE YOU WANT TO DELETE", y + 12);
+            screen.centered_text(assets.font(), "ARE YOU SURE YOU WANT TO DELETE", y + 12);
             screen.centered_text(
-                &assets.font,
+                assets.font(),
                 worlds
                     .get(selection)
                     .map(|world| world.name.as_str())
                     .unwrap_or(""),
                 y + 26,
             );
-            screen.centered_text(&assets.font, "THIS CAN NOT BE UNDONE!", y + 40);
+            screen.centered_text(assets.font(), "THIS CAN NOT BE UNDONE!", y + 40);
         }
     }
-    screen.centered_text(&assets.font, "ENTER TO CONFIRM", y + height - 22);
-    screen.centered_text(&assets.font, "ESC TO CANCEL", y + height - 12);
+    screen.centered_text(assets.font(), "ENTER TO CONFIRM", y + height - 22);
+    screen.centered_text(assets.font(), "ESC TO CANCEL", y + height - 12);
 }
 
 fn render_help(screen: &mut Screen, assets: &Assets, selection: usize) {
-    screen.centered_text(&assets.font, "HELP", 66);
+    screen.centered_text(assets.font(), "HELP", 66);
     let labels: Vec<String> = Book::ALL
         .iter()
         .map(|book| book.title().to_owned())
@@ -2309,12 +2319,12 @@ fn render_book(screen: &mut Screen, assets: &Assets, book: Book, page: usize) {
     let pages = book.pages();
     let page = page.min(pages.len() - 1);
     screen.frame(6, 6, WIDTH as i32 - 12, HEIGHT as i32 - 12, 0xC8C8C8);
-    screen.centered_text(&assets.font, book.title(), 13);
+    screen.centered_text(assets.font(), book.title(), 13);
     for (row, line) in pages[page].iter().enumerate() {
-        screen.text(&assets.font, line, 16, 31 + row as i32 * 10);
+        screen.text(assets.font(), line, 16, 31 + row as i32 * 10);
     }
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         &format!("<  PAGE {} / {}  >", page + 1, pages.len()),
         HEIGHT as i32 - 18,
     );
@@ -2329,7 +2339,7 @@ fn render_achievements(
     bindings: &KeyBindings,
     selection: usize,
 ) {
-    screen.centered_text(&assets.font, "Achievements", 8);
+    screen.centered_text(assets.font(), "Achievements", 8);
     let score: u32 = achievements
         .iter()
         .filter(|achievement| unlocked.contains(&achievement.id))
@@ -2340,9 +2350,9 @@ fn render_achievements(
         &[&score.to_string()],
     );
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         &score_label,
-        (WIDTH as i32 - score_label.chars().count() as i32 * 8) / 2,
+        (WIDTH as i32 - minicraft_client::gfx::font::text_width(&score_label)) / 2,
         32,
         0x999999,
     );
@@ -2354,9 +2364,9 @@ fn render_achievements(
             "minicraft.displays.achievements.display.not_achieved"
         });
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             status,
-            (WIDTH as i32 - status.chars().count() as i32 * 8) / 2,
+            (WIDTH as i32 - minicraft_client::gfx::font::text_width(&status)) / 2,
             48,
             if achieved { 0x00FF00 } else { 0xFF3030 },
         );
@@ -2368,13 +2378,18 @@ fn render_achievements(
         let index = first + row;
         let y = 72 + row as i32 * 10;
         let name = localization.text(&achievement.id);
-        let x = (WIDTH as i32 - name.chars().count() as i32 * 8) / 2;
+        let x = (WIDTH as i32 - minicraft_client::gfx::font::text_width(&name)) / 2;
         if index == selection {
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + name.chars().count() as i32 * 8, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(
+                assets.font(),
+                "<",
+                x + minicraft_client::gfx::font::text_width(&name),
+                y,
+            );
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             name,
             x,
             y,
@@ -2386,13 +2401,13 @@ fn render_achievements(
         );
     }
     if let Some(achievement) = achievements.get(selection) {
-        render_app_menu_frame(screen, &assets.hud, 44, 128, 200, 32);
+        render_app_menu_frame(screen, assets.hud(), 44, 128, 200, 32);
         let description = localization.text(&achievement.description);
         for (row, line) in crate::content::paginate(description, 23, 2)[0]
             .iter()
             .enumerate()
         {
-            screen.text(&assets.font, line, 52, 136 + row as i32 * 10);
+            screen.text(assets.font(), line, 52, 136 + row as i32 * 10);
         }
     }
     let help = localization.format(
@@ -2400,9 +2415,9 @@ fn render_achievements(
         &[&bindings.down, &bindings.up],
     );
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         &help,
-        (WIDTH as i32 - help.chars().count() as i32 * 8) / 2,
+        (WIDTH as i32 - minicraft_client::gfx::font::text_width(&help)) / 2,
         184,
         0x333333,
     );
@@ -2417,18 +2432,18 @@ fn render_controls(
     capture: Option<(usize, bool)>,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.key_input.title"),
         8,
     );
     for (index, label) in KeyBindings::LABELS.iter().enumerate() {
         let y = 24 + index as i32 * 10;
         if index == selection {
-            screen.text(&assets.font, ">", 6, y);
-            screen.text(&assets.font, "<", WIDTH as i32 - 14, y);
+            screen.text(assets.font(), ">", 6, y);
+            screen.text(assets.font(), "<", WIDTH as i32 - 14, y);
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             16,
             y,
@@ -2439,8 +2454,8 @@ fn render_controls(
             },
         );
         let value = bindings.display_value(index);
-        let x = WIDTH as i32 - 17 - value.chars().count() as i32 * 8;
-        screen.text_colored(&assets.font, &value, x, y, 0x999999);
+        let x = WIDTH as i32 - 17 - minicraft_client::gfx::font::text_width(&value);
+        screen.text_colored(assets.font(), &value, x, y, 0x999999);
     }
     let help = [
         localization
@@ -2458,15 +2473,15 @@ fn render_controls(
         ),
     ];
     for (line, y) in help.iter().zip([146, 156, 166, 176]) {
-        screen.text_colored(&assets.font, line, 8, y, 0x999999);
+        screen.text_colored(assets.font(), line, 8, y, 0x999999);
     }
     if let Some((_, _append)) = capture {
         let message =
             localization.text("minicraft.displays.key_input.popup_display.press_key_sequence");
-        let width = message.chars().count() as i32 * 8 + 16;
+        let width = minicraft_client::gfx::font::text_width(&message) + 16;
         let x = (WIDTH as i32 - width) / 2;
-        render_app_menu_frame(screen, &assets.hud, x, 82, width, 24);
-        screen.text_colored(&assets.font, message, x + 8, 90, 0xFFFF00);
+        render_app_menu_frame(screen, assets.hud(), x, 82, width, 24);
+        screen.text_colored(assets.font(), message, x + 8, 90, 0xFFFF00);
     }
 }
 
@@ -2478,12 +2493,12 @@ fn render_control_guide(
     controller: bool,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.controls"),
         0,
     );
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text(if controller {
             "minicraft.displays.controls.display.controller"
         } else {
@@ -2501,15 +2516,15 @@ fn render_control_guide(
         let label = localization.text(&key);
         let y = 20 + row as i32 * 8;
         if index == selection {
-            let width = label.chars().count() as i32 * 8;
+            let width = minicraft_client::gfx::font::text_width(&label);
             let x = (WIDTH as i32 - width) / 2;
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + width, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(assets.font(), "<", x + width, y);
         }
-        screen.centered_text(&assets.font, label, y);
+        screen.centered_text(assets.font(), label, y);
     }
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         if controller {
             "CONTROLLER INPUTS"
         } else {
@@ -2517,7 +2532,7 @@ fn render_control_guide(
         },
         HEIGHT as i32 - 16,
     );
-    screen.centered_text(&assets.font, "LEFT RIGHT TO SWITCH", HEIGHT as i32 - 8);
+    screen.centered_text(assets.font(), "LEFT RIGHT TO SWITCH", HEIGHT as i32 - 8);
 }
 
 fn render_centered_menu(
@@ -2531,14 +2546,14 @@ fn render_centered_menu(
     for (index, label) in labels.iter().enumerate() {
         let y = start_y + index as i32 * spacing;
         if index == selection {
-            let width = label.chars().count() as i32 * 8;
+            let width = minicraft_client::gfx::font::text_width(&label);
             let x = (WIDTH as i32 - width) / 2;
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + width, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(assets.font(), "<", x + width, y);
         }
-        let x = (WIDTH as i32 - label.chars().count() as i32 * 8) / 2;
+        let x = (WIDTH as i32 - minicraft_client::gfx::font::text_width(&label)) / 2;
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             x,
             y,
@@ -2553,13 +2568,13 @@ fn render_centered_menu(
 
 pub(crate) fn render_focus_nagger(screen: &mut Screen, assets: &Assets, ticks: u64) {
     let message = "Click to focus!";
-    let width = message.chars().count() as i32 * 8 + 16;
+    let width = minicraft_client::gfx::font::text_width(&message) + 16;
     let height = 24;
     let x = (WIDTH as i32 - width) / 2;
     let y = (HEIGHT as i32 - height) / 2;
-    render_app_menu_frame(screen, &assets.hud, x, y, width, height);
+    render_app_menu_frame(screen, assets.hud(), x, y, width, height);
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         message,
         x + 8,
         y + 8,
@@ -2617,7 +2632,7 @@ fn render_languages(
     current_locale: &str,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.language_settings.title"),
         10,
     );
@@ -2630,8 +2645,8 @@ fn render_languages(
         let (code, name) = LOCALES[*locale_index];
         let y = 30 + row as i32 * 10;
         if index == selection {
-            screen.text(&assets.font, ">", 41, y);
-            screen.text(&assets.font, "<", 239, y);
+            screen.text(assets.font(), ">", 41, y);
+            screen.text(assets.font(), "<", 239, y);
         }
         let color = if code.eq_ignore_ascii_case(current_locale) {
             if index == selection {
@@ -2644,7 +2659,7 @@ fn render_languages(
         } else {
             0x999999
         };
-        screen.text_colored(&assets.font, name, 53, y, color);
+        screen.text_colored(assets.font(), name, 53, y, color);
     }
 }
 
@@ -2668,13 +2683,13 @@ fn render_skins(
     ticks: u64,
 ) {
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         localization.text("minicraft.displays.skin"),
         16,
     );
     let (source_x, flip_x) = skin_preview_frame(ticks);
     screen.blit_region(
-        &assets.skin,
+        assets.skin(),
         WIDTH as i32 / 2 - 8,
         40,
         source_x,
@@ -2693,21 +2708,21 @@ fn render_skins(
             let name_width = if skin.starts_with("minicraft.skin.") {
                 localization.text(skin).chars().count() as i32 * 8
             } else {
-                skin.chars().count() as i32 * 8
+                minicraft_client::gfx::font::text_width(&skin)
             };
             let x = (WIDTH as i32 - name_width) / 2;
-            screen.text(&assets.font, ">", x - 8, y);
-            screen.text(&assets.font, "<", x + name_width, y);
+            screen.text(assets.font(), ">", x - 8, y);
+            screen.text(assets.font(), "<", x + name_width, y);
         }
         let name = if skin.starts_with("minicraft.skin.") {
             localization.text(skin)
         } else {
             skin
         };
-        screen.centered_text(&assets.font, name, y);
+        screen.centered_text(assets.font(), name, y);
     }
-    screen.centered_text(&assets.font, "UP DOWN TO MOVE", HEIGHT as i32 - 17);
-    screen.centered_text(&assets.font, "ENTER SELECT  ESC EXIT", HEIGHT as i32 - 9);
+    screen.centered_text(assets.font(), "UP DOWN TO MOVE", HEIGHT as i32 - 17);
+    screen.centered_text(assets.font(), "ENTER SELECT  ESC EXIT", HEIGHT as i32 - 9);
 }
 
 fn skin_preview_frame(ticks: u64) -> (usize, bool) {

@@ -156,7 +156,7 @@ impl World {
             let player_x = self.player.x - 8 - camera_x;
             let player_y = self.player.y - 11 - camera_y;
             screen.blit_region(
-                &assets.skin,
+                assets.skin(),
                 player_x,
                 player_y,
                 source_x,
@@ -168,7 +168,7 @@ impl World {
             if self.player.attack_time > 0 {
                 render_attack_slash(
                     screen,
-                    &assets.hud,
+                    assets.hud(),
                     player_x,
                     player_y,
                     self.player.attack_direction,
@@ -293,7 +293,7 @@ impl World {
         }
         if self.story_complete {
             screen.rect(WIDTH as i32 - 82, 33, 80, 10, 0x101018);
-            screen.text(&assets.font, "VICTORY", WIDTH as i32 - 76, 34);
+            screen.text(assets.font(), "VICTORY", WIDTH as i32 - 76, 34);
         }
         self.render_status(screen, assets, localization);
     }
@@ -333,7 +333,7 @@ impl World {
             }
             screen.rect(54, 76, WIDTH as i32 - 108, 74, 0x101018);
             screen.centered_text(
-                &assets.font,
+                assets.font(),
                 if self.mode == GameMode::Hardcore {
                     "HARDCORE WORLD ENDED"
                 } else {
@@ -341,7 +341,7 @@ impl World {
                 },
                 91,
             );
-            screen.centered_text(&assets.font, "SELECT TO RETURN", 132);
+            screen.centered_text(assets.font(), "SELECT TO RETURN", 132);
         }
     }
 }

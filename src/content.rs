@@ -41,7 +41,16 @@ impl Book {
     }
 
     pub fn pages(self) -> Vec<Vec<String>> {
-        paginate(self.text(), 32, 14)
+        // BookData.loadBook decodes the literal page-break escape first.
+        let text = self.text().replace("\\0", "\0");
+        let pages = minicraft_client::screen::book::pages(&text);
+        // Legacy render/input adapters require at least one page. Keep this
+        // empty-resource guard outside the Java pagination implementation.
+        if pages.is_empty() {
+            vec![Vec::new()]
+        } else {
+            pages
+        }
     }
 }
 

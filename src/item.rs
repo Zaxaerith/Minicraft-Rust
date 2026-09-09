@@ -372,10 +372,6 @@ impl ToolKind {
         Self::Shears,
     ];
 
-    pub const fn id(self) -> usize {
-        self as usize
-    }
-
     pub const fn asset_name(self, tier: ToolTier) -> &'static str {
         match (self, tier) {
             (Self::Shears, _) => "shears",

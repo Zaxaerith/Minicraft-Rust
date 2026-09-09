@@ -3758,12 +3758,12 @@ fn render_world_book(screen: &mut Screen, assets: &Assets, book: Book, page: usi
     let page = page.min(pages.len().saturating_sub(1));
     screen.rect(18, 17, WIDTH as i32 - 36, HEIGHT as i32 - 34, 0xD8C68F);
     screen.rect(22, 21, WIDTH as i32 - 44, HEIGHT as i32 - 42, 0x33291C);
-    screen.centered_text(&assets.font, book.title(), 27);
+    screen.centered_text(assets.font(), book.title(), 27);
     for (row, line) in pages[page].iter().enumerate() {
-        screen.text(&assets.font, line, 29, 42 + row as i32 * 8);
+        screen.text(assets.font(), line, 29, 42 + row as i32 * 8);
     }
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         &format!("< PAGE {}/{} >  SELECT CLOSE", page + 1, pages.len()),
         HEIGHT as i32 - 25,
     );
@@ -3771,11 +3771,11 @@ fn render_world_book(screen: &mut Screen, assets: &Assets, book: Book, page: usi
 
 fn render_sign_editor(screen: &mut Screen, assets: &Assets, text: &str) {
     screen.rect(36, 72, WIDTH as i32 - 72, 69, 0x101018);
-    screen.centered_text(&assets.font, "EDIT SIGN", 81);
+    screen.centered_text(assets.font(), "EDIT SIGN", 81);
     let visible = text.chars().take(28).collect::<String>();
     screen.rect(47, 99, WIDTH as i32 - 94, 13, 0x493A28);
-    screen.centered_text(&assets.font, &format!("{visible}_"), 102);
-    screen.centered_text(&assets.font, "TYPE  BACKSPACE  SELECT SAVE", 124);
+    screen.centered_text(assets.font(), &format!("{visible}_"), 102);
+    screen.centered_text(assets.font(), "TYPE  BACKSPACE  SELECT SAVE", 124);
 }
 
 fn short_progress_id(id: &str) -> &str {
@@ -4123,20 +4123,20 @@ fn render_score_overlay(
         minutes,
         seconds
     );
-    screen.text(&assets.font, &time, WIDTH as i32 / 2 - 72, 2);
+    screen.text(assets.font(), &time, WIDTH as i32 / 2 - 72, 2);
     let score = format!("CURRENT SCORE: {score}");
     screen.text(
-        &assets.font,
+        assets.font(),
         &score,
-        WIDTH as i32 - score.chars().count() as i32 * 8 - 2,
+        WIDTH as i32 - minicraft_client::gfx::font::text_width(&score) - 2,
         11,
     );
     if multiplier > 1 {
         let multiplier = format!("X{multiplier}");
         screen.text(
-            &assets.font,
+            assets.font(),
             &multiplier,
-            WIDTH as i32 - multiplier.chars().count() as i32 * 8 - 2,
+            WIDTH as i32 - minicraft_client::gfx::font::text_width(&multiplier) - 2,
             20,
         );
     }
@@ -4147,9 +4147,9 @@ fn render_quest_overlay(screen: &mut Screen, assets: &Assets, progress: &str) {
     let width =
         (((label.chars().count().max(6) as i32 * 8 + 32) / 8) * 8).clamp(72, WIDTH as i32 - 18);
     let x = WIDTH as i32 - 9 - width;
-    render_menu_frame(screen, &assets.hud, x, 9, width, 24);
-    screen.text(&assets.font, "QUESTS", x + (width - 48) / 2, 9);
-    screen.text(&assets.font, &label, x + 16, 17);
+    render_menu_frame(screen, assets.hud(), x, 9, width, 24);
+    screen.text(assets.font(), "QUESTS", x + (width - 48) / 2, 9);
+    screen.text(assets.font(), &label, x + 16, 17);
 }
 
 fn render_potion_overlay(screen: &mut Screen, assets: &Assets, player: &Player, offset: i32) {
@@ -4170,11 +4170,11 @@ fn render_potion_overlay(screen: &mut Screen, assets: &Assets, player: &Player, 
         screen.rect(
             x - 2,
             y - 1,
-            label.chars().count() as i32 * 8 + 4,
+            minicraft_client::gfx::font::text_width(&label) + 4,
             10,
             0x101018,
         );
-        screen.text(&assets.font, &label, x, y);
+        screen.text(assets.font(), &label, x, y);
     }
 }
 
@@ -4192,15 +4192,15 @@ fn render_boss_bar(
     } else {
         usize::from(health) * 100 / usize::from(max_health)
     };
-    screen.blit_region_transformed(&assets.hud, 0, 32, 8, 8, x + 200, y, true, false);
+    screen.blit_region_transformed(assets.hud(), 0, 32, 8, 8, x + 200, y, true, false);
     for column in 0..100 {
-        screen.blit_region(&assets.hud, x + column * 2, y, 24, 32, 8, 8, false);
+        screen.blit_region(assets.hud(), x + column * 2, y, 24, 32, 8, 8, false);
     }
-    screen.blit_region(&assets.hud, x - 5, y, 0, 40, 8, 8, false);
+    screen.blit_region(assets.hud(), x - 5, y, 0, 40, 8, 8, false);
     for column in 0..length {
-        screen.blit_region(&assets.hud, x + column as i32 * 2, y, 24, 40, 8, 8, false);
+        screen.blit_region(assets.hud(), x + column as i32 * 2, y, 24, 40, 8, 8, false);
     }
-    screen.centered_text(&assets.font, title, y + 8);
+    screen.centered_text(assets.font(), title, y + 8);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4218,7 +4218,7 @@ fn render_hud(
 
     if mode != GameMode::Creative || player.active_item.is_some() {
         for x in 10..26 {
-            screen.blit_region(&assets.hud, x * 8, bottom - 8, 40, 16, 8, 8, false);
+            screen.blit_region(assets.hud(), x * 8, bottom - 8, 40, 16, 8, 8, false);
         }
     }
 
@@ -4266,7 +4266,7 @@ fn render_hud(
                 bottom - 16,
                 0xFFFFFF,
             );
-            screen.blit_region(&assets.hud, 84, bottom - 16, 32, 8, 8, 8, false);
+            screen.blit_region(assets.hud(), 84, bottom - 16, 32, 8, 8, 8, false);
         }
     }
     if player.active_item == Some(ActiveItem::Stack(ItemId::WateringCan)) {
@@ -4294,9 +4294,9 @@ fn render_hud(
         .collect::<Vec<_>>()
         .join(" ");
     if !effects.is_empty() {
-        let width = effects.chars().count() as i32 * 8 + 4;
+        let width = minicraft_client::gfx::font::text_width(&effects) + 4;
         screen.rect(WIDTH as i32 - width - 2, 8, width, 10, 0x101018);
-        screen.text(&assets.font, &effects, WIDTH as i32 - width, 9);
+        screen.text(assets.font(), &effects, WIDTH as i32 - width, 9);
     }
 
     for index in 0..10 {
@@ -4307,7 +4307,7 @@ fn render_hud(
         } else {
             0
         };
-        screen.blit_region(&assets.hud, index * 8, bottom - 16, 0, 8, 8, 8, false);
+        screen.blit_region(assets.hud(), index * 8, bottom - 16, 0, 8, 8, 8, false);
         let tier_start = if player.health > 20 {
             20
         } else if player.health > 10 {
@@ -4317,7 +4317,7 @@ fn render_hud(
         };
         if usize::from(player.health.saturating_sub(tier_start)) > index as usize {
             screen.blit_region(
-                &assets.hud,
+                assets.hud(),
                 index * 8,
                 bottom - 16,
                 0,
@@ -4347,7 +4347,7 @@ fn render_hud(
             8
         };
         screen.blit_region(
-            &assets.hud,
+            assets.hud(),
             index * 8,
             bottom - 8,
             8,
@@ -4357,7 +4357,7 @@ fn render_hud(
             false,
         );
         screen.blit_region(
-            &assets.hud,
+            assets.hud(),
             WIDTH as i32 - 80 + index * 8,
             bottom - 16,
             16,
@@ -4382,9 +4382,9 @@ fn draw_hud_text_background(
     color: u32,
 ) {
     for (index, _) in text.chars().enumerate() {
-        screen.blit_region(&assets.hud, x + index as i32 * 8, y, 40, 16, 8, 8, false);
+        screen.blit_region(assets.hud(), x + index as i32 * 8, y, 40, 16, 8, 8, false);
     }
-    screen.text_colored(&assets.font, text, x, y, color);
+    screen.text_colored(assets.font(), text, x, y, color);
 }
 
 fn hud_percentage_color(percent: u32) -> u32 {
@@ -4483,7 +4483,7 @@ fn render_inventory(
         );
         render_inventory_counter(
             screen,
-            &assets.inventory_counter,
+            assets.inventory_counter(),
             9 + player_width,
             9,
             player_entries.len(),
@@ -4493,7 +4493,7 @@ fn render_inventory(
             && let Some(description) = inventory_description(player, item_selection)
         {
             render_inventory_description(screen, assets, &description, 10, 105);
-            screen.text(&assets.font, "(SHIFT-F) to search.", 12, 137);
+            screen.text(assets.font(), "(SHIFT-F) to search.", 12, 137);
         }
         return;
     }
@@ -4520,7 +4520,7 @@ fn render_inventory(
     );
     render_inventory_counter_minimized(
         screen,
-        &assets.inventory_counter,
+        assets.inventory_counter(),
         player_x + player_width,
         9,
         player_entries.len(),
@@ -4573,9 +4573,9 @@ fn render_inventory_description(
     x: i32,
     y: i32,
 ) {
-    let width = ((description.chars().count() as i32 * 8 + 16).max(32) + 7) / 8 * 8;
-    render_menu_frame(screen, &assets.hud, x, y, width, 24);
-    screen.text(&assets.font, description, x + 8, y + 8);
+    let width = ((minicraft_client::gfx::font::text_width(&description) + 16).max(32) + 7) / 8 * 8;
+    render_menu_frame(screen, assets.hud(), x, y, width, 24);
+    screen.text(assets.font(), description, x + 8, y + 8);
 }
 
 fn render_inventory_panel(
@@ -4588,7 +4588,7 @@ fn render_inventory_panel(
 ) {
     let width = inventory_panel_width(entries, title);
     let (y, height) = (9, 88);
-    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    render_menu_frame(screen, assets.hud(), x, y, width, height);
     render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
 
     let selected = selection.unwrap_or(0);
@@ -4600,15 +4600,15 @@ fn render_inventory_panel(
         let entry_x = x + 24;
         let entry_y = y + 8 + row as i32 * 8;
         if selection == Some(index) {
-            screen.text(&assets.font, "> ", entry_x - 16, entry_y);
+            screen.text(assets.font(), "> ", entry_x - 16, entry_y);
             screen.text(
-                &assets.font,
+                assets.font(),
                 " <",
-                entry_x + label.chars().count() as i32 * 8,
+                entry_x + minicraft_client::gfx::font::text_width(&label),
                 entry_y,
             );
         }
-        screen.text(&assets.font, label, entry_x, entry_y);
+        screen.text(assets.font(), label, entry_x, entry_y);
         screen.blit(image, entry_x, entry_y);
     }
 }
@@ -4649,7 +4649,7 @@ fn render_crafting_menu(
         * 8;
     let width = (content_width + 48).clamp(96, 176);
     let (x, y, height) = (9, 9, 88);
-    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    render_menu_frame(screen, assets.hud(), x, y, width, height);
     render_menu_title(screen, assets, title, x, y, width, 0xFFFF00);
     let first = selection
         .saturating_sub(4)
@@ -4660,11 +4660,11 @@ fn render_crafting_menu(
         let entry_y = y + 8 + row as i32 * 8;
         let output = recipe.label();
         if index == selection {
-            screen.text(&assets.font, "> ", entry_x - 16, entry_y);
+            screen.text(assets.font(), "> ", entry_x - 16, entry_y);
             screen.text(
-                &assets.font,
+                assets.font(),
                 " <",
-                entry_x + output.chars().count() as i32 * 8,
+                entry_x + minicraft_client::gfx::font::text_width(&output),
                 entry_y,
             );
         }
@@ -4681,7 +4681,7 @@ fn render_crafting_menu(
                         .any(|tool| tool.kind == kind && tool.tier == tier)
                 }));
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             &output,
             entry_x,
             entry_y,
@@ -4698,10 +4698,10 @@ fn render_crafting_menu(
         let have_width =
             (("Have:".len().max(have_label.len()) as i32 * 8) + 16).min(available_width);
         if have_width >= 56 {
-            render_menu_frame(screen, &assets.hud, panel_x, y, have_width, 24);
+            render_menu_frame(screen, assets.hud(), panel_x, y, have_width, 24);
             render_menu_title_left(screen, assets, "Have:", panel_x, y, 0xFFFF00);
             screen.blit(recipe.image(assets), panel_x + 8, y + 8);
-            screen.text(&assets.font, &have_label, panel_x + 8, y + 8);
+            screen.text(assets.font(), &have_label, panel_x + 8, y + 8);
             let cost_width = costs
                 .iter()
                 .map(|cost| format!(" {}/{}", player.inventory.count(cost.item), cost.count).len())
@@ -4715,7 +4715,7 @@ fn render_crafting_menu(
             let cost_y = y + height - cost_height;
             render_menu_frame(
                 screen,
-                &assets.hud,
+                assets.hud(),
                 panel_x,
                 cost_y,
                 cost_width,
@@ -4726,7 +4726,7 @@ fn render_crafting_menu(
                 let entry_y = cost_y + 8 + row as i32 * 8;
                 screen.blit(assets.item(cost.item), panel_x + 8, entry_y);
                 screen.text(
-                    &assets.font,
+                    assets.font(),
                     &format!(" {}/{}", player.inventory.count(cost.item), cost.count),
                     panel_x + 8,
                     entry_y,
@@ -4747,12 +4747,12 @@ fn render_menu_title(
     width: i32,
     color: u32,
 ) {
-    let title_width = title.chars().count() as i32 * 8;
+    let title_width = minicraft_client::gfx::font::text_width(&title);
     let title_x = x + (width - title_width) / 2;
     minicraft_client::gfx::gui::render_title(
         screen,
-        &assets.hud,
-        &assets.font,
+        assets.hud(),
+        assets.font(),
         title,
         title_x,
         y,
@@ -4771,8 +4771,8 @@ fn render_menu_title_left(
     let title_x = x + 8;
     minicraft_client::gfx::gui::render_title(
         screen,
-        &assets.hud,
-        &assets.font,
+        assets.hud(),
+        assets.font(),
         title,
         title_x,
         y,
@@ -4869,15 +4869,18 @@ fn render_counter_digits(
     color: u32,
 ) {
     for (index, digit) in number.to_string().bytes().enumerate() {
-        screen.blit_region_tinted(
+        screen.render_sprite(
             counter,
             x + index as i32 * width as i32,
             y,
-            usize::from(digit - b'0') * width,
-            source_y,
-            width,
-            height,
-            color,
+            minicraft_client::gfx::sprite::SpriteRender {
+                source_x: usize::from(digit - b'0') * width,
+                source_y,
+                width,
+                height,
+                white_tint: Some(color),
+                ..Default::default()
+            },
         );
     }
 }
@@ -5132,7 +5135,7 @@ fn render_entity(
             ) {
                 let percent = (mob.health.saturating_mul(100) / mob.max_health).max(1);
                 screen.text(
-                    &assets.font,
+                    assets.font(),
                     &format!("{percent}%"),
                     entity.x - 12 - camera_x,
                     entity.y - 23 - camera_y,
@@ -5162,7 +5165,7 @@ fn render_entity(
         }
         EntityKind::Particle(kind) => match kind {
             entity::ParticleKind::Smash => {
-                screen.blit(&assets.smash, entity.x - camera_x, entity.y - camera_y);
+                screen.blit(assets.smash(), entity.x - camera_x, entity.y - camera_y);
             }
             entity::ParticleKind::Fire => {
                 screen.rect(entity.x - camera_x, entity.y - camera_y, 2, 2, 0xFF8A30);
@@ -5172,8 +5175,8 @@ fn render_entity(
             let (offset_x, offset_y, z) = text_particle_motion(entity.id, entity.age);
             let x = entity.x - camera_x - text.chars().count() as i32 * 4 + offset_x;
             let y = entity.y - camera_y + offset_y - z;
-            screen.text_colored(&assets.font, text, x + 1, y + 1, 0x000000);
-            screen.text_colored(&assets.font, text, x, y, 0xFF3030);
+            screen.text_colored(assets.font(), text, x + 1, y + 1, 0x000000);
+            screen.text_colored(assets.font(), text, x, y, 0xFF3030);
         }
     }
 }
@@ -5225,7 +5228,7 @@ pub(crate) fn render_pause(
     let height = entry_count * 12 + 12;
     let x = (WIDTH as i32 - width) / 2;
     let y = (HEIGHT as i32 - height) / 2;
-    render_menu_frame(screen, &assets.hud, x, y, width, height);
+    render_menu_frame(screen, assets.hud(), x, y, width, height);
     let (title, labels): (&str, Vec<String>) = match world.pause.render_view().page {
         PausePage::Main => (
             "Paused",
@@ -5280,7 +5283,7 @@ pub(crate) fn render_pause(
     for (index, label) in labels.iter().enumerate() {
         // The first Java entry is BlankEntry; selectable entries begin on row 1.
         let draw_y = y + 20 + index as i32 * 12;
-        let draw_x = x + (width - label.chars().count() as i32 * 8) / 2;
+        let draw_x = x + (width - minicraft_client::gfx::font::text_width(&label)) / 2;
         let selected = if world.pause.render_view().confirm
             && world.pause.render_view().page == PausePage::Main
         {
@@ -5294,11 +5297,11 @@ pub(crate) fn render_pause(
                 PausePage::Main | PausePage::Options
             )
         {
-            screen.text(&assets.font, "> ", draw_x - 16, draw_y);
+            screen.text(assets.font(), "> ", draw_x - 16, draw_y);
             screen.text(
-                &assets.font,
+                assets.font(),
                 " <",
-                draw_x + label.chars().count() as i32 * 8,
+                draw_x + minicraft_client::gfx::font::text_width(&label),
                 draw_y,
             );
         }
@@ -5307,7 +5310,7 @@ pub(crate) fn render_pause(
             PausePage::Main | PausePage::Options
         );
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             draw_x,
             draw_y,
@@ -5321,14 +5324,14 @@ pub(crate) fn render_pause(
     if world.pause.render_view().page == PausePage::Main {
         let help_y = y + 20 + labels.len() as i32 * 12 + 12;
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             "UP and DOWN to Scroll",
             (WIDTH as i32 - 21 * 8) / 2,
             help_y,
             0x999999,
         );
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             "ENTER: Choose",
             (WIDTH as i32 - 13 * 8) / 2,
             help_y + 12,
@@ -5341,23 +5344,23 @@ pub(crate) fn render_pause(
         let (popup_x, popup_y, popup_width, popup_height) = (4, 64, 280, 64);
         render_menu_frame(
             screen,
-            &assets.hud,
+            assets.hud(),
             popup_x,
             popup_y,
             popup_width,
             popup_height,
         );
         screen.centered_text(
-            &assets.font,
+            assets.font(),
             "Are you sure you want to exit the",
             popup_y + 8,
         );
-        screen.centered_text(&assets.font, "game?", popup_y + 16);
+        screen.centered_text(assets.font(), "game?", popup_y + 16);
         let warning = "All unsaved progress will be lost";
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             warning,
-            (WIDTH as i32 - warning.chars().count() as i32 * 8) / 2,
+            (WIDTH as i32 - minicraft_client::gfx::font::text_width(&warning)) / 2,
             popup_y + 24,
             0xC62C2C,
         );
@@ -5365,11 +5368,11 @@ pub(crate) fn render_pause(
             let draw_y = popup_y + 40 + index as i32 * 8;
             let draw_x = (WIDTH as i32 - label.len() as i32 * 8) / 2;
             if index == world.pause.render_view().selection {
-                screen.text(&assets.font, "> ", draw_x - 16, draw_y);
-                screen.text(&assets.font, " <", draw_x + label.len() as i32 * 8, draw_y);
+                screen.text(assets.font(), "> ", draw_x - 16, draw_y);
+                screen.text(assets.font(), " <", draw_x + label.len() as i32 * 8, draw_y);
             }
             screen.text_colored(
-                &assets.font,
+                assets.font(),
                 label,
                 draw_x,
                 draw_y,
@@ -5384,11 +5387,8 @@ pub(crate) fn render_pause(
 }
 
 fn quest_description_lines(text: &str) -> Vec<String> {
-    // StringEntry.useLines uses Screen.w - 20 pixels and 8px glyphs.
-    crate::content::paginate(text, (WIDTH - 20) / 8, HEIGHT / 4)
-        .into_iter()
-        .flatten()
-        .collect()
+    // Java StringEntry.useLines uses pixel width and keeps the final remainder.
+    minicraft_client::gfx::font::get_lines(text, WIDTH as i32 - 20, HEIGHT as i32 * 2, 0, false)
 }
 
 fn render_quest_root(
@@ -5401,7 +5401,7 @@ fn render_quest_root(
     // QuestsDisplay(clearScreen=true), including when drawn as a parent.
     screen.clear(0);
     screen.centered_text(
-        &assets.font,
+        assets.font(),
         &format!(
             "{}: {}",
             localization.text("minicraft.settings.quests"),
@@ -5412,9 +5412,9 @@ fn render_quest_root(
     let unlocked = localization.text("minicraft.displays.quests.display.header.unlocked");
     let completed = localization.text("minicraft.displays.quests.display.header.completed");
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         unlocked,
-        WIDTH as i32 / 2 - unlocked.chars().count() as i32 * 8 - 16,
+        WIDTH as i32 / 2 - minicraft_client::gfx::font::text_width(&unlocked) - 16,
         26,
         if world.pause.render_view().quest_tab == 0 {
             0xFFFFFF
@@ -5423,7 +5423,7 @@ fn render_quest_root(
         },
     );
     screen.text_colored(
-        &assets.font,
+        assets.font(),
         completed,
         WIDTH as i32 / 2 + 16,
         26,
@@ -5444,15 +5444,15 @@ fn render_quest_root(
     // recalculate its fixed 44px-high entry bounds, centered at (144,76).
     for (row, group) in groups.iter().skip(first).take(5).enumerate() {
         let label = localization.text(&group.id);
-        let width = label.chars().count() as i32 * 8;
+        let width = minicraft_client::gfx::font::text_width(&label);
         let x = (WIDTH as i32 - width) / 2;
         let y = 54 + row as i32 * 9;
         if first + row == selection {
-            screen.text(&assets.font, "> ", x - 16, y);
-            screen.text(&assets.font, " <", x + width, y);
+            screen.text(assets.font(), "> ", x - 16, y);
+            screen.text(assets.font(), " <", x + width, y);
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             label,
             x,
             y,
@@ -5467,9 +5467,24 @@ fn render_quest_root(
         .get(selection)
         .map(|group| localization.text(&group.description))
         .unwrap_or_else(|| localization.text("minicraft.displays.quests.display.no_quest_desc"));
-    for (row, line) in quest_description_lines(description).iter().enumerate() {
-        screen.centered_text(&assets.font, line, 127 + row as i32 * 8);
+    let lines = quest_description_lines(description);
+    let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+    minicraft_client::gfx::font_style::FontStyle {
+        color: 0xFFFFFF,
+        shadow_color: 0,
+        shadow_mask: 0,
     }
+    .draw_paragraph(
+        screen,
+        assets.font(),
+        &lines,
+        &minicraft_client::gfx::font_style::ParagraphLayout {
+            anchor: (WIDTH as i32 / 2, 127),
+            block_position: minicraft_client::screen::rel_pos::RelPos::BOTTOM,
+            line_position: minicraft_client::screen::rel_pos::RelPos::TOP,
+            spacing: 0,
+        },
+    );
 }
 
 /// Menu.Builder(true, spacing, CENTER) anchored at (Screen.w/2, top), BOTTOM.
@@ -5486,7 +5501,7 @@ fn render_quest_info_panel(
     let content_width = entries
         .iter()
         .map(|(text, _, select)| {
-            (text.chars().count() as i32 * 8
+            (minicraft_client::gfx::font::text_width(&text)
                 - if selectable && !select {
                     cursor_inset
                 } else {
@@ -5503,19 +5518,24 @@ fn render_quest_info_panel(
     let height = count as i32 * step - spacing + 16;
     render_menu_frame(
         screen,
-        &assets.hud,
+        assets.hud(),
         (WIDTH as i32 - width) / 2,
         top,
         width,
         height,
     );
     for (row, (text, color, select)) in entries.iter().take(count).enumerate() {
-        let x = (WIDTH as i32 - text.chars().count() as i32 * 8) / 2;
+        let x = (WIDTH as i32 - minicraft_client::gfx::font::text_width(&text)) / 2;
         let y = top + 8 + row as i32 * step;
-        screen.text_colored(&assets.font, text, x, y, *color);
+        screen.text_colored(assets.font(), text, x, y, *color);
         if *select {
-            screen.text(&assets.font, "> ", x - 16, y);
-            screen.text(&assets.font, " <", x + text.chars().count() as i32 * 8, y);
+            screen.text(assets.font(), "> ", x - 16, y);
+            screen.text(
+                assets.font(),
+                " <",
+                x + minicraft_client::gfx::font::text_width(&text),
+                y,
+            );
         }
     }
 }
@@ -5666,7 +5686,7 @@ fn render_quest_page(
                 );
                 render_menu_frame(
                     screen,
-                    &assets.hud,
+                    assets.hud(),
                     8,
                     40,
                     WIDTH as i32 - 16,
@@ -5675,7 +5695,7 @@ fn render_quest_page(
                 let tree = quest_tree::Tree::new(&quests, |id| localization.text(id).to_owned());
                 tree.render(
                     screen,
-                    &assets.font,
+                    assets.font(),
                     &quests,
                     world.pause.render_view().selection,
                     &world.quest_tree_state,

@@ -152,20 +152,26 @@ impl World {
         // non-selectable entries contribute width minus 32, no title.
         let content_width = rows
             .iter()
-            .map(|(text, _)| (text.chars().count() as i32 * 8 - 32).max(0))
-            .chain([exit.chars().count() as i32 * 8])
+            .map(|(text, _)| (minicraft_client::gfx::font::text_width(&text) - 32).max(0))
+            .chain([minicraft_client::gfx::font::text_width(&exit)])
             .max()
             .unwrap_or(0);
         let width = content_width + 48;
         let height = (rows.len() as i32 + 1) * 8 + 16;
         let x = (super::WIDTH as i32 - width) / 2;
         let y = (super::HEIGHT as i32 - height) / 2;
-        super::render_menu_frame(screen, &assets.hud, x, y, width, height);
+        super::render_menu_frame(screen, assets.hud(), x, y, width, height);
         for (index, (text, color)) in rows.iter().enumerate() {
-            screen.text_colored(&assets.font, text, x + 24, y + 8 + index as i32 * 8, *color);
+            screen.text_colored(
+                assets.font(),
+                text,
+                x + 24,
+                y + 8 + index as i32 * 8,
+                *color,
+            );
         }
         screen.text_colored(
-            &assets.font,
+            assets.font(),
             &format!("> {exit} <"),
             x + 8,
             y + 8 + rows.len() as i32 * 8,

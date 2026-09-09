@@ -69,7 +69,7 @@ impl Tree {
             for index in indices {
                 remaining.retain(|&value| value != index);
                 let label = label(&quests[index].id);
-                let width = 6 + label.chars().count() as i32 * 8;
+                let width = 6 + minicraft_client::gfx::font::text_width(&label);
                 row.push(Node {
                     quest: index,
                     parent: quests[index]

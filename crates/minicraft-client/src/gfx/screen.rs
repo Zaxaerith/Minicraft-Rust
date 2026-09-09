@@ -4,7 +4,7 @@ use std::{fs::File, io::BufWriter, path::Path};
 pub const WIDTH: usize = 288;
 pub const HEIGHT: usize = 192;
 
-use super::font::FONT_CHARS;
+use super::font;
 
 pub struct Screen {
     pixels: Vec<u32>,
@@ -87,71 +87,66 @@ impl Screen {
         flip_x: bool,
         flip_y: bool,
     ) {
-        for yy in 0..height {
-            let destination_y = y + yy as i32;
-            if !(0..HEIGHT as i32).contains(&destination_y) {
+        self.render_sprite(
+            image,
+            x,
+            y,
+            super::sprite::SpriteRender {
+                source_x,
+                source_y,
+                width,
+                height,
+                mirror_x: flip_x,
+                mirror_y: flip_y,
+                ..Default::default()
+            },
+        );
+    }
+
+    pub fn render_sprite(
+        &mut self,
+        image: &Image,
+        x: i32,
+        y: i32,
+        sprite: super::sprite::SpriteRender,
+    ) {
+        for yy in 0..sprite.height {
+            let dy = y as i64 + yy as i64;
+            if !(0..HEIGHT as i64).contains(&dy) {
                 continue;
             }
-            for xx in 0..width {
-                let destination_x = x + xx as i32;
-                if !(0..WIDTH as i32).contains(&destination_x) {
+            for xx in 0..sprite.width {
+                let dx = x as i64 + xx as i64;
+                if !(0..WIDTH as i64).contains(&dx) {
                     continue;
                 }
-                let source_offset = if flip_x { width - xx - 1 } else { xx };
-                let source_row = if flip_y { height - yy - 1 } else { yy };
-                if let Some((color, alpha)) =
-                    image.pixel(source_x + source_offset, source_y + source_row)
+                let sx = if sprite.mirror_x {
+                    sprite.width - xx - 1
+                } else {
+                    xx
+                };
+                let sy = if sprite.mirror_y {
+                    sprite.height - yy - 1
+                } else {
+                    yy
+                };
+                if let Some((source, alpha)) =
+                    image.pixel(sprite.source_x + sx, sprite.source_y + sy)
                     && alpha != 0
                 {
-                    let index = destination_x as usize + destination_y as usize * WIDTH;
-                    self.pixels[index] = if alpha == 255 {
-                        color
-                    } else {
-                        blend(self.pixels[index], color, alpha)
-                    };
+                    // MinicraftImage reduces PNG alpha to a binary visibility flag.
+                    self.pixels[dx as usize + dy as usize * WIDTH] = sprite.pixel_color(source);
                 }
             }
         }
     }
 
     pub fn text(&mut self, font: &Image, message: &str, x: i32, y: i32) {
-        for (offset, character) in message.chars().enumerate() {
-            if let Some(index) = FONT_CHARS
-                .chars()
-                .position(|candidate| candidate == character)
-            {
-                self.blit_region(
-                    font,
-                    x + offset as i32 * 8,
-                    y,
-                    index % 32 * 8,
-                    index / 32 * 8,
-                    8,
-                    8,
-                    false,
-                );
-            }
-        }
+        font::draw(self, font, message, x, y, None);
     }
 
     pub fn text_colored(&mut self, font: &Image, message: &str, x: i32, y: i32, color: u32) {
-        for (offset, character) in message.chars().enumerate() {
-            if let Some(index) = FONT_CHARS
-                .chars()
-                .position(|candidate| candidate == character)
-            {
-                self.blit_region_tinted(
-                    font,
-                    x + offset as i32 * 8,
-                    y,
-                    index % 32 * 8,
-                    index / 32 * 8,
-                    8,
-                    8,
-                    color,
-                );
-            }
-        }
+        font::draw(self, font, message, x, y, Some(color));
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -196,8 +191,26 @@ impl Screen {
         }
     }
 
+    /// Java Screen whiteTint replaces only white pixels, not every shade.
+    /// Kept separate from the legacy multiplicative sprite-tint adapter.
+    pub fn blit_font_glyph(&mut self, image: &Image, x: i32, y: i32, index: usize, tint: u32) {
+        self.render_sprite(
+            image,
+            x,
+            y,
+            super::sprite::SpriteRender {
+                source_x: index % 32 * 8,
+                source_y: index / 32 * 8,
+                width: 8,
+                height: 8,
+                white_tint: Some(tint),
+                ..Default::default()
+            },
+        );
+    }
+
     pub fn centered_text(&mut self, font: &Image, message: &str, y: i32) {
-        let x = (WIDTH as i32 - message.chars().count() as i32 * 8) / 2;
+        let x = (WIDTH as i32 - font::text_width(message)) / 2;
         self.text(font, message, x, y);
     }
 

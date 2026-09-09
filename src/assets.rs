@@ -1,3 +1,4 @@
+use minicraft_client::gfx::sprite_linker::{SpriteLinker, SpriteType};
 use std::{fs, path::Path};
 
 use crate::{
@@ -7,156 +8,210 @@ use crate::{
     world::{FurnitureKind, Tile, spawn::NaturalMob},
 };
 
-struct Connection {
-    border: Image,
-    corner: Option<Image>,
+struct Connection<'a> {
+    border: &'a Image,
+    corner: Option<&'a Image>,
     singleton: bool,
 }
 
 pub struct Assets {
-    pub font: Image,
+    sheets: SpriteLinker,
     pub default_pack_logo: Image,
     pub fallback_pack_logo: Image,
-    pub title: Image,
-    pub hud: Image,
-    pub inventory_counter: Image,
-    pub smash: Image,
-    pub skin: Image,
     pub skin_row: usize,
-    tiles: Vec<Vec<Image>>,
-    connections: Vec<Option<Connection>>,
-    mobs: Vec<Image>,
-    items: Vec<Image>,
-    tools: Vec<Image>,
-    furniture: Vec<Image>,
+    tiles: Vec<Vec<&'static str>>,
     pub warnings: Vec<String>,
 }
 
 impl Assets {
+    pub fn font(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Gui, "font")
+            .expect("loaded font")
+    }
+    pub fn title(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Gui, "title")
+            .expect("loaded title")
+    }
+    pub fn hud(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Gui, "hud")
+            .expect("loaded hud")
+    }
+    pub fn inventory_counter(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Gui, "inventory_counter")
+            .expect("loaded inventory_counter")
+    }
+    pub fn smash(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Entity, "smash")
+            .expect("loaded smash")
+    }
+    pub fn skin(&self) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Entity, "skin.active")
+            .expect("loaded skin")
+    }
     pub fn load(packs: &[ResourcePack]) -> Result<Self, String> {
         let mut assets = Self {
+            sheets: SpriteLinker::default(),
             default_pack_logo: png(include_bytes!("../assets/pack.png"))?,
             fallback_pack_logo: png(include_bytes!("../assets/resources/default_pack.png"))?,
-            font: png(include_bytes!(concat!(
+            skin_row: 0,
+            tiles: Tile::ALL.iter().map(|id| tile_variants(*id)).collect(),
+            warnings: Vec::new(),
+        };
+        assets.sheets.set(
+            SpriteType::Gui,
+            "font",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/font.png"
             )))?,
-            title: png(include_bytes!(concat!(
+        );
+        assets.sheets.set(
+            SpriteType::Gui,
+            "title",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/title.png"
             )))?,
-            hud: png(include_bytes!(concat!(
+        );
+        assets.sheets.set(
+            SpriteType::Gui,
+            "hud",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/hud.png"
             )))?,
-            inventory_counter: png(include_bytes!(concat!(
+        );
+        assets.sheets.set(
+            SpriteType::Gui,
+            "inventory_counter",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/gui/inventory_counter.png"
             )))?,
-            smash: png(include_bytes!(concat!(
+        );
+        assets.sheets.set(
+            SpriteType::Entity,
+            "smash",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/assets/textures/entity/smash.png"
             )))?,
-            skin: png(include_bytes!(concat!(
+        );
+        assets.sheets.set(
+            SpriteType::Entity,
+            "skin.active",
+            png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/resources/textures/skins.png"
             )))?,
-            skin_row: 0,
-            tiles: Tile::ALL
-                .iter()
-                .map(|tile_id| {
-                    tile_variants(*tile_id)
-                        .into_iter()
-                        .map(tile)
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            connections: Tile::ALL
-                .iter()
-                .map(|tile_id| {
-                    let Some((border, corner, singleton)) = connection_names(*tile_id) else {
-                        return Ok(None);
-                    };
-                    Ok(Some(Connection {
-                        border: tile(border)?,
-                        corner: corner.map(tile).transpose()?,
-                        singleton,
-                    }))
-                })
-                .collect::<Result<Vec<_>, String>>()?,
-            mobs: NaturalMob::ALL
-                .iter()
-                .map(|mob| entity(mob.asset_name()))
-                .collect::<Result<Vec<_>, _>>()?,
-            items: ItemId::ALL
-                .iter()
-                .map(|item| item_image(item.asset_name()))
-                .collect::<Result<Vec<_>, _>>()?,
-            tools: ToolKind::ALL
-                .into_iter()
-                .flat_map(|kind| ToolTier::ALL.into_iter().map(move |tier| (kind, tier)))
-                .map(|(kind, tier)| item_image(kind.asset_name(tier)))
-                .collect::<Result<Vec<_>, _>>()?,
-            furniture: FurnitureKind::ALL
-                .iter()
-                .map(|kind| entity(kind.asset_name()))
-                .collect::<Result<Vec<_>, _>>()?,
-            warnings: Vec::new(),
-        };
+        );
+        for id in Tile::ALL {
+            let mut names = tile_variants(id);
+            if let Some((border, corner, _)) = connection_names(id) {
+                names.push(border);
+                names.extend(corner);
+            }
+            for name in names {
+                if assets.sheets.sheet(SpriteType::Tile, name).is_none() {
+                    assets.sheets.set(SpriteType::Tile, name, tile(name)?);
+                }
+            }
+        }
+        for item in ItemId::ALL {
+            assets.sheets.set(
+                SpriteType::Item,
+                item.asset_name(),
+                item_image(item.asset_name())?,
+            );
+        }
+        for kind in ToolKind::ALL {
+            for tier in ToolTier::ALL {
+                let key = kind.asset_name(tier);
+                assets.sheets.set(SpriteType::Item, key, item_image(key)?);
+            }
+        }
+        for mob in NaturalMob::ALL {
+            assets.sheets.set(
+                SpriteType::Entity,
+                mob.asset_name(),
+                entity(mob.asset_name())?,
+            );
+        }
+        for kind in FurnitureKind::ALL {
+            assets.sheets.set(
+                SpriteType::Entity,
+                kind.asset_name(),
+                entity(kind.asset_name())?,
+            );
+        }
         for pack in packs {
             override_image(
                 pack,
                 "assets/textures/gui/font.png",
-                &mut assets.font,
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Gui, "font")
+                    .expect("loaded font"),
                 &mut assets.warnings,
             );
             override_image(
                 pack,
                 "assets/textures/entity/smash.png",
-                &mut assets.smash,
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Entity, "smash")
+                    .expect("loaded smash"),
                 &mut assets.warnings,
             );
             override_image(
                 pack,
                 "assets/textures/gui/title.png",
-                &mut assets.title,
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Gui, "title")
+                    .expect("loaded title"),
                 &mut assets.warnings,
             );
             override_image(
                 pack,
                 "assets/textures/gui/hud.png",
-                &mut assets.hud,
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Gui, "hud")
+                    .expect("loaded hud"),
                 &mut assets.warnings,
             );
             override_image(
                 pack,
                 "assets/textures/gui/inventory_counter.png",
-                &mut assets.inventory_counter,
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Gui, "inventory_counter")
+                    .expect("loaded inventory_counter"),
                 &mut assets.warnings,
             );
-            for tile_id in Tile::ALL {
-                for (variant, name) in tile_variants(tile_id).into_iter().enumerate() {
-                    override_image(
-                        pack,
-                        &format!("assets/textures/tile/{name}.png"),
-                        &mut assets.tiles[tile_id.id() as usize][variant],
-                        &mut assets.warnings,
-                    );
+            let mut overridden = std::collections::HashSet::new();
+            for id in Tile::ALL {
+                let mut names = tile_variants(id);
+                if let Some((border, corner, _)) = connection_names(id) {
+                    names.push(border);
+                    names.extend(corner);
                 }
-                if let Some(connection) = &mut assets.connections[tile_id.id() as usize]
-                    && let Some((border, corner, _)) = connection_names(tile_id)
-                {
-                    override_image(
-                        pack,
-                        &format!("assets/textures/tile/{border}.png"),
-                        &mut connection.border,
-                        &mut assets.warnings,
-                    );
-                    if let (Some(name), Some(image)) = (corner, &mut connection.corner) {
+                for name in names {
+                    if overridden.insert(name) {
                         override_image(
                             pack,
                             &format!("assets/textures/tile/{name}.png"),
-                            image,
+                            assets
+                                .sheets
+                                .sheet_mut(SpriteType::Tile, name)
+                                .expect("loaded tile"),
                             &mut assets.warnings,
                         );
                     }
@@ -166,15 +221,21 @@ impl Assets {
                 override_image(
                     pack,
                     &format!("assets/textures/entity/{}.png", mob.asset_name()),
-                    &mut assets.mobs[mob.id()],
+                    assets
+                        .sheets
+                        .sheet_mut(SpriteType::Entity, mob.asset_name())
+                        .expect("loaded mob"),
                     &mut assets.warnings,
                 );
             }
-            for (index, item) in ItemId::ALL.iter().enumerate() {
+            for item in ItemId::ALL {
                 override_image(
                     pack,
                     &format!("assets/textures/item/{}.png", item.asset_name()),
-                    &mut assets.items[index],
+                    assets
+                        .sheets
+                        .sheet_mut(SpriteType::Item, item.asset_name())
+                        .expect("loaded item"),
                     &mut assets.warnings,
                 );
             }
@@ -183,7 +244,10 @@ impl Assets {
                     override_image(
                         pack,
                         &format!("assets/textures/item/{}.png", kind.asset_name(tier)),
-                        &mut assets.tools[kind.id() * ToolTier::ALL.len() + tier.level() as usize],
+                        assets
+                            .sheets
+                            .sheet_mut(SpriteType::Item, kind.asset_name(tier))
+                            .expect("loaded tool"),
                         &mut assets.warnings,
                     );
                 }
@@ -192,7 +256,10 @@ impl Assets {
                 override_image(
                     pack,
                     &format!("assets/textures/entity/{}.png", kind.asset_name()),
-                    &mut assets.furniture[kind.id()],
+                    assets
+                        .sheets
+                        .sheet_mut(SpriteType::Entity, kind.asset_name())
+                        .expect("loaded furniture"),
                     &mut assets.warnings,
                 );
             }
@@ -203,26 +270,36 @@ impl Assets {
     pub fn tile(&self, tile: Tile, data: u16) -> &Image {
         debug_assert_eq!(Tile::from_id(tile.id()), Some(tile));
         let variants = &self.tiles[tile.id() as usize];
-        &variants[tile_variant_index(tile, data, variants.len())]
+        self.sheets
+            .sheet(
+                SpriteType::Tile,
+                variants[tile_variant_index(tile, data, variants.len())],
+            )
+            .expect("loaded tile sheet")
     }
 
     pub fn mob(&self, mob: NaturalMob) -> &Image {
-        &self.mobs[mob.id()]
+        self.sheets
+            .sheet(SpriteType::Entity, mob.asset_name())
+            .expect("loaded mob sheet")
     }
 
     pub fn item(&self, item: ItemId) -> &Image {
-        &self.items[ItemId::ALL
-            .iter()
-            .position(|candidate| *candidate == item)
-            .expect("registered item")]
+        self.sheets
+            .sheet(SpriteType::Item, item.asset_name())
+            .expect("loaded item sheet")
     }
 
     pub fn tool(&self, tool: ToolItem) -> &Image {
-        &self.tools[tool.kind.id() * ToolTier::ALL.len() + tool.tier.level() as usize]
+        self.sheets
+            .sheet(SpriteType::Item, tool.kind.asset_name(tool.tier))
+            .expect("loaded tool sheet")
     }
 
     pub fn furniture(&self, kind: FurnitureKind) -> &Image {
-        &self.furniture[kind.id()]
+        self.sheets
+            .sheet(SpriteType::Entity, kind.asset_name())
+            .expect("loaded furniture sheet")
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -237,7 +314,7 @@ impl Assets {
         connected: [bool; 8],
     ) {
         let image = self.tile(tile, data);
-        let Some(connection) = &self.connections[tile.id() as usize] else {
+        let Some((border, corner, singleton)) = connection_names(tile) else {
             screen.blit_region(
                 image,
                 x,
@@ -250,6 +327,18 @@ impl Assets {
             );
             return;
         };
+        let connection = Connection {
+            border: self
+                .sheets
+                .sheet(SpriteType::Tile, border)
+                .expect("loaded border"),
+            corner: corner.map(|key| {
+                self.sheets
+                    .sheet(SpriteType::Tile, key)
+                    .expect("loaded corner")
+            }),
+            singleton,
+        };
         let [
             up,
             down,
@@ -261,10 +350,10 @@ impl Assets {
             down_right,
         ] = connected;
         let pieces = [
-            quadrant(connection, image, frame, up, left, up_left, 0),
-            quadrant(connection, image, frame, up, right, up_right, 1),
-            quadrant(connection, image, frame, down, left, down_left, 2),
-            quadrant(connection, image, frame, down, right, down_right, 3),
+            quadrant(&connection, image, frame, up, left, up_left, 0),
+            quadrant(&connection, image, frame, up, right, up_right, 1),
+            quadrant(&connection, image, frame, down, left, down_left, 2),
+            quadrant(&connection, image, frame, down, right, down_right, 3),
         ];
         for (index, (source, source_x, source_y)) in pieces.into_iter().enumerate() {
             screen.blit_region(
@@ -289,10 +378,14 @@ impl Assets {
             _ => None,
         };
         if let Some(row) = built_in_row {
-            self.skin = png(include_bytes!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/assets/resources/textures/skins.png"
-            )))?;
+            self.sheets.set(
+                SpriteType::Entity,
+                "skin.active",
+                png(include_bytes!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/assets/resources/textures/skins.png"
+                )))?,
+            );
             self.skin_row = row;
             return Ok(());
         }
@@ -311,7 +404,7 @@ impl Assets {
                 path.display()
             ));
         }
-        self.skin = image;
+        self.sheets.set(SpriteType::Entity, "skin.active", image);
         self.skin_row = 0;
         Ok(())
     }
@@ -455,7 +548,7 @@ fn connection_names(tile: Tile) -> Option<(&'static str, Option<&'static str>, b
 }
 
 fn quadrant<'a>(
-    connection: &'a Connection,
+    connection: &Connection<'a>,
     full: &'a Image,
     frame: usize,
     vertical: bool,
@@ -464,7 +557,7 @@ fn quadrant<'a>(
     corner: usize,
 ) -> (&'a Image, usize, usize) {
     if vertical && horizontal {
-        if !diagonal && let Some(sides) = &connection.corner {
+        if !diagonal && let Some(sides) = connection.corner {
             return (sides, corner % 2 * 8, corner / 2 * 8);
         }
         if connection.singleton || !diagonal {
@@ -472,7 +565,7 @@ fn quadrant<'a>(
             let source_y = frame * 16 + if corner < 2 { 8 } else { 0 };
             return (full, source_x, source_y);
         }
-        return (&connection.border, 8, 8);
+        return (connection.border, 8, 8);
     }
     let source_x = match (corner % 2, horizontal) {
         (0, false) => 0,
@@ -486,7 +579,7 @@ fn quadrant<'a>(
         (1, true) => 8,
         _ => 16,
     };
-    (&connection.border, source_x, source_y)
+    (connection.border, source_x, source_y)
 }
 
 fn tile(name: &str) -> Result<Image, String> {

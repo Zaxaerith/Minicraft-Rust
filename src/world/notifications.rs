@@ -168,8 +168,12 @@ fn draw_paragraph(
     for (index, line) in lines.iter().enumerate() {
         let x = (WIDTH as i32 - line.encode_utf16().count() as i32 * 8) / 2;
         let y = top + index as i32 * (8 + spacing);
-        screen.text_colored(&assets.font, line, x + 1, y + 1, 0x333333);
-        screen.text_colored(&assets.font, line, x, y, 0xFFFFFF);
+        minicraft_client::gfx::font_style::FontStyle {
+            color: 0xFFFFFF,
+            shadow_color: 0x333333,
+            shadow_mask: 1 << 3,
+        }
+        .draw_at(screen, assets.font(), line, x, y);
     }
 }
 
