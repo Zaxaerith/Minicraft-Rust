@@ -1,11 +1,11 @@
 //! Category/key sheet ownership corresponding to Java SpriteLinker.
 use super::{
-    Image,
+    Image, Screen,
     sprite::{Px, Sprite},
 };
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpriteType {
     Item,
     Gui,
@@ -51,6 +51,8 @@ impl SpriteLinker {
 }
 
 /// Resolve at draw time so replaced resource sheets cannot leave stale pointers.
+/// Dimensions are in 8px sheet cells, matching Java LinkedSprite.setSpriteDim.
+#[derive(Clone, Debug)]
 pub struct LinkedSprite {
     pub category: SpriteType,
     pub key: String,
@@ -64,6 +66,43 @@ pub struct LinkedSprite {
 }
 
 impl LinkedSprite {
+    pub fn new(category: SpriteType, key: impl Into<String>) -> Self {
+        Self {
+            category,
+            key: key.into(),
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            mirror: 0,
+            flip: 0,
+            white_tint: None,
+        }
+    }
+
+    pub fn set_sprite_dim(mut self, x: usize, y: usize, width: usize, height: usize) -> Self {
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    pub fn set_mirror(mut self, mirror: u8) -> Self {
+        self.mirror = mirror;
+        self
+    }
+
+    pub fn set_flip(mut self, flip: u8) -> Self {
+        self.flip = flip;
+        self
+    }
+
+    pub fn set_white_tint(mut self, color: u32) -> Self {
+        self.white_tint = Some(color);
+        self
+    }
+
     pub fn resolve<'a>(&self, linker: &'a SpriteLinker) -> Option<Sprite<'a>> {
         let original = linker.sheet(self.category, &self.key);
         let sheet = original.or_else(|| linker.missing(self.category))?;
@@ -102,5 +141,41 @@ impl LinkedSprite {
             rows,
             white_tint: if fallback { None } else { self.white_tint },
         })
+    }
+
+    /// Java Screen.render(x, y, LinkedSprite) / render(..., mirror, fullbright, color).
+    pub fn render(
+        &self,
+        linker: &SpriteLinker,
+        screen: &mut Screen,
+        x: i32,
+        y: i32,
+        mirror: u8,
+        full_bright: bool,
+        color: u32,
+    ) {
+        if let Some(sprite) = self.resolve(linker) {
+            sprite.render(screen, x, y, mirror, full_bright, color);
+        }
+    }
+
+    /// Only the top 8px row (Java swimming half-body).
+    pub fn render_half_top(
+        &self,
+        linker: &SpriteLinker,
+        screen: &mut Screen,
+        x: i32,
+        y: i32,
+        full_bright: bool,
+    ) {
+        if let Some(sprite) = self.resolve(linker)
+            && let Some(row) = sprite.rows.first()
+        {
+            Sprite {
+                rows: vec![row.clone()],
+                white_tint: sprite.white_tint,
+            }
+            .render(screen, x, y, 0, full_bright, 0);
+        }
     }
 }

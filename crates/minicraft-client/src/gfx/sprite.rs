@@ -2,6 +2,7 @@
 use super::{Image, Screen};
 
 /// One 8x8 cell; a composite may reference a different sheet for every cell.
+#[derive(Clone, Copy)]
 pub struct Px<'a> {
     pub sheet: &'a Image,
     pub sheet_x: usize,

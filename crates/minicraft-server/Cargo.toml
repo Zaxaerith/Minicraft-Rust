@@ -8,5 +8,12 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "minicraft-server"
+path = "src/main.rs"
+
 [dependencies]
 minicraft-common = { path = "../minicraft-common" }
+
+[dev-dependencies]
+minicraft-client = { path = "../minicraft-client" }

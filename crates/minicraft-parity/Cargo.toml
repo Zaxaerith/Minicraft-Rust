@@ -10,6 +10,6 @@ name = "minicraft-parity"
 path = "src/main.rs"
 
 [dependencies]
+minicraft-client = { path = "../minicraft-client" }
 minicraft-common = { path = "../minicraft-common" }
-minicraft-rust = { path = "../.." }
 serde_json = "1"

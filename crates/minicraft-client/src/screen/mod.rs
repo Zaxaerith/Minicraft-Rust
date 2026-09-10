@@ -2,6 +2,7 @@
 
 pub mod book;
 pub mod display;
+pub mod display_host;
 pub mod end_game;
 pub mod entry;
 pub mod menu;

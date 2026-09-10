@@ -5,16 +5,44 @@ pub const WIDTH: usize = 288;
 pub const HEIGHT: usize = 192;
 
 use super::font;
+use super::lighting::{self, LightOverlay, LightSources};
 
 pub struct Screen {
     pixels: Vec<u32>,
+    lights: LightSources,
+    light_overlay: LightOverlay,
 }
 
 impl Screen {
     pub fn new() -> Self {
         Self {
             pixels: vec![0; WIDTH * HEIGHT],
+            lights: LightSources::default(),
+            light_overlay: LightOverlay::new(WIDTH, HEIGHT),
         }
+    }
+
+    /// Java Screen.renderLight: store a light at screen coordinates.
+    pub fn render_light(&mut self, x: i32, y: i32, radius: i32) {
+        if radius > 0 {
+            self.lights.insert(x, y, radius);
+        }
+    }
+
+    /// Java Screen.overlay: darken with collected lights and clear the queue.
+    pub fn overlay(
+        &mut self,
+        level_index: usize,
+        xa: i32,
+        ya: i32,
+        day_tick: i32,
+        past_day_one: bool,
+    ) {
+        let dark = lighting::dark_factor(level_index, day_tick, past_day_one);
+        let opacity = lighting::overlay_opacity(level_index, dark);
+        let shapes = self.lights.drain_shapes();
+        let alphas = self.light_overlay.render(&shapes, xa, ya);
+        lighting::composite_overlay(&mut self.pixels, &alphas, opacity);
     }
 
     pub fn pixels(&self) -> &[u32] {
@@ -51,10 +79,6 @@ impl Screen {
 
     pub fn blit(&mut self, image: &Image, x: i32, y: i32) {
         self.blit_region(image, x, y, 0, 0, image.width, image.height, false);
-    }
-
-    pub fn blit_tinted(&mut self, image: &Image, x: i32, y: i32, tint: u32) {
-        self.blit_region_tinted(image, x, y, 0, 0, image.width, image.height, tint);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -98,6 +122,40 @@ impl Screen {
                 height,
                 mirror_x: flip_x,
                 mirror_y: flip_y,
+                ..Default::default()
+            },
+        );
+    }
+
+    /// Like blit_region but supports Java LinkedSprite color / fullBright overrides.
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_region_override(
+        &mut self,
+        image: &Image,
+        source_x: usize,
+        source_y: usize,
+        width: usize,
+        height: usize,
+        x: i32,
+        y: i32,
+        flip_x: bool,
+        flip_y: bool,
+        color: u32,
+        full_bright: bool,
+    ) {
+        self.render_sprite(
+            image,
+            x,
+            y,
+            super::sprite::SpriteRender {
+                source_x,
+                source_y,
+                width,
+                height,
+                mirror_x: flip_x,
+                mirror_y: flip_y,
+                color,
+                full_bright,
                 ..Default::default()
             },
         );
@@ -149,50 +207,7 @@ impl Screen {
         font::draw(self, font, message, x, y, Some(color));
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn blit_region_tinted(
-        &mut self,
-        image: &Image,
-        x: i32,
-        y: i32,
-        source_x: usize,
-        source_y: usize,
-        width: usize,
-        height: usize,
-        tint: u32,
-    ) {
-        for yy in 0..height {
-            let destination_y = y + yy as i32;
-            if !(0..HEIGHT as i32).contains(&destination_y) {
-                continue;
-            }
-            for xx in 0..width {
-                let destination_x = x + xx as i32;
-                if !(0..WIDTH as i32).contains(&destination_x) {
-                    continue;
-                }
-                if let Some((source, alpha)) = image.pixel(source_x + xx, source_y + yy)
-                    && alpha != 0
-                {
-                    let brightness =
-                        (((source >> 16) & 255) + ((source >> 8) & 255) + (source & 255)) / 3;
-                    let red = ((tint >> 16) & 255) * brightness / 255;
-                    let green = ((tint >> 8) & 255) * brightness / 255;
-                    let blue = (tint & 255) * brightness / 255;
-                    let color = red << 16 | green << 8 | blue;
-                    let index = destination_x as usize + destination_y as usize * WIDTH;
-                    self.pixels[index] = if alpha == 255 {
-                        color
-                    } else {
-                        blend(self.pixels[index], color, alpha)
-                    };
-                }
-            }
-        }
-    }
-
     /// Java Screen whiteTint replaces only white pixels, not every shade.
-    /// Kept separate from the legacy multiplicative sprite-tint adapter.
     pub fn blit_font_glyph(&mut self, image: &Image, x: i32, y: i32, index: usize, tint: u32) {
         self.render_sprite(
             image,
@@ -210,50 +225,7 @@ impl Screen {
     }
 
     pub fn centered_text(&mut self, font: &Image, message: &str, y: i32) {
-        let x = (WIDTH as i32 - font::text_width(message)) / 2;
-        self.text(font, message, x, y);
-    }
-
-    pub fn darken_with_lights(&mut self, lights: &[(i32, i32, i32)], alpha: u8) {
-        if alpha == 0 || lights.is_empty() {
-            return;
-        }
-        for y in 0..HEIGHT as i32 {
-            for x in 0..WIDTH as i32 {
-                let mut local_alpha = alpha as i32;
-                for &(center_x, center_y, radius) in lights {
-                    if radius <= 0 {
-                        continue;
-                    }
-                    let inner = radius / 2;
-                    let inner_squared = inner * inner;
-                    let outer_squared = radius * radius;
-                    let dx = x - center_x;
-                    let dy = y - center_y;
-                    let distance = dx * dx + dy * dy;
-                    let candidate = if distance <= inner_squared {
-                        0
-                    } else if distance >= outer_squared {
-                        alpha as i32
-                    } else {
-                        alpha as i32 * (distance - inner_squared)
-                            / (outer_squared - inner_squared).max(1)
-                    };
-                    local_alpha = local_alpha.min(candidate);
-                }
-                let local_alpha = local_alpha as u32;
-                if local_alpha == 0 {
-                    continue;
-                }
-                let index = x as usize + y as usize * WIDTH;
-                let color = self.pixels[index];
-                let multiplier = 255 - local_alpha;
-                let red = ((color >> 16) & 255) * multiplier / 255;
-                let green = ((color >> 8) & 255) * multiplier / 255;
-                let blue = (color & 255) * multiplier / 255;
-                self.pixels[index] = red << 16 | green << 8 | blue;
-            }
-        }
+        font::draw_centered(self, font, message, y, 0xFF_FF_FF);
     }
 
     pub fn save_png(&self, path: &Path) -> Result<(), String> {
@@ -273,15 +245,6 @@ impl Screen {
     }
 }
 
-fn blend(background: u32, foreground: u32, alpha: u8) -> u32 {
-    let alpha = alpha as u32;
-    let inverse = 255 - alpha;
-    let red = (((foreground >> 16) & 255) * alpha + ((background >> 16) & 255) * inverse) / 255;
-    let green = (((foreground >> 8) & 255) * alpha + ((background >> 8) & 255) * inverse) / 255;
-    let blue = ((foreground & 255) * alpha + (background & 255) * inverse) / 255;
-    (red << 16) | (green << 8) | blue
-}
-
 #[cfg(test)]
 mod tests {
     use super::{HEIGHT, Screen, WIDTH};
@@ -290,9 +253,16 @@ mod tests {
     fn multiple_light_sources_preserve_each_lit_center() {
         let mut screen = Screen::new();
         screen.clear(0xFF_FF_FF);
-        screen.darken_with_lights(&[(40, 40, 24), (240, 140, 32)], 200);
-        assert_eq!(screen.pixels[40 + 40 * WIDTH], 0xFF_FF_FF);
-        assert_eq!(screen.pixels[240 + 140 * WIDTH], 0xFF_FF_FF);
-        assert!(screen.pixels[(WIDTH / 2) + (HEIGHT / 2) * WIDTH] < 0x80_80_80);
+        screen.render_light(40, 40, 24);
+        screen.render_light(240, 140, 32);
+        // Caves: full opacity darkness away from lights.
+        screen.overlay(0, 0, 0, 0, false);
+        let center_a = screen.pixels[40 + 40 * WIDTH];
+        let center_b = screen.pixels[240 + 140 * WIDTH];
+        let mid = screen.pixels[(WIDTH / 2) + (HEIGHT / 2) * WIDTH];
+        assert!(center_a > mid);
+        assert!(center_b > mid);
+        assert!(mid < 0x40_40_40);
+        let _ = HEIGHT;
     }
 }

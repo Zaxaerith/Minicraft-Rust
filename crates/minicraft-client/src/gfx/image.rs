@@ -9,6 +9,30 @@ pub struct Image {
 }
 
 impl Image {
+    /// Fixed-size top-left extraction used by Java's resource-sheet loader.
+    /// Reject undersized images instead of silently manufacturing pixels.
+    pub fn crop(&self, width: usize, height: usize) -> Result<Self, String> {
+        if width == 0 || height == 0 || width > self.width || height > self.height {
+            return Err(format!(
+                "cannot extract {width}x{height} from {}x{}",
+                self.width, self.height
+            ));
+        }
+        let mut pixels = Vec::with_capacity(width * height);
+        let mut alpha = Vec::with_capacity(width * height);
+        for row in 0..height {
+            let start = row * self.width;
+            pixels.extend_from_slice(&self.pixels[start..start + width]);
+            alpha.extend_from_slice(&self.alpha[start..start + width]);
+        }
+        Ok(Self {
+            width,
+            height,
+            pixels,
+            alpha,
+        })
+    }
+
     pub fn from_png(bytes: &[u8]) -> Result<Self, String> {
         let mut decoder = png::Decoder::new(Cursor::new(bytes));
         decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);

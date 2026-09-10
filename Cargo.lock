@@ -352,31 +352,7 @@ name = "minicraft-client"
 version = "2.2.4"
 dependencies = [
  "minicraft-common",
- "png",
-]
-
-[[package]]
-name = "minicraft-common"
-version = "2.2.4"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "minicraft-parity"
-version = "2.2.4"
-dependencies = [
- "minicraft-common",
- "minicraft-rust",
- "serde_json",
-]
-
-[[package]]
-name = "minicraft-rust"
-version = "2.2.4"
-dependencies = [
- "minicraft-client",
- "minicraft-common",
+ "minicraft-server",
  "minifb",
  "png",
  "sdl2",
@@ -387,9 +363,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "minicraft-common"
+version = "2.2.4"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "minicraft-parity"
+version = "2.2.4"
+dependencies = [
+ "minicraft-client",
+ "minicraft-common",
+ "serde_json",
+]
+
+[[package]]
+name = "minicraft-rust"
+version = "2.2.4"
+dependencies = [
+ "minicraft-client",
+]
+
+[[package]]
 name = "minicraft-server"
 version = "2.2.4"
 dependencies = [
+ "minicraft-client",
  "minicraft-common",
 ]
 

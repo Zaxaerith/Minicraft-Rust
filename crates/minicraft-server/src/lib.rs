@@ -1,9 +1,11 @@
-//! Staged standalone server boundary.
+//! Standalone multiplayer server for the Minicraft+ 2.2.4 parity port.
 //!
-//! The compatibility server remains in the root package until the protocol
-//! registry and session behavior have differential coverage.
+//! Depends only on `minicraft-common` for protocol types. No client assets,
+//! world generation, or rendering code are linked into this crate.
 
 pub use minicraft_common as common;
 
 pub mod server;
 pub mod session;
+
+pub use server::{default_server_address, run_server, serve};

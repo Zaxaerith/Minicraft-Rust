@@ -172,3 +172,8 @@ pub fn draw(screen: &mut Screen, font: &Image, text: &str, x: i32, y: i32, tint:
         }
     }
 }
+
+/// Java Font.drawCentered: FontStyle(color).setYPos(y).draw(msg).
+pub fn draw_centered(screen: &mut Screen, font: &Image, message: &str, y: i32, color: u32) {
+    super::font_style::FontStyle::draw_centered(screen, font, message, y, color);
+}
