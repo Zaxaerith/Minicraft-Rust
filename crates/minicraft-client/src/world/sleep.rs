@@ -52,25 +52,14 @@ impl World {
             if x < 0 || y < 0 || x as usize >= self.width || y as usize >= self.height {
                 return false;
             }
-            // Java Tile.maySpawn, for tile classes represented by this host.
-            matches!(
-                self.levels[self.current_level].tiles[x as usize + y as usize * self.width],
-                Tile::Grass
-                    | Tile::Dirt
-                    | Tile::Sand
-                    | Tile::Flower
-                    | Tile::Path
-                    | Tile::TreeSapling
-                    | Tile::CactusSapling
-                    | Tile::WoodFloor
-                    | Tile::StoneFloor
-                    | Tile::ObsidianFloor
-                    | Tile::BossFloor
-                    | Tile::RawStone
-                    | Tile::RawObsidian
-                    | Tile::OrnateStone
-                    | Tile::OrnateObsidian
-            )
+            // Java Tile.maySpawn, plus host-only boss/ornate floors kept valid
+            // for respawn in this port.
+            let tile = self.levels[self.current_level].tiles[x as usize + y as usize * self.width];
+            tile.may_spawn()
+                || matches!(
+                    tile,
+                    Tile::BossFloor | Tile::OrnateStone | Tile::OrnateObsidian
+                )
         });
         let position = valid.unwrap_or_else(|| {
             super::find_spawn(

@@ -1,4 +1,5 @@
 use super::{Level, Tile, random::JavaRandom};
+use crate::level::tile::{farming, grass, lava, rock, sapling, tree, wall, water};
 
 pub fn tick_random_tiles(level: &mut Level, width: usize, height: usize, random: &mut JavaRandom) {
     for _ in 0..width * height / 50 {
@@ -20,7 +21,11 @@ fn tick(
     let tile = level.tiles[index];
     match tile {
         Tile::Grass | Tile::Flower => {
-            let chance = if tile == Tile::Grass { 40 } else { 30 };
+            let chance = if tile == Tile::Grass {
+                grass::SPREAD_CHANCE
+            } else {
+                crate::level::tile::flower::SPREAD_CHANCE
+            };
             if random.next_int(chance) == 0
                 && let Some(adjacent) = random_adjacent(width, height, x, y, random)
                 && level.tiles[adjacent] == Tile::Dirt
@@ -29,30 +34,32 @@ fn tick(
             }
         }
         Tile::Water | Tile::Lava => {
-            if let Some(adjacent) = random_adjacent(width, height, x, y, random)
-                && level.tiles[adjacent] == Tile::Hole
-            {
-                set(level, adjacent, tile, 0);
+            if let Some(adjacent) = random_adjacent(width, height, x, y, random) {
+                let neighbor = level.tiles[adjacent];
+                let replacement = if tile == Tile::Water {
+                    water::tick_neighbor(neighbor, 0, 1)
+                } else {
+                    lava::tick_neighbor(neighbor)
+                };
+                if let Some(replacement) = replacement {
+                    set(level, adjacent, replacement, 0);
+                }
             }
             if tile == Tile::Water {
                 for adjacent in cardinal(width, height, x, y) {
-                    if level.tiles[adjacent] == Tile::Lava {
-                        set(level, adjacent, Tile::RawObsidian, 0);
+                    if let Some(replacement) = water::tick_neighbor(level.tiles[adjacent], 1, 0) {
+                        set(level, adjacent, replacement, 0);
                     }
                 }
             }
         }
         Tile::TreeSapling | Tile::CactusSapling => {
-            let age = level.data[index].saturating_add(1);
-            if age > 110 {
-                let grown = if tile == Tile::TreeSapling {
-                    Tile::Tree
-                } else {
-                    Tile::Cactus
-                };
-                set(level, index, grown, 0);
-            } else {
-                level.data[index] = age;
+            match sapling::tick_age(level.data[index]) {
+                sapling::SaplingTick::ReadyToGrow => {
+                    let grown = sapling::grown_tile(tile == Tile::TreeSapling);
+                    set(level, index, grown, 0);
+                }
+                sapling::SaplingTick::Age(age) => level.data[index] = age,
             }
         }
         Tile::Farmland => tick_farmland(level, width, height, x, y, random),
@@ -62,16 +69,18 @@ fn tick(
         | Tile::Carrot
         | Tile::HeavenlyBerries
         | Tile::HellishBerries => tick_crop(level, width, height, x, y, random),
-        Tile::Rock
-        | Tile::Tree
-        | Tile::HardRock
-        | Tile::Cactus
-        | Tile::WoodWall
-        | Tile::StoneWall
-        | Tile::ObsidianWall => {
-            level.data[index] = level.data[index].saturating_sub(1);
-        }
+        Tile::Rock => decay(level, index, rock::tick_decay),
+        Tile::Tree => decay(level, index, tree::tick_decay),
+        Tile::HardRock => decay(level, index, crate::level::tile::hard_rock::tick_decay),
+        Tile::Cactus => decay(level, index, crate::level::tile::cactus::tick_decay),
+        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => decay(level, index, wall::tick_decay),
         _ => {}
+    }
+}
+
+fn decay(level: &mut Level, index: usize, tick_decay: fn(u16) -> Option<u16>) {
+    if let Some(next) = tick_decay(level.data[index]) {
+        level.data[index] = next;
     }
 }
 
@@ -185,16 +194,7 @@ fn tick_crop(
 }
 
 fn is_farm(tile: Tile) -> bool {
-    matches!(
-        tile,
-        Tile::Farmland
-            | Tile::Wheat
-            | Tile::Potato
-            | Tile::Tomato
-            | Tile::Carrot
-            | Tile::HeavenlyBerries
-            | Tile::HellishBerries
-    )
+    farming::is_farm(tile)
 }
 
 fn at(width: usize, height: usize, x: usize, y: usize, dx: i32, dy: i32) -> Option<usize> {

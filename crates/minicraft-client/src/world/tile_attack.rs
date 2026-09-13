@@ -46,33 +46,15 @@ impl World {
                 return;
             }
             if matches!(item, ItemId::Fertilizer | ItemId::ArcaneFertilizer)
-                && matches!(
-                    target,
-                    Tile::Wheat
-                        | Tile::Potato
-                        | Tile::Tomato
-                        | Tile::Carrot
-                        | Tile::HeavenlyBerries
-                        | Tile::HellishBerries
-                )
+                && crate::level::tile::farming::is_crop(target)
             {
                 let data = self.levels[self.current_level].data[index];
-                let old = data >> 7;
-                let amount = if item == ItemId::ArcaneFertilizer {
-                    300
-                } else if old < 100 {
-                    40
-                } else if old < 200 {
-                    30
-                } else if old < 300 {
-                    25
-                } else if old < 400 {
-                    20
-                } else {
-                    10
-                };
+                let arcane = item == ItemId::ArcaneFertilizer;
+                let current = crate::level::tile::farming::crop::fertilization(data);
+                let amount =
+                    crate::level::tile::farming::crop::fertilizer_amount(current, arcane);
                 self.levels[self.current_level].data[index] =
-                    (data & 0x7f) | ((old + amount).min(511) << 7);
+                    crate::level::tile::farming::crop::apply_fertilizer(data, amount, arcane);
                 self.consume_active_stack(item);
                 return;
             }

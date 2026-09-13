@@ -1,8 +1,49 @@
 //! Stable tile identities, registry metadata, and tile-local helpers.
+//!
+//! Layout mirrors Java `level/tile/*`: one module per tile class. This file is
+//! the registry (`Tiles`) plus the shared `Tile` identity enum and the public
+//! free-function API used by the rest of the client.
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::item::ItemId;
+pub mod boss_door;
+pub mod boss_floor;
+pub mod boss_wall;
+pub mod cactus;
+pub mod cloud;
+pub mod connect_tile;
+pub mod decor;
+pub mod dirt;
+pub mod door;
+pub mod exploded;
+pub mod fence;
+pub mod floor;
+pub mod flower;
+pub mod grass;
+pub mod hard_rock;
+pub mod hole;
+pub mod infinite_fall;
+pub mod lava;
+pub mod lava_brick;
+pub mod material;
+pub mod ore;
+pub mod path;
+pub mod rock;
+pub mod sand;
+pub mod sapling;
+pub mod sign;
+pub mod stairs;
+pub mod tile_item;
+pub mod torch;
+pub mod tree;
+pub mod wall;
+pub mod water;
+pub mod wool;
+
+pub mod entity;
+pub mod farming;
+
+pub use tile_item::{is_tile_item, tile_placement};
 
 /// Java `Tile.tickCount`: a global tick counter incremented once after each
 /// unpaused `level.tick` (Java `Updater.tick` no-menu branch). Water/lava and
@@ -30,6 +71,35 @@ pub fn fluid_animation_phase(period: u32) -> u32 {
         0
     } else {
         tile_tick() % period
+    }
+}
+
+/// Java `Tile.Material` — wall/floor/door/fence construction material.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Material {
+    Wood,
+    Stone,
+    Obsidian,
+}
+
+impl Material {
+    pub const ALL: [Self; 3] = [Self::Wood, Self::Stone, Self::Obsidian];
+
+    /// Java `Material.getRequiredTool`.
+    pub fn required_tool(self) -> crate::item::ToolKind {
+        match self {
+            Self::Wood => crate::item::ToolKind::Axe,
+            Self::Stone | Self::Obsidian => crate::item::ToolKind::Pickaxe,
+        }
+    }
+
+    /// Java `Material.ordinal`.
+    pub fn ordinal(self) -> u8 {
+        match self {
+            Self::Wood => 0,
+            Self::Stone => 1,
+            Self::Obsidian => 2,
+        }
     }
 }
 
@@ -295,41 +365,63 @@ impl Tile {
         ASSETS[self.id() as usize]
     }
 
+    /// Inverse of Java `Tile.mayPass` for walkable hosts (no boats).
+    /// `data` is the tile's level data (doors store open/closed there).
     pub fn solid(self, data: u16) -> bool {
-        if matches!(
-            self,
-            Self::WoodDoor | Self::StoneDoor | Self::ObsidianDoor | Self::BossDoor
-        ) {
-            return data == 0;
+        match self {
+            Self::WoodDoor | Self::StoneDoor | Self::ObsidianDoor | Self::BossDoor => {
+                door::is_closed(data)
+            }
+            Self::Rock => true,
+            Self::IronOre | Self::GoldOre | Self::GemOre | Self::LapisOre | Self::CloudOre => true,
+            Self::Tree | Self::Cactus | Self::HardRock => true,
+            Self::InfiniteFall => true,
+            Self::WoodWall | Self::StoneWall | Self::ObsidianWall | Self::BossWall => true,
+            Self::WoodFence | Self::StoneFence | Self::ObsidianFence => true,
+            _ => false,
         }
-        matches!(
-            self,
-            Self::Rock
-                | Self::IronOre
-                | Self::GoldOre
-                | Self::GemOre
-                | Self::LapisOre
-                | Self::CloudOre
-                | Self::Tree
-                | Self::Cactus
-                | Self::HardRock
-                | Self::InfiniteFall
-                | Self::WoodWall
-                | Self::StoneWall
-                | Self::ObsidianWall
-                | Self::BossWall
-                | Self::WoodFence
-                | Self::StoneFence
-                | Self::ObsidianFence
-        )
     }
 
     pub fn light_radius(self) -> i32 {
         match self {
-            Self::Lava => 6,
-            Self::Torch => 5,
+            Self::Lava => lava::LIGHT_RADIUS,
+            Self::Torch => torch::LIGHT_RADIUS,
             _ => 0,
         }
+    }
+
+    /// Java `Tile.maySpawn`.
+    pub fn may_spawn(self) -> bool {
+        match self {
+            Self::Grass => grass::MAY_SPAWN,
+            Self::Dirt => dirt::MAY_SPAWN,
+            Self::Flower => flower::MAY_SPAWN,
+            Self::Sand => sand::MAY_SPAWN,
+            Self::TreeSapling | Self::CactusSapling => sapling::MAY_SPAWN,
+            Self::Path => path::MAY_SPAWN,
+            Self::WoodFloor | Self::StoneFloor | Self::ObsidianFloor => floor::MAY_SPAWN,
+            Self::RawStone | Self::RawObsidian => material::MAY_SPAWN,
+            Self::OrnateStone | Self::OrnateObsidian => decor::MAY_SPAWN,
+            _ => false,
+        }
+    }
+
+    /// Java `Tiles.explosionBlacklist`.
+    pub fn explosion_blacklisted(self) -> bool {
+        matches!(
+            self,
+            Self::StairsUp
+                | Self::StairsDown
+                | Self::HardRock
+                | Self::ObsidianDoor
+                | Self::ObsidianFloor
+                | Self::ObsidianWall
+                | Self::RawObsidian
+                | Self::OrnateObsidian
+                | Self::BossWall
+                | Self::BossFloor
+                | Self::BossDoor
+        )
     }
 }
 
@@ -362,194 +454,61 @@ pub fn connection_mask(
     })
 }
 
+/// Whether `tile`'s auto-tiling appearance joins through `neighbor`.
+/// Per-class logic lives in the matching module (Java sprite connection checkers).
 pub fn connects(tile: Tile, neighbor: Tile) -> bool {
     match tile {
-        Tile::Grass => matches!(
-            neighbor,
-            Tile::Grass | Tile::Flower | Tile::Tree | Tile::TreeSapling | Tile::Path
-        ),
-        Tile::Sand => matches!(
-            neighbor,
-            Tile::Sand
-                | Tile::Cactus
-                | Tile::CactusSapling
-                | Tile::Hole
-                | Tile::Lava
-                | Tile::Exploded
-        ),
-        Tile::Water | Tile::Lava | Tile::Hole => {
-            matches!(
-                neighbor,
-                Tile::Water | Tile::Lava | Tile::Hole | Tile::Exploded
-            )
+        Tile::Dirt => dirt::connects(neighbor),
+        Tile::Grass => grass::connects(neighbor),
+        Tile::Flower => flower::connects(neighbor),
+        Tile::Tree => tree::connects(neighbor),
+        Tile::TreeSapling => sapling::tree_connects(neighbor),
+        Tile::CactusSapling => sapling::cactus_connects(neighbor),
+        Tile::Path => path::connects(neighbor),
+        Tile::Sand => sand::connects(neighbor),
+        Tile::Cactus => cactus::connects(neighbor),
+        Tile::Water => water::connects(neighbor),
+        Tile::Lava => lava::connects(neighbor),
+        Tile::Hole => hole::connects(neighbor),
+        Tile::Rock => rock::connects(neighbor),
+        Tile::HardRock => hard_rock::connects(neighbor),
+        Tile::Cloud => cloud::connects(neighbor),
+        Tile::Exploded => exploded::connects(neighbor),
+        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall | Tile::BossWall => {
+            wall::connects(neighbor)
         }
-        Tile::Rock => neighbor == Tile::Rock,
-        Tile::HardRock => neighbor == Tile::HardRock,
-        Tile::Cloud => neighbor != Tile::InfiniteFall,
-        Tile::Exploded => neighbor == Tile::Exploded,
-        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall | Tile::BossWall => matches!(
-            neighbor,
-            Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall | Tile::BossWall
-        ),
         _ => false,
     }
 }
 
+/// Overlay tiles (torch/fence/sign) forward appearance to their base tile in `data`.
 pub fn underlay_layers(tile: Tile, data: u16, depth: i8) -> [Option<Tile>; 2] {
     match tile {
-        Tile::Grass => [Some(Tile::Dirt), None],
-        Tile::Flower | Tile::Tree | Tile::TreeSapling | Tile::Path => {
-            [Some(Tile::Dirt), Some(Tile::Grass)]
-        }
-        Tile::Sand => [Some(Tile::Dirt), None],
-        Tile::Cactus | Tile::CactusSapling => [Some(Tile::Dirt), Some(Tile::Sand)],
-        Tile::Water | Tile::Lava | Tile::Hole | Tile::Rock | Tile::HardRock => {
-            [Some(Tile::Dirt), None]
-        }
-        Tile::StairsUp | Tile::StairsDown => [
-            Some(if depth == 1 { Tile::Cloud } else { Tile::Dirt }),
-            None,
-        ],
-        Tile::Torch | Tile::Sign | Tile::WoodFence | Tile::StoneFence | Tile::ObsidianFence => {
-            let base = u8::try_from(data).ok().and_then(Tile::from_id);
-            if matches!(base, Some(Tile::Grass | Tile::Sand)) {
-                [Some(Tile::Dirt), base]
-            } else {
-                [base, None]
-            }
-        }
+        Tile::Dirt => dirt::underlay(),
+        Tile::Grass => grass::underlay(),
+        Tile::Flower => flower::underlay(),
+        Tile::Tree => tree::underlay(),
+        Tile::TreeSapling => sapling::tree_underlay(),
+        Tile::CactusSapling => sapling::cactus_underlay(),
+        Tile::Path => path::underlay(),
+        Tile::Sand => sand::underlay(),
+        Tile::Cactus => cactus::underlay(),
+        Tile::Water => water::underlay(),
+        Tile::Lava => lava::underlay(),
+        Tile::Hole => hole::underlay(),
+        Tile::Rock => rock::underlay(),
+        Tile::HardRock => hard_rock::underlay(),
+        Tile::IronOre => ore::underlay(ore::OreType::Iron),
+        Tile::GoldOre => ore::underlay(ore::OreType::Gold),
+        Tile::GemOre => ore::underlay(ore::OreType::Gem),
+        Tile::LapisOre => ore::underlay(ore::OreType::Lapis),
+        Tile::CloudOre => ore::underlay(ore::OreType::Cloud),
+        Tile::StairsUp | Tile::StairsDown => stairs::underlay(depth),
+        Tile::Torch => torch::underlay(data),
+        Tile::Sign => sign::underlay(data),
+        Tile::WoodFence | Tile::StoneFence | Tile::ObsidianFence => fence::underlay(data),
         _ => [None, None],
     }
-}
-
-pub fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
-    let fluid_or_hole = matches!(target, Tile::Hole | Tile::Water | Tile::Lava);
-    let floor_target = matches!(
-        target,
-        Tile::Dirt
-            | Tile::Grass
-            | Tile::Sand
-            | Tile::Path
-            | Tile::WoodFloor
-            | Tile::StoneFloor
-            | Tile::ObsidianFloor
-            | Tile::RawStone
-            | Tile::RawObsidian
-            | Tile::OrnateStone
-            | Tile::OrnateObsidian
-            | Tile::WhiteWool
-            | Tile::RedWool
-            | Tile::BlueWool
-            | Tile::GreenWool
-            | Tile::YellowWool
-            | Tile::BlackWool
-    );
-    Some(match item {
-        ItemId::Flower if target == Tile::Grass => (Tile::Flower, 0),
-        ItemId::Acorn if target == Tile::Grass => (Tile::TreeSapling, 0),
-        ItemId::Dirt if fluid_or_hole => (Tile::Dirt, 0),
-        ItemId::NaturalRock
-            if fluid_or_hole
-                || matches!(target, Tile::Dirt | Tile::Grass | Tile::Sand | Tile::Path) =>
-        {
-            (Tile::Rock, 0)
-        }
-        ItemId::Plank if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud) => {
-            (Tile::WoodFloor, 0)
-        }
-        ItemId::PlankWall if target == Tile::WoodFloor => (Tile::WoodWall, 0),
-        ItemId::WoodDoor if target == Tile::WoodFloor => (Tile::WoodDoor, 0),
-        ItemId::WoodFence if floor_target => (Tile::WoodFence, target.id() as u16),
-        ItemId::Stone if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) => {
-            (Tile::RawStone, 0)
-        }
-        ItemId::StoneBrick
-            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
-        {
-            (Tile::StoneFloor, 0)
-        }
-        ItemId::OrnateStone
-            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
-        {
-            (Tile::OrnateStone, 0)
-        }
-        ItemId::StoneWall if target == Tile::StoneFloor => (Tile::StoneWall, 0),
-        ItemId::StoneDoor if target == Tile::StoneFloor => (Tile::StoneDoor, 0),
-        ItemId::StoneFence if floor_target => (Tile::StoneFence, target.id() as u16),
-        ItemId::RawObsidian
-            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
-        {
-            (Tile::RawObsidian, 0)
-        }
-        ItemId::ObsidianBrick
-            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
-        {
-            (Tile::ObsidianFloor, 0)
-        }
-        ItemId::OrnateObsidian
-            if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud | Tile::Lava) =>
-        {
-            (Tile::OrnateObsidian, 0)
-        }
-        ItemId::ObsidianWall if target == Tile::ObsidianFloor => (Tile::ObsidianWall, 0),
-        ItemId::ObsidianDoor if target == Tile::ObsidianFloor => (Tile::ObsidianDoor, 0),
-        ItemId::ObsidianFence if floor_target => (Tile::ObsidianFence, target.id() as u16),
-        ItemId::Wool if matches!(target, Tile::Hole | Tile::Water) => (Tile::WhiteWool, 0),
-        ItemId::RedWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::RedWool, 0),
-        ItemId::BlueWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlueWool, 0),
-        ItemId::GreenWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::GreenWool, 0),
-        ItemId::YellowWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::YellowWool, 0),
-        ItemId::BlackWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlackWool, 0),
-        ItemId::Sand if fluid_or_hole => (Tile::Sand, 0),
-        ItemId::Cactus if target == Tile::Sand => (Tile::CactusSapling, 0),
-        ItemId::Cloud if target == Tile::InfiniteFall => (Tile::Cloud, 0),
-        ItemId::WheatSeeds if target == Tile::Farmland => (Tile::Wheat, 0),
-        ItemId::Potato if target == Tile::Farmland => (Tile::Potato, 0),
-        ItemId::Carrot if target == Tile::Farmland => (Tile::Carrot, 0),
-        ItemId::TomatoSeeds if target == Tile::Farmland => (Tile::Tomato, 0),
-        ItemId::HeavenlyBerries if target == Tile::Farmland => (Tile::HeavenlyBerries, 0),
-        ItemId::HellishBerries if target == Tile::Farmland => (Tile::HellishBerries, 0),
-        ItemId::GrassSeeds if target == Tile::Dirt => (Tile::Grass, 0),
-        ItemId::Torch if floor_target => (Tile::Torch, target.id() as u16),
-        ItemId::Sign if floor_target => (Tile::Sign, target.id() as u16),
-        ItemId::FarmlandItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
-            (Tile::Farmland, 0)
-        }
-        ItemId::HoleItem if matches!(target, Tile::Dirt | Tile::Grass) => (Tile::Hole, 0),
-        ItemId::LavaItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
-            (Tile::Lava, 0)
-        }
-        ItemId::PathItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
-            (Tile::Path, 0)
-        }
-        ItemId::WaterItem if matches!(target, Tile::Dirt | Tile::Grass | Tile::Hole) => {
-            (Tile::Water, 0)
-        }
-        _ => return None,
-    })
-}
-
-/// Java TileItem instances: shows the placement frame and places via tile_placement.
-pub fn is_tile_item(item: ItemId) -> bool {
-    [
-        Tile::Hole,
-        Tile::Water,
-        Tile::Lava,
-        Tile::Grass,
-        Tile::Sand,
-        Tile::Dirt,
-        Tile::Path,
-        Tile::WoodFloor,
-        Tile::StoneFloor,
-        Tile::Farmland,
-        Tile::Cloud,
-        Tile::ObsidianFloor,
-        Tile::WhiteWool,
-        Tile::WoodWall,
-        Tile::StoneWall,
-    ]
-    .iter()
-    .any(|target| tile_placement(item, *target).is_some())
 }
 
 pub fn find_stair_site(
@@ -568,15 +527,7 @@ pub fn find_stair_site(
         for y in top..=bottom {
             for x in left..=right {
                 let index = x + y * width;
-                if matches!(
-                    tiles[index],
-                    Tile::Rock
-                        | Tile::Dirt
-                        | Tile::Grass
-                        | Tile::Cloud
-                        | Tile::ObsidianFloor
-                        | Tile::RawObsidian
-                ) {
+                if stairs::is_site(tiles[index]) {
                     return Some(index);
                 }
             }
@@ -611,5 +562,17 @@ mod tests {
         // Both fluid tiles connect to each other (Java connectsToFluid).
         assert!(connects(Tile::Water, Tile::Lava));
         assert!(connects(Tile::Lava, Tile::Water));
+    }
+
+    #[test]
+    fn registry_ids_match_java_tiles_init() {
+        assert_eq!(Tile::ALL.len(), 59);
+        assert_eq!(Tile::Grass.id(), 0);
+        assert_eq!(Tile::Lava.id(), 17);
+        assert_eq!(Tile::Sign.id(), 58);
+        assert!(Tile::StairsUp.explosion_blacklisted());
+        assert!(!Tile::Grass.explosion_blacklisted());
+        assert!(Tile::Grass.may_spawn());
+        assert!(!Tile::Water.may_spawn());
     }
 }

@@ -49,14 +49,10 @@ impl World {
             .into_iter()
             .map(|(offset_x, offset_y)| self.tile_at_pixel(x + offset_x, y + offset_y))
             .map(|tile| match tile {
-                Tile::Cactus => {
-                    if self.difficulty.min(2) == 2 {
-                        2
-                    } else {
-                        1
-                    }
-                }
-                Tile::LavaBrick => 3,
+                Tile::Cactus => crate::level::tile::cactus::bump_damage(
+                    u8::try_from(self.difficulty.min(2)).unwrap_or(0),
+                ),
+                Tile::LavaBrick => crate::level::tile::lava_brick::BUMP_DAMAGE,
                 _ => 0,
             })
             .max()
