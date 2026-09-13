@@ -1,0 +1,399 @@
+//! Java Level.tickEntity: per-entity kind dispatch for one game tick.
+use super::arena::EntityArena;
+use super::furniture::FurnitureKind;
+use super::furniture::chest;
+use super::furniture::spawner;
+use super::furniture::tnt;
+use super::helpers::{furniture_can_stand, squared_distance};
+use super::mob::NaturalMob;
+use super::mob::ai;
+use super::particle;
+use super::projectile::ProjectileKind;
+use super::types::{EntityKind, Mob, TickOutcome};
+use crate::level::noise::JavaRandom;
+use crate::level::tile::Tile;
+
+impl EntityArena {
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick(
+        &mut self,
+        tiles: &mut [Tile],
+        data: &[u16],
+        width: usize,
+        height: usize,
+        player_x: i32,
+        player_y: i32,
+        time_slowed: bool,
+        player_passive: bool,
+        random: &mut JavaRandom,
+    ) -> TickOutcome {
+        self.tick_with_player(
+            tiles,
+            data,
+            width,
+            height,
+            Some((player_x, player_y)),
+            time_slowed,
+            player_passive,
+            random,
+        )
+    }
+
+    /// None represents a player removed from the level (including Bed.use),
+    /// not a creative/passive player at an invented off-map coordinate.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick_with_player(
+        &mut self,
+        tiles: &mut [Tile],
+        data: &[u16],
+        width: usize,
+        height: usize,
+        player: Option<(i32, i32)>,
+        time_slowed: bool,
+        player_passive: bool,
+        random: &mut JavaRandom,
+    ) -> TickOutcome {
+        self.tick_with_player_difficulty(
+            tiles,
+            data,
+            width,
+            height,
+            player,
+            time_slowed,
+            player_passive,
+            random,
+            1,
+            0,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick_with_player_difficulty(
+        &mut self,
+        tiles: &mut [Tile],
+        data: &[u16],
+        width: usize,
+        height: usize,
+        player: Option<(i32, i32)>,
+        time_slowed: bool,
+        player_passive: bool,
+        random: &mut JavaRandom,
+        player_difficulty: u8,
+        level_depth: i8,
+    ) -> TickOutcome {
+        let (player_x, player_y) = player.unwrap_or_default();
+        let player_passive = player_passive || player.is_none();
+        let mut outcome = TickOutcome::default();
+        let mut queued_projectiles = Vec::new();
+        let mut queued_mobs = Vec::new();
+        let mut projectile_hits = Vec::new();
+
+        for index in 0..self.entities.len() {
+            let entity = &mut self.entities[index];
+            entity.age = entity.age.saturating_add(1);
+            match &mut entity.kind {
+                EntityKind::Item(_) => {
+                    tick_item(entity);
+                }
+                EntityKind::Particle(kind) => {
+                    let lifetime = particle::lifetime(*kind);
+                    if entity.age > lifetime {
+                        entity.removed = true;
+                    }
+                }
+                EntityKind::TextParticle(_) => {
+                    if entity.age > particle::TEXT_LIFETIME {
+                        entity.removed = true;
+                    }
+                }
+                EntityKind::Projectile(projectile) => {
+                    projectile.life = projectile.life.saturating_sub(1);
+                    if projectile.life == 0 {
+                        entity.removed = true;
+                        continue;
+                    }
+                    entity.x += i32::from(projectile.velocity_x);
+                    entity.y += i32::from(projectile.velocity_y);
+                    let tile_x = entity.x.div_euclid(16);
+                    let tile_y = entity.y.div_euclid(16);
+                    if tile_x < 0 || tile_y < 0 || tile_x >= width as i32 || tile_y >= height as i32
+                    {
+                        entity.removed = true;
+                        continue;
+                    }
+                    let tile_index = tile_x as usize + tile_y as usize * width;
+                    // Java Spark ignores solid tiles; Arrow/other projectiles collide.
+                    if projectile.kind != ProjectileKind::Spark
+                        && projectile.kind != ProjectileKind::FireSpark
+                        && tiles[tile_index].solid(data[tile_index])
+                    {
+                        entity.removed = true;
+                        continue;
+                    }
+                    if projectile.hostile {
+                        if player.is_some()
+                            && squared_distance(entity.x, entity.y, player_x, player_y) <= 7 * 7
+                        {
+                            outcome.player_damage = outcome.player_damage.max(projectile.damage);
+                            entity.removed = true;
+                        }
+                    } else {
+                        projectile_hits.push((index, entity.x, entity.y, projectile.damage));
+                    }
+                }
+                EntityKind::Furniture(FurnitureKind::Chest | FurnitureKind::DungeonChest)
+                    if entity.state == chest::DEATH_CHEST_STATE =>
+                {
+                    // Java DeathChest: 300s on normal; host handles touch-retrieve.
+                    let used = entity
+                        .storage
+                        .as_ref()
+                        .map(|storage| storage.used_slots())
+                        .unwrap_or(0);
+                    if chest::death_chest_expired(entity.age, used) {
+                        entity.removed = true;
+                        continue;
+                    }
+                }
+                EntityKind::Furniture(kind) => {
+                    tick_furniture(
+                        *kind,
+                        entity.x,
+                        entity.y,
+                        entity.age,
+                        &mut entity.state,
+                        tiles,
+                        data,
+                        width,
+                        height,
+                        player,
+                        level_depth,
+                        &mut outcome,
+                        &mut queued_mobs,
+                    );
+                }
+                EntityKind::Mob(_) => {
+                    ai::tick_mob(
+                        entity,
+                        tiles,
+                        data,
+                        width,
+                        height,
+                        player,
+                        player_passive,
+                        time_slowed,
+                        random,
+                        &mut outcome,
+                        &mut queued_projectiles,
+                        player_difficulty,
+                    );
+                }
+                EntityKind::ExplosionTicker => {
+                    // Java ExplosionTileTicker: 18 ticks then convert explode → hole.
+                    const EXPLOSION_TIME: u32 = 18;
+                    if entity.age >= EXPLOSION_TIME {
+                        settle_explosion(
+                            tiles,
+                            width,
+                            height,
+                            entity.x,
+                            entity.y,
+                            entity.state as i32,
+                            entity.health as i16 as i8,
+                        );
+                        entity.removed = true;
+                    }
+                }
+            }
+        }
+
+        for (projectile_index, x, y, damage) in projectile_hits {
+            let Some(target) = self
+                .entities
+                .iter()
+                .enumerate()
+                .filter(|(_, entity)| matches!(entity.kind, EntityKind::Mob(_)))
+                .filter(|(_, entity)| squared_distance(entity.x, entity.y, x, y) <= 7 * 7)
+                .min_by_key(|(_, entity)| squared_distance(entity.x, entity.y, x, y))
+                .map(|(index, _)| index)
+            else {
+                continue;
+            };
+            let blocked = matches!(
+                &self.entities[target].kind,
+                EntityKind::Mob(Mob {
+                    species: NaturalMob::ObsidianKnight,
+                    phase: 0,
+                    ..
+                })
+            );
+            if !blocked {
+                self.damage_mob_at(
+                    target,
+                    u16::from(damage),
+                    random,
+                    &mut outcome.defeated_mobs,
+                );
+            }
+            self.entities[projectile_index].removed = true;
+        }
+
+        for (kind, x, y, target_x, target_y, damage) in queued_projectiles {
+            match kind {
+                ProjectileKind::Arrow => {
+                    self.spawn_arrow(x, y, target_x, target_y, damage, true);
+                }
+                ProjectileKind::Spark | ProjectileKind::FireSpark => {
+                    self.spawn_spark(
+                        x,
+                        y,
+                        (target_x - x).clamp(-2, 2) as i16,
+                        (target_y - y).clamp(-2, 2) as i16,
+                        kind == ProjectileKind::FireSpark,
+                    );
+                }
+            }
+        }
+        for (species, x, y) in queued_mobs {
+            self.spawn_mob(species, x, y);
+        }
+        self.tick_furniture_push(tiles, data, width, height);
+        self.entities.retain(|entity| !entity.removed);
+        outcome
+    }
+
+    /// Java Furniture.tick: move once by pushDir, then clear it; pushTime is only a cooldown.
+    fn tick_furniture_push(&mut self, tiles: &[Tile], data: &[u16], width: usize, height: usize) {
+        let push_moves: Vec<(usize, u64, i32, i32, i32, i32)> = self
+            .entities
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entity)| {
+                let EntityKind::Furniture(kind) = entity.kind else {
+                    return None;
+                };
+                if entity.push_x == 0 && entity.push_y == 0 {
+                    return None;
+                }
+                let (xr, yr) = kind.collision_radius();
+                Some((
+                    index,
+                    entity.id,
+                    entity.x + entity.push_x,
+                    entity.y + entity.push_y,
+                    xr,
+                    yr,
+                ))
+            })
+            .collect();
+        for (index, id, next_x, next_y, xr, yr) in push_moves {
+            self.entities[index].push_x = 0;
+            self.entities[index].push_y = 0;
+            if furniture_can_stand(tiles, data, width, height, next_x, next_y, xr, yr)
+                && !self.furniture_hits_other(id, next_x, next_y, xr, yr)
+            {
+                self.entities[index].x = next_x;
+                self.entities[index].y = next_y;
+            }
+        }
+        for entity in self.entities.iter_mut() {
+            if matches!(entity.kind, EntityKind::Furniture(_)) {
+                entity.push_time = entity.push_time.saturating_sub(1);
+            }
+        }
+    }
+}
+
+/// Java ItemEntity.tick: ballistic hop + lifetime.
+fn tick_item(entity: &mut super::types::Entity) {
+    let motion = entity.item_motion.get_or_insert_with(|| super::types::ItemMotion {
+        precise_x: f64::from(entity.x),
+        precise_y: f64::from(entity.y),
+        height: 0.0,
+        velocity_x: 0.0,
+        velocity_y: 0.0,
+        velocity_z: 0.0,
+        lifetime: 600,
+    });
+    motion.precise_x += motion.velocity_x;
+    motion.precise_y += motion.velocity_y;
+    motion.height += motion.velocity_z;
+    if motion.height < 0.0 {
+        motion.height = 0.0;
+        motion.velocity_z *= -0.5;
+        motion.velocity_x *= 0.6;
+        motion.velocity_y *= 0.6;
+    }
+    motion.velocity_z -= 0.15;
+    entity.x = motion.precise_x as i32;
+    entity.y = motion.precise_y as i32;
+    if entity.age >= motion.lifetime {
+        entity.removed = true;
+    }
+}
+
+/// Java Spawner / Tnt furniture per-tick body (mutates state, queues spawns).
+#[allow(clippy::too_many_arguments)]
+fn tick_furniture(
+    kind: FurnitureKind,
+    x: i32,
+    y: i32,
+    age: u32,
+    state: &mut u16,
+    tiles: &[Tile],
+    data: &[u16],
+    width: usize,
+    height: usize,
+    player: Option<(i32, i32)>,
+    level_depth: i8,
+    outcome: &mut TickOutcome,
+    queued_mobs: &mut Vec<(NaturalMob, i32, i32)>,
+) {
+    if let Some(species) = kind.spawner_mob()
+        && let Some((species, sx, sy)) = spawner::try_spawn(
+            species, x, y, age, tiles, data, width, height, player, level_depth,
+        )
+    {
+        queued_mobs.push((species, sx, sy));
+    }
+    if kind == FurnitureKind::Tnt
+        && let Some((ex, ey, radius, player_tnt, player_damage)) =
+            tnt::tick_fuse(state, x, y, player)
+    {
+        outcome.explosions.push((ex, ey, radius, player_tnt));
+        if player_damage > 0 {
+            outcome.player_damage = outcome.player_damage.max(player_damage);
+        }
+    }
+}
+
+/// Java ExplosionTileTicker: Exploded → Hole (or InfiniteFall on sky depth).
+fn settle_explosion(
+    tiles: &mut [Tile],
+    width: usize,
+    height: usize,
+    center_px: i32,
+    center_py: i32,
+    radius: i32,
+    depth: i8,
+) {
+    let center_x = center_px.div_euclid(16);
+    let center_y = center_py.div_euclid(16);
+    for tile_y in center_y - radius..=center_y + radius {
+        for tile_x in center_x - radius..=center_x + radius {
+            if tile_x < 0 || tile_y < 0 || tile_x >= width as i32 || tile_y >= height as i32 {
+                continue;
+            }
+            let index = tile_x as usize + tile_y as usize * width;
+            if tiles[index] == Tile::Exploded {
+                tiles[index] = if depth == 1 {
+                    Tile::InfiniteFall
+                } else {
+                    Tile::Hole
+                };
+            }
+        }
+    }
+}

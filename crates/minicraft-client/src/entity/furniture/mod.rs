@@ -1,6 +1,13 @@
-//! Furniture, crafters, containers, spawners, beds, lights, and TNT.
+//! Java entity/furniture/* — FurnitureKind plus tick/push/place helpers.
 use crate::entity::mob::NaturalMob;
 use serde::{Deserialize, Serialize};
+
+pub mod bed;
+pub mod chest;
+pub mod composter;
+pub mod spawner;
+pub mod statue;
+pub mod tnt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FurnitureKind {

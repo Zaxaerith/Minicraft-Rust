@@ -21,7 +21,6 @@ mod entity;
 mod entity_render;
 mod overlay_ui;
 mod player_render;
-mod entity_mob_ai;
 mod furniture_action;
 mod generation;
 mod hud;

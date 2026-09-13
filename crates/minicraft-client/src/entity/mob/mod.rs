@@ -1,5 +1,11 @@
-//! Hostile/passive species IDs shared by spawn tables, AI, and spawners.
+//! Java entity/mob/* — species IDs plus AI tick split by Java class.
 use serde::{Deserialize, Serialize};
+
+pub mod air_wizard;
+pub mod ai;
+pub mod creeper;
+pub mod obsidian_knight;
+pub mod skeleton;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NaturalMob {
