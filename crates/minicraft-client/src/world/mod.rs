@@ -52,7 +52,8 @@ pub(crate) use pause_ui::render_pause;
 pub(crate) use player_render::player_sprite_frame;
 pub use crate::gfx::gui::render_menu_frame;
 pub use tile::{
-    Tile, connection_mask, damage_tile, find_stair_site, tile_placement, underlay_layers,
+    Tile, connection_mask, damage_tile, find_stair_site, fluid_animation_phase, increment_tile_tick,
+    tile_placement, tile_tick, underlay_layers,
 };
 
 use std::collections::HashMap;
@@ -303,6 +304,12 @@ pub struct World {
     random: random::JavaRandom,
     #[serde(skip)]
     sound_events: Vec<SoundEffect>,
+    /// Per-host mirror of Java `Tile.tickCount` increments (race-free tests).
+    #[serde(skip)]
+    tile_ticks: u32,
+    /// Per-host mirror of Java `Sound.tick()` calls (race-free tests).
+    #[serde(skip)]
+    sound_ticks: u64,
 }
 
 #[derive(Serialize)]
@@ -365,6 +372,16 @@ impl World {
 
     pub fn take_sound_events(&mut self) -> Vec<SoundEffect> {
         std::mem::take(&mut self.sound_events)
+    }
+
+    /// Per-host Java `Tile.tickCount` increments (gameplay + sleeping level ticks).
+    pub fn tile_ticks(&self) -> u32 {
+        self.tile_ticks
+    }
+
+    /// Per-host Java `Sound.tick()` pumps (every Updater tick, including menus).
+    pub fn sound_ticks(&self) -> u64 {
+        self.sound_ticks
     }
 
     /// World pause/inventory/crafting sounds are emitted on the logical tick
@@ -577,6 +594,8 @@ impl World {
             obsidian_knight_defeated: false,
             random: random::JavaRandom::new(seed ^ 0x05EE_D224),
             sound_events: Vec::new(),
+            tile_ticks: 0,
+            sound_ticks: 0,
         }
     }
 
@@ -868,6 +887,12 @@ impl World {
             }
             return WorldAction::None;
         }
+        // Java Updater still *calls* Game.player.tick() while currentDisplay
+        // != null, but Player.tick itself returns on an already-requested
+        // Display (core/player_update.rs::can_tick) before hurt/attack timers,
+        // potion/fishing, hunger and stamina recharge. Returning here — and on
+        // the inventory/book/sign/death branches below — is that no-op; do not
+        // resume tick_gameplay_player under menus.
         if self.pause.is_open() {
             return self.tick_pause(input);
         }
@@ -1067,6 +1092,9 @@ impl World {
         for mob in outcome.defeated_mobs {
             self.handle_defeated_mob(mob);
         }
+        // Java Updater: level.tick(true); Tile.tickCount++;
+        increment_tile_tick();
+        self.tile_ticks = self.tile_ticks.wrapping_add(1);
         self.update_progress(ProgressEvent::InventoryChanged);
         WorldAction::None
     }

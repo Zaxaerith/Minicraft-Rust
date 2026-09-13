@@ -78,3 +78,82 @@ impl SpriteAnimation {
         self.frame_time = frame_time;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_frame_animation_never_advances() {
+        let mut anim = SpriteAnimation::new(1, 4, 0, 100);
+        anim.after_render(20, 200, 0);
+        assert_eq!(anim.frame(), 0);
+    }
+
+    #[test]
+    fn frame_advances_by_frametime_ticks() {
+        let mut anim = SpriteAnimation::new(4, 3, 0, 100);
+        anim.after_render(2, 101, 0);
+        assert_eq!(anim.frame(), 0, "2 < frametime");
+        anim.after_render(3, 102, 0);
+        // frametick = 3 → frame += 1
+        assert_eq!(anim.frame(), 1);
+        anim.after_render(6, 103, 0);
+        // frametick += 3 → frame += 1
+        assert_eq!(anim.frame(), 2);
+    }
+
+    #[test]
+    fn frame_wraps_using_java_modulo_when_at_or_past_last() {
+        let mut anim = SpriteAnimation::new(4, 1, 0, 100);
+        // Each tick advances one frame; at length-1 Java mods (keeps last), then wraps.
+        anim.after_render(1, 101, 0);
+        assert_eq!(anim.frame(), 1);
+        anim.after_render(2, 102, 0);
+        assert_eq!(anim.frame(), 2);
+        anim.after_render(3, 103, 0);
+        // frame becomes 3 == length-1 → 3 % 4 = 3
+        assert_eq!(anim.frame(), 3);
+        anim.after_render(4, 104, 0);
+        // frame becomes 4 → 4 % 4 = 0
+        assert_eq!(anim.frame(), 0);
+    }
+
+    #[test]
+    fn world_enter_resets_frame_clock() {
+        let mut anim = SpriteAnimation::new(4, 1, 0, 100);
+        anim.after_render(5, 150, 0);
+        assert_ne!(anim.frame(), 0);
+        // New world entered after lastMillis → reset.
+        anim.after_render(50, 200, 250);
+        assert_eq!(anim.frame(), 0);
+    }
+
+    #[test]
+    fn refresh_resets_frames_but_keeps_clock() {
+        let mut anim = SpriteAnimation::new(4, 1, 10, 100);
+        anim.after_render(15, 150, 0);
+        assert_ne!(anim.frame(), 0);
+        anim.refresh(2, 2);
+        assert_eq!(anim.frame(), 0);
+        // last_tick still 15; a tick of 17 with frametime 2 advances one frame.
+        anim.after_render(17, 160, 0);
+        assert_eq!(anim.frame(), 1);
+    }
+
+    #[test]
+    fn zero_frame_time_does_not_divide_by_zero() {
+        let mut anim = SpriteAnimation::new(4, 0, 0, 100);
+        anim.after_render(50, 150, 0);
+        assert_eq!(anim.frame(), 0);
+    }
+
+    #[test]
+    fn meta_defaults_match_java_sprite_meta() {
+        let meta = SpriteMeta::default();
+        assert_eq!(meta.frames, 1);
+        assert_eq!(meta.frame_time, 0);
+        assert!(meta.border.is_none());
+        assert!(meta.corner.is_none());
+    }
+}

@@ -35,7 +35,8 @@ impl FontStyle {
     pub fn new(color: u32) -> Self {
         Self {
             color,
-            shadow_color: 0x33_33_33,
+            // Java Color.get(-1, -1) → 0xFEFEFEFF; only used when a mask is set.
+            shadow_color: 0xfe_fe_fe_ff,
             shadow_mask: 0,
             // Java default: centered on Screen.w/2, Screen.h/2 with no shadow.
             anchor: (super::WIDTH as i32 / 2, super::HEIGHT as i32 / 2),
@@ -95,9 +96,10 @@ impl FontStyle {
         self
     }
 
-    /// false → bottom-right single shadow "0001"; true → full outline "10101010".
+    /// Java `setShadowType`: false → "0001" (SE only); true → "10101010"
+    /// which is the compass cross N/E/S/W (string indices 0,2,4,6), not diagonals.
     pub fn set_shadow_type(mut self, color: u32, full: bool) -> Self {
-        self.shadow_mask = if full { 0b1010_1010 } else { 1 << 3 };
+        self.shadow_mask = if full { 0b0101_0101 } else { 1 << 3 };
         self.shadow_color = color;
         self
     }
@@ -217,5 +219,58 @@ impl FontStyle {
             .set_rel_text_pos(layout.block_position, false)
             .set_rel_line_pos(layout.line_position);
         styled.draw_paragraph(screen, image, lines, layout.spacing);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gfx::color;
+    use crate::screen::rel_pos::RelPos;
+
+    #[test]
+    fn single_shadow_is_south_east_bit() {
+        let style = FontStyle::new(color::WHITE_RGB).set_shadow_type(0, false);
+        assert_eq!(style.shadow_mask, 1 << 3);
+    }
+
+    #[test]
+    fn full_shadow_covers_cardinal_compass_not_diagonals() {
+        // Java "10101010" → string indices 0,2,4,6 = N,E,S,W.
+        let style = FontStyle::new(color::WHITE_RGB).set_shadow_type(0, true);
+        assert_eq!(style.shadow_mask, 0b0101_0101);
+        assert_eq!(style.shadow_mask & (1 << 0), 1 << 0); // N
+        assert_eq!(style.shadow_mask & (1 << 1), 0); // NE not set
+        assert_eq!(style.shadow_mask & (1 << 2), 1 << 2); // E
+        assert_eq!(style.shadow_mask & (1 << 3), 0); // SE not set
+        assert_eq!(style.shadow_mask & (1 << 4), 1 << 4); // S
+        assert_eq!(style.shadow_mask & (1 << 6), 1 << 6); // W
+    }
+
+    #[test]
+    fn set_y_pos_resets_alignment_like_java() {
+        let style = FontStyle::new(0).set_y_pos(20);
+        assert_eq!(style.anchor, (super::super::WIDTH as i32 / 2, 20));
+        assert_eq!(style.rel_text_pos, RelPos::BOTTOM);
+        assert_eq!(style.rel_line_pos, RelPos::TOP);
+    }
+
+    #[test]
+    fn set_x_pos_resets_alignment_like_java() {
+        let style = FontStyle::new(0).set_x_pos(7);
+        assert_eq!(style.anchor, (7, super::super::HEIGHT as i32 / 2));
+        assert_eq!(style.rel_text_pos, RelPos::RIGHT);
+        assert_eq!(style.rel_line_pos, RelPos::LEFT);
+    }
+
+    #[test]
+    fn default_anchor_is_screen_center() {
+        let style = FontStyle::new(0);
+        assert_eq!(
+            style.anchor,
+            (super::super::WIDTH as i32 / 2, super::super::HEIGHT as i32 / 2)
+        );
+        assert_eq!(style.rel_text_pos, RelPos::CENTER);
+        assert_eq!(style.shadow_mask, 0);
     }
 }

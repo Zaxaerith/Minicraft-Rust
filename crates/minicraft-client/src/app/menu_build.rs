@@ -293,21 +293,10 @@ pub(super) fn build_languages_menu(
     use crate::screen::entry::Entry;
     use crate::screen::menu::MenuBuilder;
     use crate::screen::rel_pos::RelPos;
-    let order = {
-        let mut indices: Vec<usize> = (0..LOCALES.len()).collect();
-        indices.sort_by(|left, right| {
-            let a = format!("{} ({})", LOCALES[*left].1, LOCALES[*left].0);
-            let b = format!("{} ({})", LOCALES[*right].1, LOCALES[*right].0);
-            a.to_lowercase().cmp(&b.to_lowercase())
-        });
-        indices
-    };
+    let order = crate::resource::localization::sorted_locale_indices();
     let entries: Vec<Entry> = order
         .iter()
-        .map(|index| {
-            let (code, name) = LOCALES[*index];
-            Entry::select(format!("{name} ({code})"), false)
-        })
+        .map(|index| Entry::select(LOCALES[*index].1, false))
         .collect();
     MenuBuilder::new(false, 2, RelPos::CENTER, entries)
         .set_title(localization.text("minicraft.displays.language_settings.title"))
@@ -512,9 +501,9 @@ pub(super) fn menu_input_from(input: &Input) -> crate::screen::menu::MenuInput {
         exit: input.exit,
         shift_up: input.shift && input.cursor_up_pressed,
         shift_down: input.shift && input.cursor_down_pressed,
-        page_up: false,
-        page_down: false,
-        search: false,
+        page_up: input.page_up,
+        page_down: input.page_down,
+        search: input.search,
         alt: input.alt,
         backspace: input.backspace,
         typed_char: input.text.first().copied(),

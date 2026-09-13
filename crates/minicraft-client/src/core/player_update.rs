@@ -1,6 +1,9 @@
 //! Player.tick's early-return boundary, before Mob.tick and HUD controls.
-//! Updater may call Player before Display, but an already-requested Display
-//! makes Player return without advancing gameplay state (Java 2.2.4).
+//! Java Updater.tick still invokes Game.player.tick() while currentDisplay
+//! != null, but Player.tick returns immediately when a Display is already
+//! requested — no hurt/attack decrement, potion/fishing, hunger_ticks or
+//! stamina_recharge. World menu early-returns in tick_after_prelude match
+//! that no-op (Java 2.2.4).
 pub fn can_tick(has_level: bool, removed: bool, has_requested_display: bool) -> bool {
     has_level && !removed && !has_requested_display
 }

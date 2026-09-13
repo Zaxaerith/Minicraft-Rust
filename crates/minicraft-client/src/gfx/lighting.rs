@@ -2,7 +2,8 @@
 use std::collections::BTreeMap;
 
 pub const MAX_DARK: i32 = 128;
-const DAY_QUARTER: i32 = 16_200;
+/// Java `Updater.dayLength / 4` (morning/day/evening/night quarter length).
+pub const DAY_QUARTER: i32 = 16_200;
 
 /// Same-coordinate last write wins; radii are not max-combined.
 #[derive(Default)]

@@ -179,3 +179,88 @@ impl LinkedSprite {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gfx::Image;
+
+    fn sheet(width: usize, height: usize) -> Image {
+        Image::from_rgb(width, height, vec![0xff_ffff; width * height]).unwrap()
+    }
+
+    fn linker_with(key: &str, width: usize, height: usize) -> SpriteLinker {
+        let mut linker = SpriteLinker::default();
+        linker.set(SpriteType::Item, key, sheet(width, height));
+        linker
+    }
+
+    #[test]
+    fn resolve_defaults_to_full_sheet_cells() {
+        let linker = linker_with("sword", 16, 8);
+        let linked = LinkedSprite::new(SpriteType::Item, "sword");
+        let sprite = linked.resolve(&linker).unwrap();
+        assert_eq!(sprite.rows.len(), 1);
+        assert_eq!(sprite.rows[0].len(), 2);
+        assert_eq!(sprite.rows[0][0].sheet_x, 0);
+        assert_eq!(sprite.rows[0][1].sheet_x, 1);
+    }
+
+    #[test]
+    fn resolve_applies_flip_x_and_y_to_sheet_indices() {
+        let linker = linker_with("icon", 16, 16);
+        let linked = LinkedSprite::new(SpriteType::Item, "icon")
+            .set_sprite_dim(1, 2, 2, 2)
+            .set_flip(0b11);
+        let sprite = linked.resolve(&linker).unwrap();
+        // Java: xOffset = flipX ? w-1-c : c, plus the sprite origin.
+        assert_eq!(sprite.rows[0][0].sheet_x, 1 + 1);
+        assert_eq!(sprite.rows[0][0].sheet_y, 2 + 1);
+        assert_eq!(sprite.rows[1][1].sheet_x, 1 + 0);
+        assert_eq!(sprite.rows[1][1].sheet_y, 2 + 0);
+    }
+
+    #[test]
+    fn resolve_carries_mirror_bits_onto_each_px() {
+        let linker = linker_with("body", 8, 8);
+        let linked = LinkedSprite::new(SpriteType::Item, "body").set_mirror(0b01);
+        let sprite = linked.resolve(&linker).unwrap();
+        assert_eq!(sprite.rows[0][0].mirror, 0b01);
+    }
+
+    #[test]
+    fn missing_key_falls_back_to_missing_item_sheet() {
+        let mut linker = linker_with("missing_item", 8, 8);
+        linker.set(SpriteType::Tile, "missing_tile", sheet(8, 8));
+        // No "ghost" sheet registered.
+        let linked = LinkedSprite::new(SpriteType::Item, "ghost")
+            .set_sprite_dim(3, 3, 1, 1)
+            .set_white_tint(0xff_0000)
+            .set_mirror(1);
+        let sprite = linked.resolve(&linker).unwrap();
+        // Fallback ignores configured dim/mirror/tint and uses the missing sheet.
+        assert_eq!(sprite.rows.len(), 1);
+        assert_eq!(sprite.rows[0].len(), 1);
+        assert_eq!(sprite.rows[0][0].mirror, 0);
+        assert!(sprite.white_tint.is_none());
+    }
+
+    #[test]
+    fn gui_has_no_missing_sheet() {
+        let linker = SpriteLinker::default();
+        assert!(linker.missing(SpriteType::Gui).is_none());
+        assert!(LinkedSprite::new(SpriteType::Gui, "font")
+            .resolve(&linker)
+            .is_none());
+    }
+
+    #[test]
+    fn clear_skins_only_drops_skin_prefix() {
+        let mut linker = SpriteLinker::default();
+        linker.set(SpriteType::Entity, "skin.paul", sheet(8, 8));
+        linker.set(SpriteType::Entity, "player", sheet(8, 8));
+        linker.clear_skins();
+        assert!(linker.sheet(SpriteType::Entity, "skin.paul").is_none());
+        assert!(linker.sheet(SpriteType::Entity, "player").is_some());
+    }
+}

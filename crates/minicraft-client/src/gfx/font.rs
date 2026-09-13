@@ -1,4 +1,5 @@
 //! Bitmap glyph layout and measurement corresponding to Java Font.
+use super::color::{self, COLOR_CHAR};
 use super::{Image, Screen};
 
 const FONT_CHARS: &str = concat!(
@@ -16,7 +17,7 @@ const FONT_CHARS: &str = concat!(
 /// Font.textWidth removes five units for every inline color marker.
 pub fn text_width(text: &str) -> i32 {
     let units = text.encode_utf16().count();
-    let codes = text.chars().filter(|&ch| ch == '\u{00a7}').count();
+    let codes = text.chars().filter(|&ch| ch == COLOR_CHAR).count();
     units.saturating_sub(codes * 5).min((i32::MAX / 8) as usize) as i32 * 8
 }
 
@@ -114,38 +115,34 @@ pub fn get_lines(
 /// Java Color.toStringCode: marker followed by four character-valued bytes,
 /// not printable hexadecimal digits.
 pub fn color_code(color: u32) -> String {
-    [
-        '§',
-        char::from((color >> 24) as u8),
-        char::from((color >> 16) as u8),
-        char::from((color >> 8) as u8),
-        char::from(color as u8),
-    ]
-    .iter()
-    .collect()
+    color::to_string_code(color)
 }
 
 /// Font.drawColor segmentation, including Java's white fallback for short codes.
 /// Empty input is a safe no-op instead of Java's charAt(0) exception.
 pub fn draw_color(screen: &mut Screen, font: &Image, text: &str, x: i32, y: i32) {
-    let message = if text.starts_with('§') {
+    if text.is_empty() {
+        return;
+    }
+    let message = if text.starts_with(COLOR_CHAR) {
         text.to_owned()
     } else {
-        color_code(0x01ffffff) + text
+        color_code(color::WHITE) + text
     };
     let mut leading = 0;
-    for segment in message.split('§').filter(|part| !part.is_empty()) {
+    for segment in message.split(COLOR_CHAR).filter(|part| !part.is_empty()) {
         let units: Vec<u16> = segment.encode_utf16().collect();
-        let (content, color) = if units.len() >= 4 {
-            let color = ((units[0] as u32) << 24)
+        let (content, tint) = if units.len() >= 4 {
+            // Java Color.get(String): four raw component chars after the marker.
+            let packed = ((units[0] as u32) << 24)
                 .wrapping_add((units[1] as u32) << 16)
                 .wrapping_add((units[2] as u32) << 8)
                 .wrapping_add(units[3] as u32);
-            (String::from_utf16_lossy(&units[4..]), color)
+            (String::from_utf16_lossy(&units[4..]), color::upgrade(packed))
         } else {
-            (segment.to_owned(), 0x01ffffff)
+            (segment.to_owned(), color::WHITE_RGB)
         };
-        draw(screen, font, &content, x + leading, y, Some(color));
+        draw(screen, font, &content, x + leading, y, Some(tint));
         leading += text_width(&content);
     }
 }
@@ -176,4 +173,49 @@ pub fn draw(screen: &mut Screen, font: &Image, text: &str, x: i32, y: i32, tint:
 /// Java Font.drawCentered: FontStyle(color).setYPos(y).draw(msg).
 pub fn draw_centered(screen: &mut Screen, font: &Image, message: &str, y: i32, color: u32) {
     super::font_style::FontStyle::draw_centered(screen, font, message, y, color);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FONT_CHARS, color_code, text_width};
+    use crate::gfx::color::{self, COLOR_CHAR};
+
+    #[test]
+    fn text_width_matches_java_formula() {
+        assert_eq!(text_width(""), 0);
+        assert_eq!(text_width("A"), 8);
+        assert_eq!(text_width("Hello"), 40);
+        // One color marker removes five UTF-16 units before * 8.
+        let colored = format!("{}AB", color_code(color::WHITE));
+        assert_eq!(text_width(&colored), 16);
+        // "§ABCD" is a complete color code with empty payload → width 0.
+        assert_eq!(text_width("§ABCD"), 0);
+        // Code plus two payload glyphs.
+        assert_eq!(text_width("§ABCDXY"), 16);
+        // Never negative: a lone marker has length 1 - 5 → clamp to 0.
+        assert_eq!(text_width("§"), 0);
+    }
+
+    #[test]
+    fn color_code_is_marker_plus_four_raw_bytes() {
+        let code = color_code(color::RED);
+        assert_eq!(code.chars().next(), Some(COLOR_CHAR));
+        assert_eq!(code.chars().count(), 5);
+        let units: Vec<u16> = code.encode_utf16().collect();
+        assert_eq!(units[1], 1);
+        assert_eq!(units[2], 198);
+        assert_eq!(units[3], 44);
+        assert_eq!(units[4], 44);
+    }
+
+    #[test]
+    fn font_chars_match_java_layout() {
+        // First glyph row is the Latin uppercase alphabet + digits.
+        // Java String.length is UTF-16 units; same 8×32+6 layout.
+        assert_eq!(FONT_CHARS.encode_utf16().count(), 230);
+        assert_eq!(FONT_CHARS.chars().next(), Some('A'));
+        assert!(FONT_CHARS.contains('✓'));
+        // Java Font.chars includes § (inline color marker); it is in the sheet.
+        assert!(FONT_CHARS.contains('§'));
+    }
 }

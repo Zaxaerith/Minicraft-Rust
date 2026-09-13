@@ -1,4 +1,7 @@
 //! Player entry controls that must run before compatibility menu dispatch.
+//! Display-requested gating mirrors Java Player.tick's early return: with a
+//! requested Display (pause/inventory/book/sign/death) neither HUD toggles nor
+//! survival timers run; see core/player_update.rs and tick_after_prelude.
 use super::World;
 use crate::io::Input;
 

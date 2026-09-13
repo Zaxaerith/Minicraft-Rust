@@ -28,6 +28,10 @@ pub struct Input {
     pub menu: bool,
     pub craft: bool,
     pub pickup: bool,
+    /// Java SEARCHER-BAR / PAGE-UP / PAGE-DOWN menu actions.
+    pub search: bool,
+    pub page_up: bool,
+    pub page_down: bool,
     pub world_copy: bool,
     pub world_rename: bool,
     pub world_delete: bool,
@@ -68,6 +72,9 @@ impl Input {
         self.menu |= latest.menu;
         self.craft |= latest.craft;
         self.pickup |= latest.pickup;
+        self.search |= latest.search;
+        self.page_up |= latest.page_up;
+        self.page_down |= latest.page_down;
         self.world_copy |= latest.world_copy;
         self.world_rename |= latest.world_rename;
         self.world_delete |= latest.world_delete;
@@ -95,6 +102,9 @@ impl Input {
         self.menu = false;
         self.craft = false;
         self.pickup = false;
+        self.search = false;
+        self.page_up = false;
+        self.page_down = false;
         self.world_copy = false;
         self.world_rename = false;
         self.world_delete = false;

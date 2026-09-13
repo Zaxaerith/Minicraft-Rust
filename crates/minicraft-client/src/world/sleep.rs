@@ -28,6 +28,10 @@ impl World {
             self.days,
             &mut self.random,
         );
+        // Java still runs level.tick + Tile.tickCount++ while sleeping in bed
+        // (no Display is open; only gamespeed changes).
+        super::increment_tile_tick();
+        self.tile_ticks = self.tile_ticks.wrapping_add(1);
     }
 
     pub(super) fn enter_bed(&mut self) {

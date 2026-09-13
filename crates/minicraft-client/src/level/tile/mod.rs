@@ -1,7 +1,37 @@
 //! Stable tile identities, registry metadata, and tile-local helpers.
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::item::ItemId;
+
+/// Java `Tile.tickCount`: a global tick counter incremented once after each
+/// unpaused `level.tick` (Java `Updater.tick` no-menu branch). Water/lava and
+/// other tile-local animation readers may sample this value.
+///
+/// Java 2.2.4's `SpriteAnimation` for water/lava advances on `Updater.gameTime`
+/// rather than this counter; the field is still part of the core-loop contract
+/// and is incremented at the same call site.
+static TILE_TICK: AtomicU32 = AtomicU32::new(0);
+
+/// Current global tile tick (Java `Tile.tickCount`).
+pub fn tile_tick() -> u32 {
+    TILE_TICK.load(Ordering::Relaxed)
+}
+
+/// Increment after `level.tick`, matching Java `Tile.tickCount++`.
+pub fn increment_tile_tick() {
+    TILE_TICK.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Fluid (water/lava) animation phase derived from the global tile tick.
+/// Equivalent to Java `Tile.tickCount % period` readers.
+pub fn fluid_animation_phase(period: u32) -> u32 {
+    if period == 0 {
+        0
+    } else {
+        tile_tick() % period
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -553,4 +583,33 @@ pub fn find_stair_site(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tile_tick_increments_like_java_static() {
+        let before = tile_tick();
+        increment_tile_tick();
+        // Other threads may also increment; the contract is monotonic +1 from us.
+        assert!(tile_tick() >= before + 1);
+        increment_tile_tick();
+        assert!(tile_tick() >= before + 2);
+    }
+
+    #[test]
+    fn fluid_animation_phase_zero_period_is_a_no_animation_guard() {
+        assert_eq!(fluid_animation_phase(0), 0);
+    }
+
+    #[test]
+    fn water_and_lava_are_the_fluid_tiles_named_by_java_tickcount_comment() {
+        assert_eq!(Tile::Water.asset_name(), "water");
+        assert_eq!(Tile::Lava.asset_name(), "lava");
+        // Both fluid tiles connect to each other (Java connectsToFluid).
+        assert!(connects(Tile::Water, Tile::Lava));
+        assert!(connects(Tile::Lava, Tile::Water));
+    }
 }

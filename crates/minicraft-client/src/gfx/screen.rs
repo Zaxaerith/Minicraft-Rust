@@ -248,6 +248,7 @@ impl Screen {
 #[cfg(test)]
 mod tests {
     use super::{HEIGHT, Screen, WIDTH};
+    use crate::gfx::Image;
 
     #[test]
     fn multiple_light_sources_preserve_each_lit_center() {
@@ -264,5 +265,83 @@ mod tests {
         assert!(center_b > mid);
         assert!(mid < 0x40_40_40);
         let _ = HEIGHT;
+    }
+
+    fn checker_image() -> Image {
+        // 2×2 cells of 8px: left column red, right column blue.
+        let mut pixels = vec![0u32; 16 * 8];
+        for y in 0..8 {
+            for x in 0..16 {
+                pixels[y * 16 + x] = if x < 8 { 0xff_0000 } else { 0x00_00ff };
+            }
+        }
+        Image::from_rgb(16, 8, pixels).unwrap()
+    }
+
+    #[test]
+    fn blit_region_flip_x_swaps_source_columns() {
+        let image = checker_image();
+        let mut a = Screen::new();
+        let mut b = Screen::new();
+        a.blit_region(&image, 0, 0, 0, 0, 16, 8, false);
+        b.blit_region(&image, 0, 0, 0, 0, 16, 8, true);
+        assert_eq!(a.pixels[0], 0xff_0000);
+        assert_eq!(a.pixels[15], 0x00_00ff);
+        assert_eq!(b.pixels[0], 0x00_00ff);
+        assert_eq!(b.pixels[15], 0xff_0000);
+    }
+
+    #[test]
+    fn blit_region_flip_y_swaps_source_rows() {
+        let mut pixels = vec![0u32; 8 * 16];
+        for y in 0..16 {
+            for x in 0..8 {
+                pixels[y * 8 + x] = if y < 8 { 0x00_ff00 } else { 0x00_00ff };
+            }
+        }
+        let image = Image::from_rgb(8, 16, pixels).unwrap();
+        let mut flipped = Screen::new();
+        flipped.blit_region_transformed(&image, 0, 0, 8, 16, 0, 0, false, true);
+        assert_eq!(flipped.pixels[0], 0x00_00ff);
+        assert_eq!(flipped.pixels[8 * crate::gfx::WIDTH], 0x00_ff00);
+    }
+
+    #[test]
+    fn blit_font_glyph_tints_only_white_pixels() {
+        // One glyph cell: one pure white pixel and one near-white.
+        let mut pixels = vec![0x10_2030u32; 64];
+        pixels[0] = 0xff_ffff;
+        pixels[1] = 0xfe_fefe;
+        let image = Image::from_rgb(8, 8, pixels).unwrap();
+        let mut screen = Screen::new();
+        screen.blit_font_glyph(&image, 0, 0, 0, 0x00_00ff);
+        assert_eq!(screen.pixels[0], 0x00_00ff);
+        assert_eq!(screen.pixels[1], 0xfe_fefe);
+        assert_eq!(screen.pixels[2], 0x10_2030);
+    }
+
+    #[test]
+    fn clear_and_rect_clip_to_screen() {
+        let mut screen = Screen::new();
+        screen.clear(0x11_2233);
+        assert_eq!(screen.pixels[0], 0x11_2233);
+        screen.rect(-4, -4, 8, 8, 0xff_ffff);
+        assert_eq!(screen.pixels[0], 0xff_ffff);
+        assert_eq!(screen.pixels[4 + 4 * WIDTH], 0x11_2233);
+    }
+
+    #[test]
+    fn overlay_surface_day_stays_bright_and_night_darkens() {
+        use crate::gfx::lighting::{DAY_QUARTER, java_level_index};
+
+        let mut day = Screen::new();
+        day.clear(0x80_80_80);
+        day.overlay(java_level_index(0), 0, 0, DAY_QUARTER + 100, true);
+        assert!(day.pixels[0] > 0x70_7070, "day surface barely darkens");
+
+        let mut night = Screen::new();
+        night.clear(0x80_80_80);
+        night.overlay(java_level_index(0), 0, 0, DAY_QUARTER * 3 + 10, true);
+        assert!(night.pixels[0] < 0x50_5050, "night surface is clearly darker");
     }
 }

@@ -1,5 +1,5 @@
 //! Java RelPos geometry. Keep divisions separate to preserve odd-size rounding.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RelPos {
     x: i32,
     y: i32,

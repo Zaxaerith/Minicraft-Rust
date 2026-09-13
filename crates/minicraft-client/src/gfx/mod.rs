@@ -1,5 +1,6 @@
 //! The original 288×192 software canvas, sprites, bitmap font, and lighting.
 //! Software drawing core; assets and window presentation stay in adapters.
+pub mod color;
 pub mod connection;
 pub mod font;
 pub mod font_style;

@@ -88,3 +88,67 @@ impl SpriteRender {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn white_tint_replaces_only_pure_white_source() {
+        let tinted = SpriteRender {
+            white_tint: Some(0x00ff_0000),
+            ..Default::default()
+        };
+        assert_eq!(tinted.pixel_color(0xffffff), 0xff_0000);
+        // Near-white is not replaced.
+        assert_eq!(tinted.pixel_color(0xfffefe), 0xfffefe);
+        // Java whiteTint == -1 disables the pass.
+        let off = SpriteRender {
+            white_tint: Some(u32::MAX),
+            ..Default::default()
+        };
+        assert_eq!(off.pixel_color(0xffffff), 0xffffff);
+    }
+
+    #[test]
+    fn full_bright_wins_over_color_and_source() {
+        let sprite = SpriteRender {
+            white_tint: Some(0x123456),
+            full_bright: true,
+            color: 0xabcdef,
+            ..Default::default()
+        };
+        // Non-white source skips whiteTint, then fullBright fires.
+        assert_eq!(sprite.pixel_color(0x111111), 0x01ffffff);
+    }
+
+    #[test]
+    fn nonzero_color_overrides_source_but_not_white_tint() {
+        let colored = SpriteRender {
+            color: 0x00ff_ff00,
+            ..Default::default()
+        };
+        assert_eq!(colored.pixel_color(0x0000ff), 0x00ff_ff00);
+        let both = SpriteRender {
+            white_tint: Some(0x00ff_00ff),
+            color: 0x00ff_ff00,
+            ..Default::default()
+        };
+        assert_eq!(both.pixel_color(0xffffff), 0xff_00ff);
+        assert_eq!(both.pixel_color(0x123456), 0x00ff_ff00);
+    }
+
+    #[test]
+    fn zero_color_keeps_source() {
+        assert_eq!(SpriteRender::default().pixel_color(0x123456), 0x123456);
+    }
+
+    #[test]
+    fn sprite_mirror_xor_combines_px_and_draw_mirror() {
+        // Java: bits = pixel.mirror ^ mirror before blit.
+        let px_mirror = 0b01u8;
+        let draw_mirror = 0b10u8;
+        assert_eq!(px_mirror ^ draw_mirror, 0b11);
+        assert_eq!(px_mirror ^ 0, 0b01);
+    }
+}

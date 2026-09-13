@@ -21,6 +21,9 @@ pub struct KeyBindings {
     pub menu: String,
     pub craft: String,
     pub pickup: String,
+    pub searcher_bar: String,
+    pub page_up: String,
+    pub page_down: String,
     pub toggle_hud: String,
     pub screenshot: String,
     pub fullscreen: String,
@@ -29,17 +32,20 @@ pub struct KeyBindings {
 impl Default for KeyBindings {
     fn default() -> Self {
         Self {
-            up: "W".to_owned(),
-            down: "S".to_owned(),
-            left: "A".to_owned(),
-            right: "D".to_owned(),
+            // Java InputHandler.initKeyMap keymap defaults (order and aliases).
+            up: "UP|W".to_owned(),
+            down: "DOWN|S".to_owned(),
+            left: "LEFT|A".to_owned(),
+            right: "RIGHT|D".to_owned(),
             select: "ENTER".to_owned(),
             exit: "ESCAPE".to_owned(),
             attack: "C|SPACE|ENTER".to_owned(),
             menu: "X|E".to_owned(),
             craft: "Z|SHIFT-E".to_owned(),
             pickup: "V|P".to_owned(),
-            // Java InputHandler defaults: TOGGLEHUD=F1, SCREENSHOT=F2, FULLSCREEN=F11.
+            searcher_bar: "SHIFT-F".to_owned(),
+            page_up: "PAGE_UP".to_owned(),
+            page_down: "PAGE_DOWN".to_owned(),
             toggle_hud: "F1".to_owned(),
             screenshot: "F2".to_owned(),
             fullscreen: "F11".to_owned(),
@@ -48,6 +54,8 @@ impl Default for KeyBindings {
 }
 
 impl KeyBindings {
+    /// Action → physical binding, matching Java `getMappedKey` substitution.
+    /// Cursor actions stay arrow-only so menus never share WASD with movement.
     pub fn mapping(&self, action: &str) -> Option<String> {
         if let Some(index) = Self::LABELS.iter().position(|label| *label == action) {
             return Some(self.value(index).to_owned());
@@ -60,7 +68,7 @@ impl KeyBindings {
             _ => None,
         }
     }
-    pub const LABELS: [&'static str; 13] = [
+    pub const LABELS: [&'static str; 16] = [
         "MOVE-UP",
         "MOVE-DOWN",
         "MOVE-LEFT",
@@ -71,10 +79,20 @@ impl KeyBindings {
         "MENU",
         "CRAFT",
         "PICKUP",
+        "SEARCHER-BAR",
+        "PAGE-UP",
+        "PAGE-DOWN",
         "TOGGLEHUD",
         "SCREENSHOT",
         "FULLSCREEN",
     ];
+
+    /// Java `InputHandler.getMapping` display form (`|` alternatives → `/`).
+    pub fn display_mapping(&self, action: &str) -> String {
+        self.mapping(action)
+            .map(|value| value.replace('|', "/"))
+            .unwrap_or_else(|| "NO_KEY".to_owned())
+    }
 
     pub fn value(&self, index: usize) -> &str {
         match index {
@@ -88,8 +106,11 @@ impl KeyBindings {
             7 => &self.menu,
             8 => &self.craft,
             9 => &self.pickup,
-            10 => &self.toggle_hud,
-            11 => &self.screenshot,
+            10 => &self.searcher_bar,
+            11 => &self.page_up,
+            12 => &self.page_down,
+            13 => &self.toggle_hud,
+            14 => &self.screenshot,
             _ => &self.fullscreen,
         }
     }
@@ -106,8 +127,11 @@ impl KeyBindings {
             7 => self.menu = value,
             8 => self.craft = value,
             9 => self.pickup = value,
-            10 => self.toggle_hud = value,
-            11 => self.screenshot = value,
+            10 => self.searcher_bar = value,
+            11 => self.page_up = value,
+            12 => self.page_down = value,
+            13 => self.toggle_hud = value,
+            14 => self.screenshot = value,
             _ => self.fullscreen = value,
         }
     }
@@ -123,9 +147,15 @@ impl KeyBindings {
         self.set(index, format!("{current}|{value}"));
     }
 
-    /// Controls screen string, matching Java's fixed alternative aliases
-    /// (e.g. MOVE-UP shows `W|…|UP`) without mutating the stored binding.
+    /// Controls-screen string: the stored keymap value, as Java `KeyInputEntry`
+    /// renders `getKeyPrefs()` (pipe-joined, no synthesized aliases).
     pub fn display_value(&self, index: usize) -> String {
+        self.value(index).to_owned()
+    }
+
+    /// One-time materialization of pre-format-2 alias-imposed bindings.
+    /// Older Rust clients displayed MOVE-UP as `W|UP` while storing only `W`.
+    fn legacy_display_value(&self, index: usize) -> String {
         let configured = self.value(index);
         let aliases: &[&str] = match index {
             0 => &["UP"],
@@ -140,16 +170,14 @@ impl KeyBindings {
         };
         let mut values: Vec<&str> = configured.split('|').collect();
         for alias in aliases {
-            if !values.iter().any(|value| value.eq_ignore_ascii_case(alias)) {
+            if !values
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(alias))
+            {
                 values.push(alias);
             }
         }
         values.join("|")
-    }
-
-    /// One-time materialization of pre-format-2 alias-imposed bindings.
-    fn legacy_display_value(&self, index: usize) -> String {
-        self.display_value(index)
     }
 }
 
@@ -262,6 +290,9 @@ impl Config {
                 "menu": self.settings.key_bindings.menu,
                 "craft": self.settings.key_bindings.craft,
                 "pickup": self.settings.key_bindings.pickup,
+                "searcher_bar": self.settings.key_bindings.searcher_bar,
+                "page_up": self.settings.key_bindings.page_up,
+                "page_down": self.settings.key_bindings.page_down,
                 "toggle_hud": self.settings.key_bindings.toggle_hud,
                 "screenshot": self.settings.key_bindings.screenshot,
                 "fullscreen": self.settings.key_bindings.fullscreen,
@@ -367,6 +398,11 @@ fn parse_settings(text: &str) -> Option<Settings> {
     settings.key_bindings.menu = binding(bindings, "menu", &settings.key_bindings.menu);
     settings.key_bindings.craft = binding(bindings, "craft", &settings.key_bindings.craft);
     settings.key_bindings.pickup = binding(bindings, "pickup", &settings.key_bindings.pickup);
+    settings.key_bindings.searcher_bar =
+        binding(bindings, "searcher_bar", &settings.key_bindings.searcher_bar);
+    settings.key_bindings.page_up = binding(bindings, "page_up", &settings.key_bindings.page_up);
+    settings.key_bindings.page_down =
+        binding(bindings, "page_down", &settings.key_bindings.page_down);
     settings.key_bindings.toggle_hud =
         binding(bindings, "toggle_hud", &settings.key_bindings.toggle_hud);
     settings.key_bindings.screenshot =
@@ -444,12 +480,66 @@ mod tests {
     }
 
     #[test]
-    fn key_bindings_support_java_style_alternatives_and_display_aliases() {
+    fn defaults_match_java_input_handler_keymap() {
+        let bindings = KeyBindings::default();
+        assert_eq!(bindings.up, "UP|W");
+        assert_eq!(bindings.down, "DOWN|S");
+        assert_eq!(bindings.left, "LEFT|A");
+        assert_eq!(bindings.right, "RIGHT|D");
+        assert_eq!(bindings.select, "ENTER");
+        assert_eq!(bindings.exit, "ESCAPE");
+        assert_eq!(bindings.attack, "C|SPACE|ENTER");
+        assert_eq!(bindings.menu, "X|E");
+        assert_eq!(bindings.craft, "Z|SHIFT-E");
+        assert_eq!(bindings.pickup, "V|P");
+        assert_eq!(bindings.searcher_bar, "SHIFT-F");
+        assert_eq!(bindings.page_up, "PAGE_UP");
+        assert_eq!(bindings.page_down, "PAGE_DOWN");
+        assert_eq!(bindings.toggle_hud, "F1");
+        assert_eq!(bindings.screenshot, "F2");
+        assert_eq!(bindings.fullscreen, "F11");
+        assert_eq!(bindings.display_value(0), "UP|W");
+        assert_eq!(bindings.display_mapping("ATTACK"), "C/SPACE/ENTER");
+        assert_eq!(bindings.display_mapping("CURSOR-UP"), "UP");
+        assert_eq!(bindings.display_mapping("missing"), "NO_KEY");
+    }
+
+    #[test]
+    fn key_bindings_support_java_style_alternatives() {
         let mut bindings = KeyBindings::default();
         bindings.add(0, "I".to_owned());
         bindings.add(0, "I".to_owned());
-        assert_eq!(bindings.up, "W|I");
-        assert_eq!(bindings.display_value(0), "W|I|UP");
+        assert_eq!(bindings.up, "UP|W|I");
+        // display_value is the stored keymap, not a synthesized alias list.
+        assert_eq!(bindings.display_value(0), "UP|W|I");
         assert_eq!(bindings.display_value(6), "C|SPACE|ENTER");
+        // Overwrite drops the previous alternatives, like Java changeKeyBinding.
+        bindings.set(0, "I".to_owned());
+        assert_eq!(bindings.up, "I");
+        assert_eq!(bindings.display_value(0), "I");
+    }
+
+    #[test]
+    fn format_one_saves_materialize_legacy_aliases_once() {
+        let settings = parse_settings(
+            r#"{"key_bindings":{"format":1,"up":"W","down":"S","left":"A","right":"D",
+                "select":"ENTER","exit":"ESCAPE","attack":"C","menu":"X","craft":"Z","pickup":"V"}}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.key_bindings.up, "W|UP");
+        assert_eq!(settings.key_bindings.down, "S|DOWN");
+        assert_eq!(settings.key_bindings.attack, "C|SPACE|ENTER");
+        assert_eq!(settings.key_bindings.menu, "X|E");
+        assert_eq!(settings.key_bindings.craft, "Z|SHIFT-E");
+        assert_eq!(settings.key_bindings.pickup, "V|P");
+        assert_eq!(settings.key_bindings.toggle_hud, "F1");
+
+        let format_two = parse_settings(
+            r#"{"key_bindings":{"format":2,"up":"I","toggle_hud":"F5","page_up":"W"}}"#,
+        )
+        .unwrap();
+        assert_eq!(format_two.key_bindings.up, "I");
+        assert_eq!(format_two.key_bindings.toggle_hud, "F5");
+        assert_eq!(format_two.key_bindings.page_up, "W");
     }
 }

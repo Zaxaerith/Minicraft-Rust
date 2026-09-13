@@ -1,13 +1,13 @@
 //! Java ListEntry hierarchy for Menu items.
 use crate::gfx::{Screen, font, font_style::FontStyle};
 
-/// Java ListEntry.COL_UNSLCT / COL_SLCT (Color.GRAY / Color.WHITE).
-pub const COL_UNSLCT: u32 = 0x99_99_99;
-pub const COL_SLCT: u32 = 0xFF_FF_FF;
+/// Java ListEntry.COL_UNSLCT / COL_SLCT (Color.GRAY / Color.WHITE after upgrade).
+pub const COL_UNSLCT: u32 = crate::gfx::color::GRAY_RGB;
+pub const COL_SLCT: u32 = crate::gfx::color::WHITE_RGB;
 /// Java Color.GREEN / Color.RED / Color.CYAN (minicraft get(1,…) RGB bytes).
-pub const COL_GREEN: u32 = 0x4D_D4_4D;
-pub const COL_RED: u32 = 0xC6_2C_2C;
-pub const COL_CYAN: u32 = 0x5A_CC_CC;
+pub const COL_GREEN: u32 = crate::gfx::color::GREEN_RGB;
+pub const COL_RED: u32 = crate::gfx::color::RED_RGB;
+pub const COL_CYAN: u32 = crate::gfx::color::CYAN_RGB;
 
 /// Menu-space input slice used by entries (Java InputHandler subset).
 #[derive(Clone, Default)]
@@ -557,16 +557,17 @@ impl Entry {
             && !needle.is_empty()
             && text.to_lowercase().contains(&needle.to_lowercase())
         {
-            // Java ListEntry search overlay uses Font.drawColor with containColor.
+            // Java ListEntry: drawColor(replace(contain, code(containColor)+contain+WHITE_CODE)).
             let replaced = text.replace(
                 needle,
                 &format!(
-                    "\u{a7}{}\u{a7}{}",
-                    encode_argb(highlight_color),
-                    encode_argb(COL_SLCT)
+                    "{}{}{}",
+                    crate::gfx::color::to_string_code(highlight_color),
+                    needle,
+                    crate::gfx::color::to_string_code(COL_SLCT)
                 ),
             );
-            FontStyle::new(color).draw_at(screen, font, &replaced, x, y);
+            crate::gfx::font::draw_color(screen, font, &replaced, x, y);
             return;
         }
         FontStyle::new(color).draw_at(screen, font, &text, x, y);
@@ -586,20 +587,6 @@ fn char_matches_pattern(ch: char, pattern: &str) -> bool {
             || matches!(ch, '-' | '!' | '"' | '#' | '%' | '/' | '(' | ')' | '=' | '+' | ',');
     }
     !ch.is_control()
-}
-
-fn encode_argb(color: u32) -> String {
-    // Java Color.toStringCode uses four §-escaped chars of raw component values.
-    // For display hosts that already resolved colors, use the § + 4-char form.
-    let a = ((color >> 24) & 0xff) as u8;
-    let r = ((color >> 16) & 0xff) as u8;
-    let g = ((color >> 8) & 0xff) as u8;
-    let b = (color & 0xff) as u8;
-    let mut s = String::new();
-    for c in [a, r, g, b] {
-        s.push(char::from_u32(u32::from(c)).unwrap_or('\u{a7}'));
-    }
-    s
 }
 
 #[cfg(test)]

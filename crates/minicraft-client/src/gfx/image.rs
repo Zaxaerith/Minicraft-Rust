@@ -84,6 +84,26 @@ impl Image {
         })
     }
 
+    /// Opaque image from packed 0xRRGGBB pixels (unit tests and tools).
+    pub fn from_rgb(width: usize, height: usize, pixels: Vec<u32>) -> Result<Self, String> {
+        if width == 0 || height == 0 {
+            return Err("image dimensions must be positive".to_owned());
+        }
+        if pixels.len() != width * height {
+            return Err(format!(
+                "expected {} pixels for {width}x{height}, got {}",
+                width * height,
+                pixels.len()
+            ));
+        }
+        Ok(Self {
+            width,
+            height,
+            pixels,
+            alpha: vec![255; width * height],
+        })
+    }
+
     pub fn pixel(&self, x: usize, y: usize) -> Option<(u32, u8)> {
         if x >= self.width || y >= self.height {
             return None;

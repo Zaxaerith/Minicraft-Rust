@@ -2,7 +2,8 @@
 #![allow(unused_imports)]
 use super::Level;
 pub use crate::level::tile::{
-    Tile, connection_mask, connects, find_stair_site, is_tile_item, tile_placement, underlay_layers,
+    Tile, connection_mask, connects, find_stair_site, fluid_animation_phase, increment_tile_tick,
+    is_tile_item, tile_placement, tile_tick, underlay_layers,
 };
 
 pub fn damage_tile(

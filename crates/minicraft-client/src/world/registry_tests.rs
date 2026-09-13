@@ -114,6 +114,8 @@ pub(crate) fn tiny_world() -> World {
         obsidian_knight_defeated: false,
         random: JavaRandom::new(1),
         sound_events: Vec::new(),
+        tile_ticks: 0,
+        sound_ticks: 0,
     }
 }
 
@@ -1372,6 +1374,69 @@ fn player_display_gate_freezes_player_and_ignores_hud_on_menu_close_tick() {
     assert!(!world.render_gui);
 }
 
+/// Java Updater calls Player.tick before Display.tick while currentDisplay
+/// != null, but Player.tick returns on the already-requested Display before
+/// hunger/stamina recharge. Pause, inventory and book must freeze those
+/// timers, then resume after the Display closes.
+#[test]
+fn open_menus_freeze_hunger_and_stamina_like_java_player_tick() {
+    let mut world = tiny_world();
+    world.updater = Updater::from_paused(false);
+    world.player.stamina = 4;
+    world.player.stamina_recharge = 7;
+    world.player.stamina_recharge_delay = 0;
+    world.player.hunger = 9;
+    world.player.hunger_ticks = 1_000;
+    let frozen = (
+        world.player.stamina,
+        world.player.stamina_recharge,
+        world.player.stamina_recharge_delay,
+        world.player.hunger,
+        world.player.hunger_ticks,
+        world.tick,
+    );
+    let snapshot = |world: &World| {
+        (
+            world.player.stamina,
+            world.player.stamina_recharge,
+            world.player.stamina_recharge_delay,
+            world.player.hunger,
+            world.player.hunger_ticks,
+            world.tick,
+        )
+    };
+
+    world.pause.open();
+    for _ in 0..5 {
+        world.tick(&Input::default());
+    }
+    assert_eq!(snapshot(&world), frozen, "pause must freeze Player.tick timers");
+
+    world.pause.close();
+    world.inventory_open = true;
+    for _ in 0..5 {
+        world.tick(&Input::default());
+    }
+    assert_eq!(
+        snapshot(&world),
+        frozen,
+        "inventory must freeze Player.tick timers"
+    );
+
+    world.inventory_open = false;
+    world.book_open = Some((crate::progression::Book::About, 0));
+    for _ in 0..5 {
+        world.tick(&Input::default());
+    }
+    assert_eq!(snapshot(&world), frozen, "book must freeze Player.tick timers");
+
+    world.book_open = None;
+    world.tick(&Input::default());
+    assert_eq!(world.tick, frozen.5 + 1);
+    assert_eq!(world.player.stamina_recharge, frozen.1 + 1);
+    assert!(world.player.hunger_ticks < frozen.4);
+}
+
 #[test]
 fn renderer_hud_toggle_keeps_menu_and_notification_feedback() {
     let mut world = tiny_world();
@@ -1497,6 +1562,16 @@ fn notifications_are_hidden_and_frozen_by_sleep_status_on_render() {
             );
         }
     }
+}
+
+#[test]
+fn sleeping_level_still_increments_tile_tick() {
+    let mut world = tiny_world();
+    world.sleeping = 120;
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 1);
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 2);
 }
 
 #[test]
@@ -2349,4 +2424,63 @@ fn save_resume_is_deterministic_and_two_day_soak_stays_bounded() {
         "headless two-day soak exceeded the generous regression budget"
     );
     assert!(continuous.levels[0].entities.entities().len() < 32);
+}
+
+#[test]
+fn tile_tick_increments_after_level_tick_and_not_while_menu_open() {
+    let mut world = tiny_world();
+    // Updater starts paused: the first focused tick clears pause but still
+    // runs the no-menu branch (Java sets paused=false then ticks level).
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 1);
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 2);
+
+    // Open pause: Java currentDisplay != null skips level.tick and Tile.tickCount++.
+    world.tick(&Input {
+        exit: true,
+        ..Default::default()
+    });
+    let paused_ticks = world.tile_ticks();
+    for _ in 0..5 {
+        world.tick(&Input::default());
+    }
+    assert_eq!(world.tile_ticks(), paused_ticks);
+}
+
+#[test]
+fn sound_tick_runs_once_per_updater_tick_including_menus() {
+    let mut world = tiny_world();
+    world.tick(&Input::default());
+    assert_eq!(world.sound_ticks(), 1);
+    world.tick(&Input::default());
+    assert_eq!(world.sound_ticks(), 2);
+
+    // Menu ticks still pump Sound.tick() in Java Updater.tick.
+    world.tick(&Input {
+        exit: true,
+        ..Default::default()
+    });
+    assert_eq!(world.sound_ticks(), 3);
+    for _ in 0..4 {
+        world.tick(&Input::default());
+    }
+    assert_eq!(world.sound_ticks(), 7);
+}
+
+#[test]
+fn gameplay_ticks_feed_fluid_animation_phase_reader() {
+    // World-level: each gameplay tick advances the host tile counter that
+    // backs Java Tile.tickCount. Global phase math is covered in level::tile.
+    let mut world = tiny_world();
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 1);
+    world.tick(&Input::default());
+    assert_eq!(world.tile_ticks(), 2);
+    // Pause does not advance the gameplay tile counter.
+    world.tick(&Input {
+        exit: true,
+        ..Default::default()
+    });
+    assert_eq!(world.tile_ticks(), 2);
 }

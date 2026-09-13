@@ -27,6 +27,8 @@ pub struct Game {
     ready: bool,
     clock: SharedClock,
     updater: Updater,
+    /// Per-host mirror of Java Sound.tick() calls (race-free tests).
+    sound_ticks: u64,
 }
 
 impl Game {
@@ -91,7 +93,15 @@ impl Game {
         // focus is lost. Entering Title alone does not overwrite that value.
         let plan = self.updater.plan_tick(focused, true);
         self.clock.advance_day(plan.advance_calendar);
+        // Java Sound.tick() runs every Updater.tick, including menu-only ticks.
+        crate::io::audio::tick_sound_pump();
+        self.sound_ticks = self.sound_ticks.wrapping_add(1);
         self.clock.advance_focused(focused);
+    }
+
+    /// Menu-path Sound.tick() count (Java Updater cadence, including title).
+    pub fn sound_ticks(&self) -> u64 {
+        self.sound_ticks
     }
 }
 
@@ -160,5 +170,14 @@ mod tests {
         game.enter_title();
         game.tick_menu(true);
         assert_eq!(game.game_time(), i32::MIN);
+    }
+
+    #[test]
+    fn menu_tick_pumps_sound_like_java_updater() {
+        let mut game = Game::default();
+        game.tick_menu(true);
+        game.tick_menu(false);
+        game.tick_menu(true);
+        assert_eq!(game.sound_ticks(), 3);
     }
 }

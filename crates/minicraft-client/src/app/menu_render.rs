@@ -741,7 +741,8 @@ pub(super) fn render_languages_menu(
     for (row, locale_index) in order.iter().skip(first).take(15).enumerate() {
         let index = first + row;
         let (code, name) = LOCALES[*locale_index];
-        let label = format!("{name} ({code})");
+        // Java LocaleInformation.toString() = "Name (Region)"; do not append the code.
+        let label = name;
         let y = 30 + row as i32 * 10;
         if index == selection {
             screen.text(assets.font(), ">", 41, y);
@@ -758,19 +759,12 @@ pub(super) fn render_languages_menu(
         } else {
             0x99_99_99
         };
-        screen.text_colored(assets.font(), &label, 53, y, color);
+        screen.text_colored(assets.font(), label, 53, y, color);
     }
 }
 
 pub(super) fn sorted_locale_indices() -> Vec<usize> {
-    // Java LanguageSettingsDisplay sorts by LocaleInformation.toString() = "Name (region)".
-    let mut indices: Vec<usize> = (0..LOCALES.len()).collect();
-    indices.sort_by(|left, right| {
-        let a = format!("{} ({})", LOCALES[*left].1, LOCALES[*left].0);
-        let b = format!("{} ({})", LOCALES[*right].1, LOCALES[*right].0);
-        a.to_lowercase().cmp(&b.to_lowercase())
-    });
-    indices
+    crate::resource::localization::sorted_locale_indices()
 }
 
 pub(super) fn render_skins_menu(

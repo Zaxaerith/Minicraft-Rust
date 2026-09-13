@@ -1176,14 +1176,17 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     (
                         localization.format(
                             "minicraft.displays.resource_packs.display.help.move",
-                            &[&bindings.up, &bindings.down],
+                            &[&bindings.display_mapping("CURSOR-UP"), &bindings.display_mapping("CURSOR-DOWN")],
                         ),
                         HEIGHT as i32 - 33,
                     ),
                     (
                         localization.format(
                             "minicraft.displays.resource_packs.display.help.reorder",
-                            &[&bindings.left, &bindings.right],
+                            &[
+                                &bindings.display_mapping("CURSOR-LEFT"),
+                                &bindings.display_mapping("CURSOR-RIGHT"),
+                            ],
                         ),
                         HEIGHT as i32 - 25,
                     ),

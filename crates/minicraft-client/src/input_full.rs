@@ -57,6 +57,9 @@ impl InputBuffer {
             input.menu = clicked("MENU") || pad[7];
             input.craft = clicked("CRAFT");
             input.pickup = clicked("PICKUP") || pad[8];
+            input.search = clicked("SEARCHER-BAR");
+            input.page_up = clicked("PAGE-UP");
+            input.page_down = clicked("PAGE-DOWN");
             input.backspace = clicked("BACKSPACE");
         }
         (input, std::mem::take(&mut self.raw_keys))
@@ -275,41 +278,33 @@ pub fn poll_input(
         shift: shifted,
         ctrl: window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl),
         alt: window.is_key_down(Key::LeftAlt) || window.is_key_down(Key::RightAlt),
-        toggle_hud: binding_pressed(window, &bindings.toggle_hud)
-            || window.is_key_pressed(Key::F1, KeyRepeat::No),
-        screenshot: binding_pressed(window, &bindings.screenshot)
-            || window.is_key_pressed(Key::F2, KeyRepeat::No),
-        fullscreen: binding_pressed(window, &bindings.fullscreen)
-            || window.is_key_pressed(Key::F11, KeyRepeat::No),
-        up: binding_down(window, &bindings.up) || window.is_key_down(Key::Up) || pad.up,
-        down: binding_down(window, &bindings.down) || window.is_key_down(Key::Down) || pad.down,
-        left: binding_down(window, &bindings.left) || window.is_key_down(Key::Left) || pad.left,
-        right: binding_down(window, &bindings.right)
-            || window.is_key_down(Key::Right)
-            || pad.right,
-        up_pressed: binding_pressed(window, &bindings.up)
-            || pressed(window, Key::Up)
-            || pad.up_pressed,
-        down_pressed: binding_pressed(window, &bindings.down)
-            || pressed(window, Key::Down)
-            || pad.down_pressed,
-        left_pressed: binding_pressed(window, &bindings.left)
-            || pressed(window, Key::Left)
-            || pad.left_pressed,
-        right_pressed: binding_pressed(window, &bindings.right)
-            || pressed(window, Key::Right)
-            || pad.right_pressed,
-        // Menus listen only to arrow-cursor edges (Java cursor-up/down).
-        cursor_up_pressed: pressed(window, Key::Up) || pad.up_pressed,
-        cursor_down_pressed: pressed(window, Key::Down) || pad.down_pressed,
-        cursor_left_pressed: pressed(window, Key::Left) || pad.left_pressed,
-        cursor_right_pressed: pressed(window, Key::Right) || pad.right_pressed,
+        toggle_hud: binding_pressed(window, &bindings.toggle_hud),
+        screenshot: binding_pressed(window, &bindings.screenshot),
+        fullscreen: binding_pressed(window, &bindings.fullscreen),
+        // Movement uses only the stored MOVE-* keymap (Java defaults UP|W etc.).
+        // Overwriting a binding removes the arrow alias, so do not hardcode it.
+        up: binding_down(window, &bindings.up) || pad.up,
+        down: binding_down(window, &bindings.down) || pad.down,
+        left: binding_down(window, &bindings.left) || pad.left,
+        right: binding_down(window, &bindings.right) || pad.right,
+        up_pressed: binding_pressed(window, &bindings.up) || pad.up_pressed,
+        down_pressed: binding_pressed(window, &bindings.down) || pad.down_pressed,
+        left_pressed: binding_pressed(window, &bindings.left) || pad.left_pressed,
+        right_pressed: binding_pressed(window, &bindings.right) || pad.right_pressed,
+        // Menus listen only to CURSOR-* (Java cursor-up/down = arrows only).
+        cursor_up_pressed: binding_pressed(window, "UP") || pad.up_pressed,
+        cursor_down_pressed: binding_pressed(window, "DOWN") || pad.down_pressed,
+        cursor_left_pressed: binding_pressed(window, "LEFT") || pad.left_pressed,
+        cursor_right_pressed: binding_pressed(window, "RIGHT") || pad.right_pressed,
         select: binding_pressed(window, &bindings.select) || pad.select,
         exit: binding_pressed(window, &bindings.exit) || pad.exit,
         attack: binding_pressed(window, &bindings.attack) || pad.attack,
         menu: binding_pressed(window, &bindings.menu) || pad.menu,
         craft: binding_pressed(window, &bindings.craft) || pad.craft,
         pickup: binding_pressed(window, &bindings.pickup) || pad.pickup,
+        search: binding_pressed(window, &bindings.searcher_bar),
+        page_up: binding_pressed(window, &bindings.page_up),
+        page_down: binding_pressed(window, &bindings.page_down),
         world_copy: shifted && raw_keys.contains(&Key::C),
         world_rename: shifted && raw_keys.contains(&Key::R),
         world_delete: shifted && raw_keys.contains(&Key::D),
@@ -321,7 +316,7 @@ pub fn poll_input(
 #[cfg(test)]
 mod tests {
     use crate::io::Input;
-    use super::{Gamepad, RawGamepadState, gamepad_platform};
+    use super::{Gamepad, InputBuffer, RawGamepadState, gamepad_platform};
 
     #[test]
     fn pressed_inputs_are_latched_until_the_next_fixed_tick() {
@@ -389,6 +384,63 @@ mod tests {
             ..RawGamepadState::default()
         });
         assert!(craft.right_pressed && craft.craft && !craft.menu);
+    }
+
+    #[test]
+    fn focus_loss_releases_all_physical_keys_like_java_release_all() {
+        use crate::io::KeyBindings;
+        let mut buffer = InputBuffer::default();
+        buffer.bindings = Some(KeyBindings::default());
+        buffer.keyboard.insert(
+            "W".to_owned(),
+            crate::io::input::PhysicalKey::default(),
+        );
+        buffer.keyboard.insert(
+            "ESCAPE".to_owned(),
+            crate::io::input::PhysicalKey::default(),
+        );
+        {
+            let key = buffer.keyboard.get_mut("W").expect("W");
+            key.toggle(true);
+            key.tick();
+        }
+        {
+            let key = buffer.keyboard.get_mut("ESCAPE").expect("ESC");
+            key.toggle(true);
+            key.tick();
+        }
+        assert!(buffer.keyboard["W"].state().down);
+        assert!(buffer.keyboard["ESCAPE"].state().clicked);
+
+        buffer.frame(false, Input::default(), Vec::new());
+        assert!(!buffer.keyboard["W"].state().down);
+        assert!(!buffer.keyboard["W"].state().clicked);
+        assert!(!buffer.keyboard["ESCAPE"].state().down);
+        assert!(!buffer.keyboard["ESCAPE"].state().clicked);
+
+        let (input, raw) = buffer.tick();
+        assert!(!input.up && !input.exit && raw.is_empty());
+    }
+
+    #[test]
+    fn menu_search_and_page_keys_come_from_java_bindings() {
+        use crate::io::KeyBindings;
+        let mut buffer = InputBuffer::default();
+        buffer.bindings = Some(KeyBindings::default());
+        for name in ["F", "PAGE_UP", "PAGE_DOWN", "SHIFT"] {
+            buffer
+                .keyboard
+                .insert(name.to_owned(), crate::io::input::PhysicalKey::default());
+        }
+        // sample_keyboard only toggles; InputBuffer.tick consumes the presses.
+        for name in ["F", "PAGE_UP", "PAGE_DOWN", "SHIFT"] {
+            let key = buffer.keyboard.get_mut(name).expect("key");
+            key.toggle(true);
+        }
+        let (input, _) = buffer.tick();
+        assert!(input.search, "SEARCHER-BAR default is SHIFT-F");
+        assert!(input.page_up);
+        assert!(input.page_down);
     }
 }
 

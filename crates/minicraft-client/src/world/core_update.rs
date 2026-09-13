@@ -98,6 +98,10 @@ impl World {
             self.prepare_end_game();
         }
         self.notifications.tick(); // Java runs this before the focus/input branch.
+        // Java Sound.tick() sits between notifications and the focus/input
+        // branch, once per Updater tick regardless of pause or focus.
+        crate::io::audio::tick_sound_pump();
+        self.sound_ticks = self.sound_ticks.wrapping_add(1);
         self.clock.advance_focused(focused);
         plan.dispatch_input
     }
