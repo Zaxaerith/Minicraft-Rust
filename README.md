@@ -6,12 +6,11 @@ It is licensed under GPL-3.0, like the upstream project.
 
 ## Acceptance status
 
-**Stage 15 is engineering-close-out, not full 1:1 acceptance.**
-Structure and unit gates for the seven dimensions are advanced; **Windows live
-listening** and a **full Java pixel golden matrix** still require human / oracle
-play.
+**Stage 15 structure migration, engineering gates, and user play acceptance
+are complete (2026-09-12).** The remaining optional seven-dimension items that
+still require human / oracle play are listed below.
 
-Verified on the current tree (2026-09-10):
+Verified on the current tree (2026-09-12):
 
 | Gate | Result |
 | --- | --- |
@@ -31,16 +30,13 @@ Verified on the current tree (2026-09-10):
 Still required before claiming full stage-15 / 1:1 completion:
 
 - Expanded Java↔Rust trajectory and golden-image matrix beyond current fixtures;
-- Human listening on real Windows audio devices for the full effect set;
-- Removal of remaining compatibility hosts (`app.rs` top-level `State`,
-  in-world Pause/Quest render hosts in `world/mod.rs`) after the client crate
-  owns those paths end-to-end;
-- Broader architecture trace table for every remaining large `match`.
+- Human listening on real Windows audio devices for the full effect set.
 
 ## What currently runs
 
-The root `minicraft-rust` package is the runnable compatibility client. It opens
-a native window with the original 288×192 pixel canvas and local 2.2.4 artwork.
+The root `minicraft-rust` package is a thin binary entry that launches the
+client in `minicraft-client`. It opens a native window with the original
+288×192 pixel canvas and local 2.2.4 artwork.
 
 Covered systems (implemented and under test, not a completion claim):
 
@@ -60,11 +56,12 @@ The crate tree under `crates/` holds the staged Java-parity modules
 
 ## Repository and distribution scope
 
-Only Windows x64 is packaged by the release workflows. Linux and macOS users
-build from source; those platforms are not covered by the current CI matrix.
+GitHub Actions are not configured to compile, test, or package this project.
+Build locally with the commands below. Release archives must also be assembled
+locally; pushes and version tags do not start cloud build jobs.
 
 This repository includes game source, Cargo manifests and lockfile, copied runtime
-assets, license, Windows workflows, and the packaging script. Local `tests/`,
+assets, license, and the local packaging script. Local `tests/`,
 `tools/`, Java reference copies, internal audit/plan notes, save data, logs,
 generated images, and build/package output are excluded.
 

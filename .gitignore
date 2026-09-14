@@ -19,6 +19,7 @@
 # Local runtime data, generated previews, packaging and editor state
 /dist/
 /test-data/
+/test-data-build/
 /saves/
 /savedir/
 /*.png
