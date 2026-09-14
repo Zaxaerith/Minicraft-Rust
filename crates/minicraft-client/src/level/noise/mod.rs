@@ -42,6 +42,11 @@ impl JavaRandom {
         }
     }
 
+    /// java.util.Random.nextInt() — full-range 32-bit value.
+    pub fn next_i32(&mut self) -> i32 {
+        self.next(32)
+    }
+
     pub fn next_bool(&mut self) -> bool {
         self.next(1) != 0
     }
@@ -57,5 +62,16 @@ mod tests {
         assert_eq!(random.next_int(100), 60);
         assert_eq!(random.next_int(100), 48);
         assert_eq!(random.next_int(100), 29);
+    }
+
+    #[test]
+    fn next_i32_matches_java_random_next_int() {
+        // java.util.Random(0).nextInt()
+        assert_eq!(JavaRandom::new(0).next_i32(), -1_155_484_576);
+        let mut random = JavaRandom::new(0);
+        let first = random.next_i32();
+        let second = random.next_i32();
+        assert_ne!(first, second);
+        assert_eq!(JavaRandom::new(0).next_i32(), first);
     }
 }

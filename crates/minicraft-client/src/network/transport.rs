@@ -1,4 +1,8 @@
 //! Line-delimited TCP transport for the shared multiplayer protocol.
+//!
+//! Java's `network/` package only names `Network` and `MinicraftProtocol`;
+//! the socket client itself is the Rust probe surface. LOGIN is always the
+//! first frame; PING/PONG is the heartbeat (Java `InputType.PING`).
 use minicraft_common::protocol::{
     GAME_VERSION, Message, PROTOCOL_VERSION, decode_line, encode_line, read_bounded_line,
 };

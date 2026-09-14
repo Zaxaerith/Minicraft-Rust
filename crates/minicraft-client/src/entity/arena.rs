@@ -13,10 +13,20 @@ use super::projectile::{Projectile, ProjectileKind, arrow_velocity, spark_damage
 use super::stats::{mob_drops, mob_health};
 use super::types::{Entity, EntityKind, HitResult, ItemMotion, Mob};
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct EntityArena {
+    /// Starts at 1 so the first entity never gets id 0 (Java rejects 0/negative).
     next_id: u64,
     pub(crate) entities: Vec<Entity>,
+}
+
+impl Default for EntityArena {
+    fn default() -> Self {
+        Self {
+            next_id: 1,
+            entities: Vec::new(),
+        }
+    }
 }
 
 impl EntityArena {
