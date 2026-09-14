@@ -1,4 +1,5 @@
-//! Java Recipe registration tables (hand/workbench/furnace/oven/loom/anvil/enchanter).
+//! Java `Recipe` + `Recipes` station tables (hand/workbench/furnace/oven/loom/anvil/enchanter).
+//! Instance order matches Java `Recipes` static blocks so craft-menu indices stay 1:1.
 use super::{Inventory, ItemId, ItemStack, ToolItem, ToolKind, ToolTier};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

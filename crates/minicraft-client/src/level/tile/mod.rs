@@ -3,6 +3,9 @@
 //! Layout mirrors Java `level/tile/*`: one module per tile class. This file is
 //! the registry (`Tiles`) plus the shared `Tile` identity enum and the public
 //! free-function API used by the rest of the client.
+//!
+//! Java `TileItem` placement lives in `crate::item::tile_item`; this module
+//! re-exports it so M4 call sites stay stable.
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 

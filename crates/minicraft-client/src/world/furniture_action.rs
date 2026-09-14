@@ -2,32 +2,7 @@
 use super::{FurnitureKind, GameMode, ItemId, TILE_SIZE, Tile, World};
 
 pub(super) fn furniture_for_item(item: ItemId) -> Option<FurnitureKind> {
-    Some(match item {
-        ItemId::Workbench => FurnitureKind::Workbench,
-        ItemId::Oven => FurnitureKind::Oven,
-        ItemId::Furnace => FurnitureKind::Furnace,
-        ItemId::Anvil => FurnitureKind::Anvil,
-        ItemId::Enchanter => FurnitureKind::Enchanter,
-        ItemId::Loom => FurnitureKind::Loom,
-        ItemId::Chest => FurnitureKind::Chest,
-        ItemId::DungeonChest => FurnitureKind::DungeonChest,
-        ItemId::Lantern => FurnitureKind::Lantern,
-        ItemId::IronLantern => FurnitureKind::IronLantern,
-        ItemId::GoldLantern => FurnitureKind::GoldLantern,
-        ItemId::Tnt => FurnitureKind::Tnt,
-        ItemId::Bed => FurnitureKind::Bed,
-        ItemId::Composter => FurnitureKind::Composter,
-        ItemId::CowSpawner => FurnitureKind::CowSpawner,
-        ItemId::PigSpawner => FurnitureKind::PigSpawner,
-        ItemId::SheepSpawner => FurnitureKind::SheepSpawner,
-        ItemId::SlimeSpawner => FurnitureKind::SlimeSpawner,
-        ItemId::ZombieSpawner => FurnitureKind::ZombieSpawner,
-        ItemId::CreeperSpawner => FurnitureKind::CreeperSpawner,
-        ItemId::SkeletonSpawner => FurnitureKind::SkeletonSpawner,
-        ItemId::SnakeSpawner => FurnitureKind::SnakeSpawner,
-        ItemId::KnightSpawner => FurnitureKind::KnightSpawner,
-        _ => return None,
-    })
+    crate::item::furniture_for_item(item)
 }
 
 impl World {

@@ -1,4 +1,5 @@
-//! Unified craft list views: station tables, Have/Cost sort, and can_craft.
+//! Java `Recipes` craft-list views (CraftingDisplay) — station tables,
+//! Have/Cost sort, and `can_craft` (Java `Recipe.checkCanCraft`).
 use crate::entity::furniture::FurnitureKind;
 
 use super::{
@@ -47,6 +48,9 @@ impl RecipeView {
 }
 
 /// Java station recipe lists in registration order (workbench splits items/tools).
+///
+/// Java `Recipes.workbenchRecipes` interleaves the tool block after Gem Fishing Rod
+/// and before arrow / leather / snake armor — the split index is 28.
 pub fn recipe_views(station: Option<FurnitureKind>) -> Vec<RecipeView> {
     let stack = |recipe: &Recipe| RecipeView {
         output: RecipeOutput::Stack(recipe.output),

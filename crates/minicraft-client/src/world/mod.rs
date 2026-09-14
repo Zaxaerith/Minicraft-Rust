@@ -1297,15 +1297,7 @@ impl World {
 
     fn use_bucket(&mut self, item: ItemId, index: usize) -> bool {
         let target = self.levels[self.current_level].tiles[index];
-        let replacement = match (item, target) {
-            (ItemId::EmptyBucket, Tile::Water) => Some((Tile::Hole, ItemId::WaterBucket)),
-            (ItemId::EmptyBucket, Tile::Lava) => Some((Tile::Hole, ItemId::LavaBucket)),
-            (ItemId::WaterBucket, Tile::Hole) => Some((Tile::Water, ItemId::EmptyBucket)),
-            (ItemId::LavaBucket, Tile::Hole) => Some((Tile::Lava, ItemId::EmptyBucket)),
-            (ItemId::WaterBucket, Tile::Lava) => Some((Tile::ObsidianFloor, ItemId::EmptyBucket)),
-            _ => None,
-        };
-        let Some((tile, bucket)) = replacement else {
+        let Some((tile, bucket)) = crate::item::bucket_action(item, target) else {
             return false;
         };
         self.levels[self.current_level].tiles[index] = tile;
@@ -1794,32 +1786,7 @@ impl World {
 }
 
 fn item_for_furniture(kind: FurnitureKind) -> Option<ItemId> {
-    Some(match kind {
-        FurnitureKind::Workbench => ItemId::Workbench,
-        FurnitureKind::Oven => ItemId::Oven,
-        FurnitureKind::Furnace => ItemId::Furnace,
-        FurnitureKind::Anvil => ItemId::Anvil,
-        FurnitureKind::Enchanter => ItemId::Enchanter,
-        FurnitureKind::Loom => ItemId::Loom,
-        FurnitureKind::Chest => ItemId::Chest,
-        FurnitureKind::DungeonChest => ItemId::DungeonChest,
-        FurnitureKind::Lantern => ItemId::Lantern,
-        FurnitureKind::IronLantern => ItemId::IronLantern,
-        FurnitureKind::GoldLantern => ItemId::GoldLantern,
-        FurnitureKind::Tnt => ItemId::Tnt,
-        FurnitureKind::Bed => ItemId::Bed,
-        FurnitureKind::Composter => ItemId::Composter,
-        FurnitureKind::CowSpawner => ItemId::CowSpawner,
-        FurnitureKind::PigSpawner => ItemId::PigSpawner,
-        FurnitureKind::SheepSpawner => ItemId::SheepSpawner,
-        FurnitureKind::SlimeSpawner => ItemId::SlimeSpawner,
-        FurnitureKind::ZombieSpawner => ItemId::ZombieSpawner,
-        FurnitureKind::CreeperSpawner => ItemId::CreeperSpawner,
-        FurnitureKind::SkeletonSpawner => ItemId::SkeletonSpawner,
-        FurnitureKind::SnakeSpawner => ItemId::SnakeSpawner,
-        FurnitureKind::KnightSpawner => ItemId::KnightSpawner,
-        FurnitureKind::KnightStatue => return None,
-    })
+    crate::item::item_for_furniture(kind)
 }
 
 fn tile_progress_name(tile: Tile) -> String {

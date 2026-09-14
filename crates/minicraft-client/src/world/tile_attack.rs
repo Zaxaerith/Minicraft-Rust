@@ -11,7 +11,7 @@ impl World {
             let target = self.levels[self.current_level].tiles[index];
             if item == ItemId::WateringCan {
                 if target == Tile::Water {
-                    self.player.watering_content = 1_800;
+                    self.player.watering_content = crate::item::WATERING_CAN_CAPACITY;
                 } else if self.player.watering_content > 0 {
                     self.player.watering_content -= 1;
                     if matches!(
@@ -24,9 +24,8 @@ impl World {
                             | Tile::HellishBerries
                     ) {
                         let data = self.levels[self.current_level].data[index];
-                        let fertilization = (data >> 7).min(150);
                         self.levels[self.current_level].data[index] =
-                            (data & 0x7f) | ((fertilization + 1).min(150) << 7);
+                            crate::item::watering_can::water_crop_data(data);
                     } else if target == Tile::Farmland {
                         self.levels[self.current_level].data[index] = 7;
                     }

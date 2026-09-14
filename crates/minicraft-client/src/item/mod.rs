@@ -1,26 +1,59 @@
-//! Java item catalog: ItemId, food/armor/potion/fishing lookups.
-//! Submodules mirror Java packages: inventory, tool, recipe, armor, potion.
+//! Java item catalog: ItemId registry plus per-class modules.
+//!
+//! Layout mirrors Java `item/*`: one module per class (`Item`, `Items`,
+//! `FoodItem`, `TileItem`, `FurnitureItem`, `ToolItem`, …). This file is the
+//! identity registry (`Items` name table) and the public re-export surface.
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 pub mod armor;
+pub mod book;
+pub mod bucket;
+pub mod clothing;
 pub mod crafting;
+pub mod dye;
+pub mod entity_summon;
+pub mod fishing_data;
+pub mod fishing_rod;
+pub mod food;
+pub mod furniture_item;
+pub mod heart;
 pub mod inventory;
+pub mod item;
+pub mod items;
 pub mod potion;
+pub mod potion_item;
+pub mod power_glove;
 pub mod recipe;
+pub mod stackable;
+pub mod summon;
+pub mod tile_item;
 pub mod tool;
+pub mod unknown;
+pub mod watering_can;
+pub mod wool;
 
 pub use armor::ArmorKind;
+pub use book::{BookKind, book_for_item};
+pub use bucket::{BucketFill, bucket_action};
+pub use clothing::is_clothing;
 pub use crafting::{RecipeOutput, RecipeView, ordered_recipe_views, recipe_can_craft, recipe_views};
+pub use fishing_rod::{fishing_level, breaks_after_use};
+pub use food::{FOOD_STAMINA_COST, food_value};
+pub use furniture_item::{furniture_for_item, item_for_furniture};
 pub use inventory::{Inventory, ItemStack};
 pub use potion::PotionKind;
+pub use potion_item::{can_apply, potion_for_item};
 pub use recipe::{
     ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES,
     LOOM_RECIPES, OVEN_RECIPES, Recipe, ToolRecipe, WORKBENCH_STATION_RECIPES,
     WORKBENCH_TOOL_RECIPES,
 };
+pub use summon::{SummonBoss, near_boss_center, summon_for_item};
+pub use tile_item::{is_tile_item, tile_placement};
 pub use tool::{ToolItem, ToolKind, ToolTier};
+pub use watering_can::CAPACITY as WATERING_CAN_CAPACITY;
 
 pub const MAX_STACK: u16 = 999;
 macro_rules! item_registry {
@@ -188,18 +221,12 @@ item_registry! {
 }
 
 impl ItemId {
+    /// Java `FoodItem` feed amounts (see `food::food_value`).
     pub const fn food_value(self) -> Option<u8> {
-        match self {
-            Self::BakedPotato | Self::Apple | Self::RawPork | Self::RawFish | Self::RawBeef => {
-                Some(1)
-            }
-            Self::Bread => Some(2),
-            Self::CookedFish | Self::CookedPork | Self::Steak => Some(3),
-            Self::GoldenApple => Some(10),
-            _ => None,
-        }
+        food::food_value(self)
     }
 
+    /// Java `ArmorItem` tier (see `armor::ArmorKind`).
     pub const fn armor_kind(self) -> Option<ArmorKind> {
         match self {
             Self::LeatherArmor => Some(ArmorKind::Leather),
@@ -211,34 +238,22 @@ impl ItemId {
         }
     }
 
+    /// Java `PotionItem` / `PotionType` pairing.
     pub const fn potion_kind(self) -> Option<PotionKind> {
-        match self {
-            Self::AwkwardPotion => Some(PotionKind::Awkward),
-            Self::SpeedPotion => Some(PotionKind::Speed),
-            Self::LightPotion => Some(PotionKind::Light),
-            Self::SwimPotion => Some(PotionKind::Swim),
-            Self::HastePotion => Some(PotionKind::Haste),
-            Self::LavaPotion => Some(PotionKind::Lava),
-            Self::EnergyPotion => Some(PotionKind::Energy),
-            Self::RegenPotion => Some(PotionKind::Regen),
-            Self::HealthPotion => Some(PotionKind::Health),
-            Self::EscapePotion => Some(PotionKind::Escape),
-            Self::ShieldPotion => Some(PotionKind::Shield),
-            Self::TimePotion => Some(PotionKind::Time),
-            _ => None,
-        }
+        potion_item::potion_for_item(self)
     }
 
+    /// Java `FishingRodItem` level 0..=3.
     pub const fn fishing_level(self) -> Option<u8> {
-        match self {
-            Self::WoodFishingRod => Some(0),
-            Self::IronFishingRod => Some(1),
-            Self::GoldFishingRod => Some(2),
-            Self::GemFishingRod => Some(3),
-            _ => None,
-        }
+        fishing_rod::fishing_level(self)
+    }
+
+    /// Java `FurnitureItem` placement mapping.
+    pub fn furniture_kind(self) -> Option<crate::entity::furniture::FurnitureKind> {
+        furniture_item::furniture_for_item(self)
     }
 }
+
 impl fmt::Display for ItemId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.display_name())
@@ -379,15 +394,56 @@ mod tests {
     #[test]
     fn potion_and_tool_kind_tables_match_java_counts() {
         assert_eq!(PotionKind::ALL.len(), 12);
-        assert_eq!(ToolKind::ALL.len(), 8);
+        assert_eq!(potion_item::ALL.len(), 12);
         assert_eq!(ToolKind::ALL.len(), 8);
         let mut tiers = std::collections::HashSet::new();
         for kind in ToolKind::ALL {
-            for tier in [ToolTier::Wood, ToolTier::Rock, ToolTier::Iron, ToolTier::Gold, ToolTier::Gem] {
+            for tier in [
+                ToolTier::Wood,
+                ToolTier::Rock,
+                ToolTier::Iron,
+                ToolTier::Gold,
+                ToolTier::Gem,
+            ] {
                 assert!(!kind.asset_name(tier).is_empty());
                 assert!(tiers.insert((kind, tier)));
             }
         }
         assert_eq!(tiers.len(), 40);
+    }
+
+    #[test]
+    fn bucket_and_furniture_tables_round_trip() {
+        assert_eq!(
+            bucket_action(ItemId::EmptyBucket, crate::level::tile::Tile::Water),
+            Some((crate::level::tile::Tile::Hole, ItemId::WaterBucket))
+        );
+        assert_eq!(
+            furniture_for_item(ItemId::Chest),
+            Some(crate::entity::furniture::FurnitureKind::Chest)
+        );
+        assert_eq!(
+            item_for_furniture(crate::entity::furniture::FurnitureKind::Chest),
+            Some(ItemId::Chest)
+        );
+    }
+
+    #[test]
+    fn station_table_lengths_match_java_recipes_static_blocks() {
+        // Java Recipes: craftRecipes, workbenchRecipes (items+tools+tail),
+        // furnaceRecipes, ovenRecipes, loomRecipes, anvilRecipes,
+        // enchantRecipes. DyeVat is not yet a Rust FurnitureKind.
+        assert_eq!(HAND_RECIPES.len(), 6);
+        assert_eq!(WORKBENCH_STATION_RECIPES.len(), 31);
+        assert_eq!(WORKBENCH_TOOL_RECIPES.len(), 12);
+        assert_eq!(FURNACE_RECIPES.len(), 4);
+        assert_eq!(OVEN_RECIPES.len(), 5);
+        assert_eq!(LOOM_RECIPES.len(), 17);
+        assert_eq!(ANVIL_RECIPES.len(), 7);
+        assert_eq!(ANVIL_TOOL_RECIPES.len(), 22);
+        assert_eq!(ENCHANTER_RECIPES.len(), 14);
+        // Workbench CraftingDisplay: 28 items + 12 tools + 3 tail.
+        let views = recipe_views(Some(crate::entity::furniture::FurnitureKind::Workbench));
+        assert_eq!(views.len(), 28 + 12 + 3);
     }
 }

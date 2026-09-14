@@ -1,4 +1,4 @@
-//! Java Inventory 27-slot bag and ItemStack stacking.
+//! Java `Inventory` — 27-slot bag and `StackableItem` / `ItemStack` stacking.
 use serde::{Deserialize, Serialize};
 
 use super::{ItemId, MAX_STACK, ToolItem, ToolKind, ToolTier};
