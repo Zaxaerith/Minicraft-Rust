@@ -1588,13 +1588,13 @@ fn tick_title_menu_event(
         return (Transition::None, event);
     }
     // Entries 0–1 are non-selectable; first selectable is Play at index 2.
-    let transition = match menu.selection {
-        2 if world_count == 0 => Transition::NewWorld(false),
-        2 => Transition::PlayMenu,
-        3 => Transition::Options,
-        4 => Transition::Skins,
-        5 => Transition::Achievements,
-        6 => Transition::Help,
+    let transition = match crate::screen::title_display::action_for_menu_selection(menu.selection) {
+        0 if world_count == 0 => Transition::NewWorld(false),
+        0 => Transition::PlayMenu,
+        1 => Transition::Options,
+        2 => Transition::Skins,
+        3 => Transition::Achievements,
+        4 => Transition::Help,
         _ => Transition::Quit,
     };
     (transition, event)
@@ -1727,116 +1727,20 @@ fn tick_new_world_menu(
     let events = menu.tick(&menu_input);
     let mut changed = events.iter().any(|e| matches!(e, MenuEvent::Moved));
 
-    // Sync name/seed from Input entries.
-    if let Some(entry) = menu.entries.get_mut(0)
-        && let crate::screen::entry::Entry::Input { user_input, .. } = entry
-    {
-        *name = user_input.clone();
-    }
-    let seed_index = menu.entries.len().saturating_sub(1);
-    if let Some(entry) = menu.entries.get_mut(seed_index)
-        && let crate::screen::entry::Entry::Input { user_input, .. } = entry
-    {
-        *seed = user_input.clone();
-    }
-
-    // Apply array/boolean changes back into settings (entries 1, score?, size, theme, type, quests, tutorials).
-    let mut index = 1;
-    if let Some(crate::screen::entry::Entry::Array { selection, .. }) =
-        menu.entries.get(index)
-    {
-        if *selection != settings.game_mode {
-            settings.game_mode = *selection;
-            changed = true;
-        }
-    }
-    index += 1;
-    // Java always keeps the scoretime ArrayEntry in the list (hidden unless score mode).
-    let score_mode_now = matches!(GameMode::from_index(settings.game_mode), GameMode::Score);
-    if let Some(crate::screen::entry::Entry::Array {
-        selection,
-        options,
-        hidden,
-        ..
-    }) = menu.entries.get_mut(index)
-    {
-        *hidden = !score_mode_now;
-        if score_mode_now
-            && let Some(value) = options
-                .get(*selection)
-                .and_then(|s| s.parse::<usize>().ok())
-            && value != settings.score_minutes
-        {
-            settings.score_minutes = value;
-            changed = true;
-        }
-    }
-    // Skip create at `index`.
-    index += 1;
-    if let Some(crate::screen::entry::Entry::Array {
-        selection, options, ..
-    }) = menu.entries.get(index)
-    {
-        if let Some(value) = options
-            .get(*selection)
-            .and_then(|s| s.parse::<usize>().ok())
-            && value != settings.world_size
-        {
-            settings.world_size = value;
-            changed = true;
-        }
-    }
-    index += 1;
-    if let Some(crate::screen::entry::Entry::Array { selection, .. }) =
-        menu.entries.get(index)
-    {
-        if *selection != settings.theme {
-            settings.theme = *selection;
-            changed = true;
-        }
-    }
-    index += 1;
-    if let Some(crate::screen::entry::Entry::Array { selection, .. }) =
-        menu.entries.get(index)
-    {
-        if *selection != settings.terrain_type {
-            settings.terrain_type = *selection;
-            changed = true;
-        }
-    }
-    index += 1;
-    if let Some(crate::screen::entry::Entry::Boolean { value, .. }) =
-        menu.entries.get(index)
-    {
-        if *value != settings.quests {
-            settings.quests = *value;
-            changed = true;
-        }
-    }
-    index += 1;
-    if let Some(crate::screen::entry::Entry::Boolean { value, .. }) =
-        menu.entries.get(index)
-    {
-        if *value != settings.tutorials {
-            settings.tutorials = *value;
-            changed = true;
-        }
-    }
+    // Sync name/seed/arrays/booleans and scoretime visibility (Java setVisible).
+    changed |= crate::screen::world_gen_display::apply_menu_to_settings(
+        menu, settings, name, seed,
+    );
     let _ = events_before;
     let _ = world_count;
 
-    if events.contains(&MenuEvent::Activated) {
-        // Create world is the Select entry; find its index.
-        if let Some(create_index) = menu.entries.iter().position(|entry| {
-            matches!(entry, crate::screen::entry::Entry::Select { .. })
-        }) && menu.selection == create_index
-            && !name.trim().is_empty()
-        {
-            return (
-                Transition::CreateWorld(name.trim().to_owned(), parse_world_seed(seed)),
-                changed,
-            );
-        }
+    if events.contains(&MenuEvent::Activated)
+        && let Some(world_name) = crate::screen::world_gen_display::create_requested(menu, name)
+    {
+        return (
+            Transition::CreateWorld(world_name, parse_world_seed(seed)),
+            changed,
+        );
     }
     (Transition::None, changed)
 }
@@ -1919,11 +1823,10 @@ fn tick_help_menu(menu: &mut crate::screen::menu::Menu, input: &Input) -> Transi
     }
     let events = menu.tick(&menu_input_from(input));
     if events.contains(&MenuEvent::Activated) {
-        let books = Book::ALL;
-        if let Some(book) = books.get(menu.selection) {
-            Transition::Book(*book)
-        } else {
-            Transition::None
+        // Blank row is non-selectable; selection 1..=4 maps to Book::ALL[0..=3].
+        match crate::screen::help_display::book_for_selection(menu.selection) {
+            Some(book) => Transition::Book(book),
+            None => Transition::None,
         }
     } else {
         Transition::None
@@ -1943,14 +1846,14 @@ fn tick_book_menu(
     let page_count = book.pages().len();
     let mut turned = false;
     if input.left_pressed || input.up_pressed {
-        if *page > 0 {
-            *page -= 1;
+        if let Some(next) = crate::screen::book::turn_page(*page, -1, page_count) {
+            *page = next;
             turned = true;
         }
     }
     if input.right_pressed || input.down_pressed {
-        if *page + 1 < page_count {
-            *page += 1;
+        if let Some(next) = crate::screen::book::turn_page(*page, 1, page_count) {
+            *page = next;
             turned = true;
         }
     }
@@ -2047,72 +1950,26 @@ fn tick_options_menu(
     input: &Input,
     settings: &mut Settings,
 ) -> (Transition, bool) {
-    use crate::screen::entry::Entry;
     use crate::screen::menu::MenuEvent;
+    use crate::screen::options_main_menu_display as options;
     if input.exit {
         return (Transition::Title, false);
     }
-    let previous = menu.selection;
     let menu_input = menu_input_from(input);
     let events = menu.tick(&menu_input);
     let mut changed = events.iter().any(|e| matches!(e, MenuEvent::Moved));
-    // FPS RangeEntry stores value as option string "10".."300" step 10?
-    // We used range(10,300) which is ±1 per left/right; Java uses Settings.getEntry("fps")
-    // with ArrayEntry range. Keep ±10 by multiplying when left/right pressed.
-    if (menu_input.left || menu_input.right) && menu.selection == 0 {
-        if let Some(Entry::Array {
-            options, selection, ..
-        }) = menu.entries.get_mut(0)
-        {
-            let step = if menu_input.alt { 10 } else { 10 };
-            let len = options.len() as i32;
-            let mut next = *selection as i32;
-            next += if menu_input.left { -step } else { step };
-            next = next.clamp(0, len - 1);
-            if next as usize != *selection {
-                *selection = next as usize;
-                changed = true;
-            }
-        }
+    // Java FPS RangeEntry steps by 10 on left/right of the FPS row.
+    if (menu_input.left || menu_input.right) && menu.selection == options::indices::FPS {
+        changed |= options::step_fps(menu, menu_input.left);
     }
-    // Sync booleans from entries.
-    if let Some(Entry::Boolean { value, .. }) = menu.entries.get_mut(1)
-        && *value != settings.sound
-    {
-        settings.sound = *value;
-        changed = true;
-    }
-    if let Some(Entry::Boolean { value, .. }) = menu.entries.get_mut(2)
-        && *value != settings.show_quests
-    {
-        settings.show_quests = *value;
-        changed = true;
-    }
-    if let Some(Entry::Boolean { value, .. }) = menu.entries.get_mut(3)
-        && *value != settings.hwa
-    {
-        settings.hwa = *value;
-        changed = true;
-    }
-    if let Some(Entry::Array {
-        selection, options, ..
-    }) = menu.entries.get(0)
-        && let Some(fps) = options
-            .get(*selection)
-            .and_then(|s| s.parse::<usize>().ok())
-        && fps != settings.fps
-    {
-        settings.fps = fps;
-        changed = true;
-    }
-    let _ = previous;
+    changed |= options::apply_menu_to_settings(menu, settings);
     if events.contains(&MenuEvent::Activated) {
-        let transition = match menu.selection {
-            4 => Transition::Controls,
-            5 => Transition::ControlGuide,
-            6 => Transition::Languages,
-            7 => Transition::ResourcePacks,
-            _ => Transition::None,
+        let transition = match options::action_for_selection(menu.selection) {
+            Some(options::OptionsAction::KeyBindings) => Transition::Controls,
+            Some(options::OptionsAction::Controls) => Transition::ControlGuide,
+            Some(options::OptionsAction::Language) => Transition::Languages,
+            Some(options::OptionsAction::ResourcePacks) => Transition::ResourcePacks,
+            None => Transition::None,
         };
         return (transition, changed);
     }
@@ -2271,26 +2128,24 @@ fn tick_resource_packs_menu(
     packs: &mut [ResourcePack],
 ) -> Transition {
     use crate::screen::menu::MenuEvent;
-    // Java: can move onto any pack except the default (cannot reorder default).
-    let is_default = |pack: &ResourcePack| {
-        pack.id.eq_ignore_ascii_case("default") || pack.name.eq_ignore_ascii_case("Default")
-    };
+    use crate::screen::resource_pack_display as packs_ui;
     if input.cursor_right_pressed {
-        let next = menu.selection + 1;
-        if next < packs.len() && !is_default(&packs[next]) {
-            packs.swap(menu.selection, next);
-            menu.set_selection(next as i32);
-            return Transition::MovePack(next);
-        }
-        return Transition::None;
+        return match packs_ui::try_reorder(packs, menu.selection, true) {
+            packs_ui::Reorder::Moved(next) => {
+                menu.set_selection(next as i32);
+                Transition::MovePack(next)
+            }
+            packs_ui::Reorder::Blocked => Transition::None,
+        };
     }
     if input.cursor_left_pressed {
-        if menu.selection > 0 {
-            packs.swap(menu.selection, menu.selection - 1);
-            menu.set_selection((menu.selection - 1) as i32);
-            return Transition::MovePack(menu.selection);
-        }
-        return Transition::None;
+        return match packs_ui::try_reorder(packs, menu.selection, false) {
+            packs_ui::Reorder::Moved(next) => {
+                menu.set_selection(next as i32);
+                Transition::MovePack(next)
+            }
+            packs_ui::Reorder::Blocked => Transition::None,
+        };
     }
     if input.exit {
         return Transition::Options;
@@ -2353,23 +2208,7 @@ fn edit_text(value: &mut String, input: &Input, max_chars: usize) {
 }
 
 fn parse_world_seed(value: &str) -> Option<i64> {
-    if value.is_empty() {
-        return None;
-    }
-    if value.len() < 20
-        && value
-            .strip_prefix('-')
-            .unwrap_or(value)
-            .bytes()
-            .all(|byte| byte.is_ascii_digit())
-    {
-        return value.parse().ok();
-    }
-    let mut seed = 1_125_899_906_842_597_i64;
-    for character in value.encode_utf16() {
-        seed = seed.wrapping_mul(31).wrapping_add(i64::from(character));
-    }
-    Some(seed)
+    crate::screen::world_gen_display::parse_world_seed(value)
 }
 
 fn play_options(settings: &Settings, mode: GameMode, score_minutes: usize) -> PlayOptions {
@@ -2387,9 +2226,7 @@ fn play_options(settings: &Settings, mode: GameMode, score_minutes: usize) -> Pl
 /// Stage 13: drop enabled ids that no longer resolve, so settings stay consistent
 /// with the discovered pack set. Returns true when the list changed.
 fn prune_missing_enabled_packs(enabled: &mut Vec<String>, packs: &[ResourcePack]) -> bool {
-    let before = enabled.len();
-    enabled.retain(|id| packs.iter().any(|pack| &pack.id == id));
-    enabled.len() != before
+    crate::screen::resource_pack_display::prune_missing_enabled_packs(enabled, packs)
 }
 
 #[cfg(test)]
@@ -2417,25 +2254,11 @@ fn active_packs(all: &[ResourcePack], enabled: &[String]) -> Vec<ResourcePack> {
 }
 
 fn order_packs_for_menu(packs: &mut [ResourcePack], enabled: &[String]) {
-    packs.sort_by_key(|pack| {
-        enabled
-            .iter()
-            .rev()
-            .position(|id| id == &pack.id)
-            .map_or((1, usize::MAX), |priority| (0, priority))
-    });
+    crate::screen::resource_pack_display::order_packs_for_menu(packs, enabled);
 }
 
 fn sync_enabled_pack_order(enabled: &mut Vec<String>, packs: &[ResourcePack]) {
-    let was_enabled = enabled.iter().cloned().collect::<HashSet<_>>();
-    enabled.clear();
-    enabled.extend(
-        packs
-            .iter()
-            .rev()
-            .filter(|pack| was_enabled.contains(&pack.id))
-            .map(|pack| pack.id.clone()),
-    );
+    crate::screen::resource_pack_display::sync_enabled_pack_order(enabled, packs);
 }
 
 fn reload_resources(

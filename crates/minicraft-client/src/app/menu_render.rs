@@ -829,23 +829,8 @@ pub(super) fn render_skins_menu(
     );
 }
 
-/// Java compileMobSpriteAnimations + SkinDisplay:
-/// spriteIndex = step/40 % 8 → [dir][frame].
-/// set1 = sheetX 0,2,4,6 (down1, up1, right1, right2); set2 = same with mirror=1.
-/// sprites[0]=down set2/set1, [1]=up set2/set1, [2]=left set2, [3]=right set1.
+/// Java compileMobSpriteAnimations + SkinDisplay preview frame (see screen::skin_display).
 pub(super) fn skin_preview_frame(ticks: u64) -> (usize, bool) {
-    let sprite_index = (ticks / 40 % 8) as usize;
-    let direction = sprite_index / 2;
-    let frame = sprite_index % 2;
-    match direction {
-        // Down: set1[0]=x0, set2[0]=x0 mirror
-        0 => (0, frame == 1),
-        // Up: set1[1]=x16, set2[1]=x16 mirror
-        1 => (16, frame == 1),
-        // Left: set2[2]=x32 mirror, set2[3]=x48 mirror
-        2 => (32 + frame * 16, true),
-        // Right: set1[2]=x32, set1[3]=x48
-        _ => (32 + frame * 16, false),
-    }
+    crate::screen::skin_display::skin_preview_frame(ticks)
 }
 
