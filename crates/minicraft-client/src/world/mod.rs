@@ -25,7 +25,6 @@ mod furniture_action;
 mod generation;
 mod hud;
 mod inventory_ui;
-mod java_save;
 mod level_map;
 mod player_actions;
 mod quest_tree;
@@ -72,16 +71,16 @@ use crate::resource::localization::Localization;
 
 pub use crate::entity::furniture::FurnitureKind;
 use entity::{EntityArena, EntityKind};
-pub use java_save::{import_java_save, probe_java_save};
+pub use crate::saveload::{import_java_save, probe_java_save};
 use random::JavaRandom;
 
 const TILE_SIZE: i32 = 16;
-const DAY_LENGTH: u32 = crate::core::updater::DAY_LENGTH;
-const MAX_STAT: u8 = 10;
+pub(crate) const DAY_LENGTH: u32 = crate::core::updater::DAY_LENGTH;
+pub(crate) const MAX_STAT: u8 = 10;
 fn default_render_gui() -> bool {
     true
 }
-const MAX_HEALTH: u8 = 20;
+pub(crate) const MAX_HEALTH: u8 = 20;
 const MAX_HUNGER_TICKS: i16 = 400;
 const HUNGER_STAMINA_STEPS: [i16; 3] = [10, 7, 5];
 const HUNGER_TICK_INTERVALS: [u64; 3] = [120, 30, 10];
@@ -159,7 +158,7 @@ fn direction_for_move(horizontal: i32, vertical: i32, current: Direction) -> Dir
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-enum ActiveItem {
+pub(crate) enum ActiveItem {
     Stack(ItemId),
     Tool(usize),
 }
@@ -172,42 +171,42 @@ pub(crate) enum CreativeEntry {
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Player {
-    x: i32,
-    y: i32,
-    direction: Direction,
-    walk_distance: u32,
-    attack_time: u8,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) direction: Direction,
+    pub(crate) walk_distance: u32,
+    pub(crate) attack_time: u8,
     #[serde(default = "default_direction")]
-    attack_direction: Direction,
+    pub(crate) attack_direction: Direction,
     #[serde(default)]
-    attack_item: Option<ActiveItem>,
-    health: u8,
-    max_health: u8,
-    stamina: u8,
-    hunger: u8,
-    armor: u8,
-    armor_kind: Option<ArmorKind>,
-    armor_damage_buffer: u8,
-    hurt_time: u8,
-    stamina_recharge: u8,
-    stamina_recharge_delay: u8,
-    hunger_stamina_count: i16,
-    hunger_ticks: i16,
-    step_count: u8,
-    hunger_charge_delay: u16,
-    hunger_starve_delay: u8,
-    potion_effects: [u16; PotionKind::ALL.len()],
-    regen_tick: u8,
-    fishing_level: Option<u8>,
-    fishing_ticks: u16,
-    watering_content: u16,
-    clothing: ItemId,
-    inventory: Inventory,
-    active_item: Option<ActiveItem>,
+    pub(crate) attack_item: Option<ActiveItem>,
+    pub(crate) health: u8,
+    pub(crate) max_health: u8,
+    pub(crate) stamina: u8,
+    pub(crate) hunger: u8,
+    pub(crate) armor: u8,
+    pub(crate) armor_kind: Option<ArmorKind>,
+    pub(crate) armor_damage_buffer: u8,
+    pub(crate) hurt_time: u8,
+    pub(crate) stamina_recharge: u8,
+    pub(crate) stamina_recharge_delay: u8,
+    pub(crate) hunger_stamina_count: i16,
+    pub(crate) hunger_ticks: i16,
+    pub(crate) step_count: u8,
+    pub(crate) hunger_charge_delay: u16,
+    pub(crate) hunger_starve_delay: u8,
+    pub(crate) potion_effects: [u16; PotionKind::ALL.len()],
+    pub(crate) regen_tick: u8,
+    pub(crate) fishing_level: Option<u8>,
+    pub(crate) fishing_ticks: u16,
+    pub(crate) watering_content: u16,
+    pub(crate) clothing: ItemId,
+    pub(crate) inventory: Inventory,
+    pub(crate) active_item: Option<ActiveItem>,
 }
 
 #[derive(Serialize, Deserialize)]
-struct SignEditor {
+pub(crate) struct SignEditor {
     level: usize,
     tile: usize,
     text: String,
@@ -222,26 +221,26 @@ pub enum WorldAction {
 
 #[derive(Serialize, Deserialize)]
 pub struct World {
-    width: usize,
-    height: usize,
-    levels: Vec<Level>,
-    current_level: usize,
-    player: Player,
-    seed: i64,
-    tick: u64,
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+    pub(crate) levels: Vec<Level>,
+    pub(crate) current_level: usize,
+    pub(crate) player: Player,
+    pub(crate) seed: i64,
+    pub(crate) tick: u64,
     #[serde(skip, default = "crate::assets::animation_millis")]
     animation_enter_millis: i64,
     #[serde(flatten, with = "clock_save")]
-    clock: crate::core::clock::SharedClock,
+    pub(crate) clock: crate::core::clock::SharedClock,
     #[serde(skip, default = "default_render_gui")]
     render_gui: bool,
     #[serde(default, with = "core_update")]
     updater: Updater,
-    days: u32,
-    difficulty: usize,
-    mode: GameMode,
-    score: u32,
-    score_ticks: i32,
+    pub(crate) days: u32,
+    pub(crate) difficulty: usize,
+    pub(crate) mode: GameMode,
+    pub(crate) score: u32,
+    pub(crate) score_ticks: i32,
     score_multiplier: u8,
     multiplier_ticks: u16,
     game_over: bool,
@@ -271,22 +270,22 @@ pub struct World {
     death_open: bool,
     #[serde(default)]
     death_selection: usize,
-    tutorials_enabled: bool,
-    quests_enabled: bool,
-    show_quests: bool,
-    progress: ProgressState,
-    signs: Vec<HashMap<usize, String>>,
-    sign_editor: Option<SignEditor>,
-    book_open: Option<(Book, usize)>,
+    pub(crate) tutorials_enabled: bool,
+    pub(crate) quests_enabled: bool,
+    pub(crate) show_quests: bool,
+    pub(crate) progress: ProgressState,
+    pub(crate) signs: Vec<HashMap<usize, String>>,
+    pub(crate) sign_editor: Option<SignEditor>,
+    pub(crate) book_open: Option<(Book, usize)>,
     #[serde(flatten, with = "pause_save")]
-    pause: PauseSession,
+    pub(crate) pause: PauseSession,
     #[serde(skip)]
     quest_tree_state: quest_tree::State,
-    inventory_open: bool,
+    pub(crate) inventory_open: bool,
     inventory_selection: usize,
     inventory_item_selection: usize,
     inventory_pane: usize,
-    crafting_station: Option<FurnitureKind>,
+    pub(crate) crafting_station: Option<FurnitureKind>,
     /// Open ContainerDisplay chest entity (Java Chest.use → ContainerDisplay).
     #[serde(default)]
     container_id: Option<u64>,
@@ -295,11 +294,11 @@ pub struct World {
     #[serde(default)]
     personal_crafting: bool,
     #[serde(default, rename = "notification", with = "notifications")]
-    notifications: Notifications,
+    pub(crate) notifications: Notifications,
     #[serde(skip)]
     notification_context: notifications::Context,
-    air_wizard_defeated: bool,
-    obsidian_knight_defeated: bool,
+    pub(crate) air_wizard_defeated: bool,
+    pub(crate) obsidian_knight_defeated: bool,
     random: random::JavaRandom,
     #[serde(skip)]
     sound_events: Vec<SoundEffect>,
@@ -393,7 +392,7 @@ impl World {
         self.sound_events.push(effect);
     }
 
-    fn validate_save(&self) -> Result<(), String> {
+    pub(crate) fn validate_save(&self) -> Result<(), String> {
         if self.width == 0 || self.height == 0 || self.width > 512 || self.height > 512 {
             return Err(format!(
                 "invalid saved world dimensions {}x{}",
