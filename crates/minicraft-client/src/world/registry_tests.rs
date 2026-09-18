@@ -2484,3 +2484,22 @@ fn gameplay_ticks_feed_fluid_animation_phase_reader() {
     });
     assert_eq!(world.tile_ticks(), 2);
 }
+
+#[test]
+fn last_tool_durability_removes_equipped_tool_and_frees_bag_slot() {
+    let mut world = tiny_world();
+    let target = 9 + 8 * world.width;
+    world.levels[0].tiles[target] = Tile::Tree;
+    let mut axe = ToolItem::new(ToolKind::Axe, ToolTier::Wood);
+    axe.durability = 1;
+    world.player.inventory.add_tool(axe);
+    world.player.inventory.add_tool(ToolItem::new(ToolKind::Sword, ToolTier::Wood));
+    world.player.active_item = Some(ActiveItem::Tool(0));
+
+    world.attack();
+
+    assert_eq!(world.player.inventory.used_slots(), 1);
+    assert_eq!(world.player.inventory.tools()[0].kind, ToolKind::Sword);
+    assert_eq!(world.player.active_item, None);
+    assert_eq!(world.player.attack_item, None);
+}

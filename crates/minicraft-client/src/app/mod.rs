@@ -34,6 +34,44 @@ use crate::{
     },
 };
 
+#[cfg(windows)]
+fn set_embedded_window_icon(window: &Window) {
+    use std::ffi::c_void;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+    }
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn LoadImageW(
+            instance: *mut c_void,
+            name: *const u16,
+            image_type: u32,
+            width: i32,
+            height: i32,
+            flags: u32,
+        ) -> *mut c_void;
+        fn SendMessageW(window: *mut c_void, message: u32, wparam: usize, lparam: isize) -> isize;
+    }
+
+    // Resource ID 1 comes from build.rs. Windows chooses the appropriate ICO
+    // layer for the title bar and taskbar; no external file is needed at run time.
+    unsafe {
+        let module = GetModuleHandleW(std::ptr::null());
+        let resource = 1usize as *const u16;
+        let hwnd = window.get_window_handle();
+        let small = LoadImageW(module, resource, 1, 16, 16, 0);
+        let large = LoadImageW(module, resource, 1, 32, 32, 0);
+        if !small.is_null() {
+            SendMessageW(hwnd, 0x0080, 0, small as isize);
+        }
+        if !large.is_null() {
+            SendMessageW(hwnd, 0x0080, 1, large as isize);
+        }
+    }
+}
+
 pub fn self_check(arguments: &[String]) -> Result<(), String> {
     let config = Config::load(arguments)?;
     let assets = Assets::load(&[])?;
@@ -137,7 +175,7 @@ impl State {
     pub(super) fn title(selection: usize, ticks: u64) -> Self {
         // Compatibility index is TITLE_KEYS order (0=Play); menu has 2 leading rows.
         let menu = build_title_menu(&Localization::load("en-us", &[]), 1, selection + 2);
-        State::Title { menu, ticks }
+        State::Title { menu, ticks, splash: "Now with skins!" }
     }
 }
 
@@ -145,6 +183,7 @@ enum State {
     Title {
         menu: crate::screen::menu::Menu,
         ticks: u64,
+        splash: &'static str,
     },
     Options {
         menu: crate::screen::menu::Menu,
@@ -293,6 +332,8 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
         },
     )
     .map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    set_embedded_window_icon(&window);
     window.set_target_fps(config.settings.fps);
     let mut presenter = match Presenter::new(&window, config.settings.hwa) {
         Ok(presenter) => presenter,
@@ -310,6 +351,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
     displays.open(State::Title {
         menu: build_title_menu(&localization, world_records.len(), 0),
         ticks: 0,
+        splash: crate::screen::title_display::random_splash(),
     });
     displays.update();
     let audio = Audio::default();
@@ -378,7 +420,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             let mut settings_changed = false;
             let mut menu_events = Vec::new();
             let transition = match displays.current_mut().expect("application screen") {
-                State::Title { menu, ticks } => {
+                State::Title { menu, ticks, .. } => {
                     let (transition, event) = tick_title_menu_event(
                         menu,
                         ticks,
@@ -653,6 +695,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                         State::Title {
                             menu: build_title_menu(&localization, world_records.len(), 0),
                             ticks: 0,
+                            splash: crate::screen::title_display::random_splash(),
                         },
                     );
                 }
@@ -928,6 +971,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                         State::Title {
                             menu: build_title_menu(&localization, world_records.len(), 4),
                             ticks: 0,
+                            splash: crate::screen::title_display::random_splash(),
                         },
                     );
                 }
@@ -940,6 +984,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                         State::Title {
                             menu: build_title_menu(&localization, world_records.len(), 4),
                             ticks: 0,
+                            splash: crate::screen::title_display::random_splash(),
                         },
                     );
                 }
@@ -1044,8 +1089,8 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
 
         screen.clear(0);
         match displays.current_mut().expect("application screen") {
-            State::Title { menu, ticks } => {
-                render_title_menu(&mut screen, &assets, &localization, menu, *ticks)
+            State::Title { menu, ticks, splash } => {
+                render_title_menu(&mut screen, &assets, &localization, menu, *ticks, splash)
             }
             State::Options { menu } => {
                 // Rebuild if settings-driven labels may be stale after entry edits.
@@ -1113,36 +1158,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 );
             }
             State::ControlGuide { menu, controller } => {
-                menu.render(&mut screen, assets.hud(), assets.font());
-                crate::gfx::font::draw_centered(
-                    &mut screen,
-                    assets.font(),
-                    localization.text("minicraft.displays.controls"),
-                    0,
-                    0xFF_FF_FF,
-                );
-                crate::gfx::font::draw_centered(
-                    &mut screen,
-                    assets.font(),
-                    localization.text(if *controller {
-                        "minicraft.displays.controls.display.controller"
-                    } else {
-                        "minicraft.displays.controls.display.keyboard"
-                    }),
-                    10,
-                    0xFF_FF_FF,
-                );
-                crate::gfx::font::draw_centered(
-                    &mut screen,
-                    assets.font(),
-                    if *controller {
-                        "CONTROLLER INPUTS"
-                    } else {
-                        "KEYBOARD INPUTS"
-                    },
-                    HEIGHT as i32 - 16,
-                    0x99_99_99,
-                );
+                render_controls_menu(&mut screen, &assets, &localization, menu, !*controller, None);
             }
             State::Skins { menu, ticks } => {
                 // Preview the selection without requiring a preview transition (Java tick+render).
@@ -1157,56 +1173,15 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 );
             }
             State::ResourcePacks { menu } => {
-                screen.centered_text(
-                    assets.font(),
-                    localization.text("minicraft.displays.resource_packs.display.title"),
-                    6,
+                render_resource_packs(
+                    &mut screen,
+                    &assets,
+                    &localization,
+                    &packs,
+                    &config.settings.resource_packs,
+                    menu.selection,
+                    &config.settings.key_bindings,
                 );
-                if let Some(pack) = packs.get(menu.selection) {
-                    if let Some(logo) = &pack.logo {
-                        let xo = (WIDTH as i32 - logo.width as i32) / 2;
-                        let yo = 36 - logo.height as i32 / 2;
-                        screen.blit(logo, xo, yo);
-                    }
-                }
-                // Left column: pack names; indicators menu is unused for now (Java dual menu).
-                menu.render(&mut screen, assets.hud(), assets.font());
-                let bindings = &config.settings.key_bindings;
-                for (message, y) in [
-                    (
-                        localization.format(
-                            "minicraft.displays.resource_packs.display.help.move",
-                            &[&bindings.display_mapping("CURSOR-UP"), &bindings.display_mapping("CURSOR-DOWN")],
-                        ),
-                        HEIGHT as i32 - 33,
-                    ),
-                    (
-                        localization.format(
-                            "minicraft.displays.resource_packs.display.help.reorder",
-                            &[
-                                &bindings.display_mapping("CURSOR-LEFT"),
-                                &bindings.display_mapping("CURSOR-RIGHT"),
-                            ],
-                        ),
-                        HEIGHT as i32 - 25,
-                    ),
-                    (
-                        localization.format(
-                            "minicraft.displays.resource_packs.display.help.select",
-                            &[&bindings.select],
-                        ),
-                        HEIGHT as i32 - 17,
-                    ),
-                    (
-                        localization.format(
-                            "minicraft.displays.resource_packs.display.help.info",
-                            &[&bindings.menu],
-                        ),
-                        HEIGHT as i32 - 9,
-                    ),
-                ] {
-                    crate::gfx::font::draw_centered(&mut screen, assets.font(), &message, y, 0x33_33_33);
-                }
             }
             State::Playing { world, .. } => {
                 world.render_with_ready(&mut screen, &assets, &localization, game.ready())

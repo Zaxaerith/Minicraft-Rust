@@ -25,7 +25,18 @@ pub fn build_menu(localization: &Localization, keyboard: bool, selection: usize)
     let mut entries = Vec::with_capacity(count);
     for i in 0..count {
         let key = format!("{prefix}.{i:02}");
-        entries.push(Entry::select(localization.text(&key), false));
+        // Java StringEntry.useLines runs Font.getLines with Screen.w - 20
+        // before adding rows. A long localized line may occupy several rows.
+        for line in crate::gfx::font::get_lines(
+            localization.text(&key),
+            WIDTH as i32 - 20,
+            HEIGHT as i32 * 2,
+            0,
+            false,
+        ) {
+            // Java StringEntry keeps WHITE for both selected and unselected rows.
+            entries.push(Entry::select_colored(line, super::entry::COL_SLCT));
+        }
     }
     MenuBuilder::new(false, 0, RelPos::CENTER, entries)
         .set_display_length(DISPLAY_LENGTH)
@@ -67,7 +78,8 @@ mod tests {
     fn keyboard_controls_menu_matches_java_display_length_and_anchor() {
         let localization = Localization::load("en-us", &[]);
         let menu = build_menu(&localization, true, 0);
-        assert_eq!(menu.entries.len(), KEYBOARD_LINES);
+        assert!(menu.entries.len() > KEYBOARD_LINES);
+        assert!(menu.entries.iter().all(|entry| entry.width() <= WIDTH as i32 - 20));
         assert_eq!(menu.display_length, DISPLAY_LENGTH);
         assert_eq!(menu.spacing, 0);
         assert!(menu.selectable);
@@ -79,7 +91,8 @@ mod tests {
     fn controller_controls_menu_has_sixteen_lines() {
         let localization = Localization::load("en-us", &[]);
         let menu = build_menu(&localization, false, 0);
-        assert_eq!(menu.entries.len(), CONTROLLER_LINES);
+        assert!(menu.entries.len() >= CONTROLLER_LINES);
+        assert!(menu.entries.iter().all(|entry| entry.width() <= WIDTH as i32 - 20));
     }
 
     #[test]

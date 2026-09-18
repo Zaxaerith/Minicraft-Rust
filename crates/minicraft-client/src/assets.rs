@@ -86,7 +86,7 @@ impl Assets {
             "title",
             png(include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../assets/assets/textures/gui/title.png"
+                "/../../assets/assets/textures/gui/title_rust.png"
             )))?,
         );
         assets.sheets.set(

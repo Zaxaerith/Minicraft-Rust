@@ -34,6 +34,18 @@ Still required before claiming full stage-15 / 1:1 completion:
 
 ## What currently runs
 
+2026-09-18 local fixes: the controls guide now uses Java's line wrapping and
+white entry text, the language list is centered, the resource-pack page again
+shows its default pack/check mark/logo, and exhausted tools are removed from
+the inventory when an attack uses their last durability. The title splash now
+changes on each new title screen using Java 2.2.4 text. The title uses the
+bundled Minicraft pixel lettering with a new `RUST` suffix. Windows builds embed
+`assets/branding/minicraft-rust.ico` into the EXE and uses it for the game
+window (Windows SDK `rc.exe` is required). The ICO contains independently
+rendered pixel-sharp sizes from 16 to 256 pixels. To regenerate the branding
+assets, install Pillow and run
+`python branding/generate.py`; normal builds do not require Pillow.
+
 The root `minicraft-rust` package is a thin binary entry that launches the
 client in `minicraft-client`. It opens a native window with the original
 288×192 pixel canvas and local 2.2.4 artwork.

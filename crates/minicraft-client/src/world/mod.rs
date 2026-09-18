@@ -1136,6 +1136,25 @@ impl World {
     }
 
     fn attack(&mut self) {
+        self.attack_inner();
+        self.remove_depleted_active_tool();
+    }
+
+    fn remove_depleted_active_tool(&mut self) {
+        let Some(ActiveItem::Tool(index)) = self.player.active_item else {
+            return;
+        };
+        if self.player.inventory.tools().get(index).is_some_and(|tool| tool.is_depleted()) {
+            self.player.inventory.tools.remove(index);
+            self.player.active_item = None;
+            self.player.attack_item = None;
+            self.inventory_item_selection = self.inventory_item_selection.min(
+                self.player.inventory.used_slots().saturating_sub(1)
+            );
+        }
+    }
+
+    fn attack_inner(&mut self) {
         self.player.walk_distance = self.player.walk_distance.wrapping_add(8);
         self.player.attack_time = if self.player.active_item.is_some() {
             10

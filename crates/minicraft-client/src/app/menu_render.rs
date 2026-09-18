@@ -105,6 +105,7 @@ pub(super) fn render_title_menu(
     localization: &Localization,
     menu: &crate::screen::menu::Menu,
     ticks: u64,
+    splash: &str,
 ) {
     screen.blit(
         assets.title(),
@@ -118,7 +119,7 @@ pub(super) fn render_title_menu(
     crate::gfx::font::draw_centered(
         screen,
         assets.font(),
-        "Now with skins!",
+        splash,
         HEIGHT as i32 / 2 - 44,
         splash_color as u32,
     );
@@ -744,9 +745,11 @@ pub(super) fn render_languages_menu(
         // Java LocaleInformation.toString() = "Name (Region)"; do not append the code.
         let label = name;
         let y = 30 + row as i32 * 10;
+        let label_width = crate::gfx::font::text_width(label);
+        let x = (WIDTH as i32 - label_width) / 2;
         if index == selection {
-            screen.text(assets.font(), ">", 41, y);
-            screen.text(assets.font(), "<", 239, y);
+            screen.text(assets.font(), ">", x - 16, y);
+            screen.text(assets.font(), "<", x + label_width + 8, y);
         }
         let color = if code.eq_ignore_ascii_case(current_locale) {
             if index == selection {
@@ -759,7 +762,7 @@ pub(super) fn render_languages_menu(
         } else {
             0x99_99_99
         };
-        screen.text_colored(assets.font(), label, 53, y, color);
+        screen.text_colored(assets.font(), label, x, y, color);
     }
 }
 

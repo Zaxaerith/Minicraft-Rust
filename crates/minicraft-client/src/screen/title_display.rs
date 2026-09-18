@@ -22,6 +22,49 @@ pub const TITLE_KEYS: [&str; 6] = [
 /// Checking StringEntry + BlankEntry precede the selectable rows.
 pub const LEADING_ROWS: usize = 2;
 
+// Java TitleDisplay chooses a new splash when the title screen is created.
+// These entries are from its ordinary (non-secret/non-birthday) pool.
+const SPLASHES: &[&str] = &[
+    "Now with skins!",
+    "Now with better fishing!",
+    "Now with better tools!",
+    "Now with better chests!",
+    "Now with better dungeons!",
+    "Only on PlayMinicraft.com!",
+    "The Wiki is weak! Help it!",
+    "Notch is Awesome!",
+    "Dillyg10 is cool as Ice!",
+    "Shylor is the man!",
+    "Chris J is great with portals!",
+    "AntVenom loves cows! Honest!",
+    "You should read Antidious Venomi!",
+    "Keep calm!",
+    "Get him, Paul!",
+    "Forty-Two!",
+    "Kill Creeper, get Gunpowder!",
+    "Kill Cow, get Beef!",
+    "Kill Zombie, get Cloth!",
+    "Kill Slime, get Slime!",
+    "Kill Skeleton, get Bones!",
+    "Kill Sheep, get Wool!",
+    "Kill Pig, get Porkchop!",
+    "Gold > Iron",
+    "Gem > Gold",
+    "Story? Uhh...",
+    "Infinite terrain? What's that?",
+    "Windows? I prefer Doors!",
+    "2.5D FTW!",
+    "3rd dimension not included!",
+];
+
+pub fn random_splash() -> &'static str {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    SPLASHES[(seed % SPLASHES.len() as u128) as usize]
+}
+
 /// Compatibility index is TITLE_KEYS order (0=Play); menu has 2 leading rows.
 pub fn menu_selection_for_action(action: usize) -> usize {
     action + LEADING_ROWS
