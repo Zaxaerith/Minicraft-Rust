@@ -42,7 +42,7 @@ pub(crate) fn render_container(
         &player_entries,
         "Inventory",
         player_x,
-        Some(player_selection),
+        (focus == 0).then_some(player_selection),
     );
     render_inventory_panel(
         screen,
@@ -50,24 +50,41 @@ pub(crate) fn render_container(
         &chest_entries,
         "Chest",
         chest_x,
-        Some(chest_selection),
+        (focus == 1).then_some(chest_selection),
     );
-    crate::gfx::gui::render_inventory_counter(
-        screen,
-        assets.inventory_counter(),
-        player_x + player_width,
-        9,
-        player_entries.len(),
-        player.inventory.capacity(),
-    );
-    crate::gfx::gui::render_inventory_counter_minimized(
-        screen,
-        assets.inventory_counter(),
-        chest_x + chest_width,
-        9,
-        chest_entries.len(),
-    );
-    let _ = focus;
+    if focus == 0 {
+        crate::gfx::gui::render_inventory_counter(
+            screen,
+            assets.inventory_counter(),
+            player_x + player_width,
+            9,
+            player_entries.len(),
+            player.inventory.capacity(),
+        );
+        crate::gfx::gui::render_inventory_counter_minimized(
+            screen,
+            assets.inventory_counter(),
+            chest_x + chest_width,
+            9,
+            chest_entries.len(),
+        );
+    } else {
+        crate::gfx::gui::render_inventory_counter_minimized(
+            screen,
+            assets.inventory_counter(),
+            player_x + player_width,
+            9,
+            player_entries.len(),
+        );
+        crate::gfx::gui::render_inventory_counter(
+            screen,
+            assets.inventory_counter(),
+            chest_x + chest_width,
+            9,
+            chest_entries.len(),
+            27,
+        );
+    }
     screen.text_colored(
         assets.font(),
         "LEFT bag RIGHT chest  C move  ESC close",

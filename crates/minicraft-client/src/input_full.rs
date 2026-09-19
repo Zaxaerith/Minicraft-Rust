@@ -112,6 +112,7 @@ pub use crate::io::Input;
 pub struct Gamepad {
     previous_buttons: u16,
     previous_directions: u8,
+    previous_triggers: u8,
     backend: gamepad_platform::Backend,
 }
 
@@ -120,6 +121,7 @@ impl Default for Gamepad {
         Self {
             previous_buttons: 0,
             previous_directions: 0,
+            previous_triggers: 0,
             backend: gamepad_platform::Backend::new(),
         }
     }
@@ -138,9 +140,12 @@ impl Gamepad {
             | (u8::from(state.right) << 3);
         let previous = self.previous_directions;
         let pressed = directions & !previous;
+        let triggers = u8::from(state.left_trigger) | (u8::from(state.right_trigger) << 1);
+        let trigger_pressed = triggers & !self.previous_triggers;
         let newly_pressed = state.buttons & !self.previous_buttons;
         self.previous_buttons = state.buttons;
         self.previous_directions = directions;
+        self.previous_triggers = triggers;
         GamepadInput {
             up: state.up,
             down: state.down,
@@ -148,8 +153,10 @@ impl Gamepad {
             right: state.right,
             up_pressed: pressed & 1 != 0,
             down_pressed: pressed & 2 != 0,
-            left_pressed: pressed & 4 != 0,
-            right_pressed: pressed & 8 != 0,
+            // Java Display accepts both cursor directions and triggers when
+            // moving between sibling menus such as player/chest.
+            left_pressed: pressed & 4 != 0 || trigger_pressed & 1 != 0,
+            right_pressed: pressed & 8 != 0 || trigger_pressed & 2 != 0,
             select: newly_pressed & gamepad_platform::A != 0,
             exit: newly_pressed & (gamepad_platform::B | gamepad_platform::START) != 0,
             // Java InputHandler.buttonMap: ATTACK=A, MENU=X, CRAFT=Y, PICKUP=LEFTBUMPER.
@@ -384,6 +391,20 @@ mod tests {
             ..RawGamepadState::default()
         });
         assert!(craft.right_pressed && craft.craft && !craft.menu);
+
+        gamepad.apply(RawGamepadState::default());
+        let triggers = gamepad.apply(RawGamepadState {
+            left_trigger: true,
+            right_trigger: true,
+            ..RawGamepadState::default()
+        });
+        assert!(triggers.left_pressed && triggers.right_pressed);
+        let held_triggers = gamepad.apply(RawGamepadState {
+            left_trigger: true,
+            right_trigger: true,
+            ..RawGamepadState::default()
+        });
+        assert!(!held_triggers.left_pressed && !held_triggers.right_pressed);
     }
 
     #[test]
@@ -469,6 +490,8 @@ struct RawGamepadState {
     down: bool,
     left: bool,
     right: bool,
+    left_trigger: bool,
+    right_trigger: bool,
 }
 
 #[cfg(windows)]
@@ -489,6 +512,7 @@ mod gamepad_platform {
     const DPAD_LEFT: u16 = 0x0004;
     const DPAD_RIGHT: u16 = 0x0008;
     const STICK_THRESHOLD: i16 = 12_000;
+    const TRIGGER_THRESHOLD: u8 = 30;
 
     #[repr(C)]
     #[derive(Default)]
@@ -559,6 +583,8 @@ mod gamepad_platform {
                 down: pad.buttons & DPAD_DOWN != 0 || pad.thumb_ly < -STICK_THRESHOLD,
                 left: pad.buttons & DPAD_LEFT != 0 || pad.thumb_lx < -STICK_THRESHOLD,
                 right: pad.buttons & DPAD_RIGHT != 0 || pad.thumb_lx > STICK_THRESHOLD,
+                left_trigger: pad.left_trigger > TRIGGER_THRESHOLD,
+                right_trigger: pad.right_trigger > TRIGGER_THRESHOLD,
             }
         }
     }
@@ -651,6 +677,8 @@ mod gamepad_platform {
                     || controller.axis(Axis::LeftX) < -STICK_THRESHOLD,
                 right: controller.button(Button::DPadRight)
                     || controller.axis(Axis::LeftX) > STICK_THRESHOLD,
+                left_trigger: controller.axis(Axis::TriggerLeft) > STICK_THRESHOLD,
+                right_trigger: controller.axis(Axis::TriggerRight) > STICK_THRESHOLD,
             }
         }
     }

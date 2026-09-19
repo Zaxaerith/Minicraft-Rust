@@ -296,7 +296,8 @@ mod tests {
             stack.current(),
             Some(State::Title {
                 menu,
-                ticks: 73
+                ticks: 73,
+                ..
             }) if menu.selection == 3 // Options is entry 3 after checking+blank+Play
         ));
     }
@@ -356,7 +357,7 @@ mod tests {
     fn real_title_and_options_input_use_stack_and_freeze_title_while_covered() {
         let mut stack = title();
         let mut settings = crate::io::Settings::default();
-        let Some(State::Title { menu, ticks }) = stack.current_mut() else {
+        let Some(State::Title { menu, ticks, .. }) = stack.current_mut() else {
             panic!()
         };
         let transition = super::super::tick_title_menu_event(
@@ -400,7 +401,8 @@ mod tests {
             stack.current(),
             Some(State::Title {
                 menu,
-                ticks: 74
+                ticks: 74,
+                ..
             }) if menu.selection == 3
         ));
     }

@@ -185,8 +185,15 @@ fn menu_key_opens_chest_container_and_transfers_items() {
     assert!(world.inventory_open);
     assert_eq!(world.container_id, Some(id));
 
-    // Move one wood from chest to bag.
-    world.inventory_pane = 1;
+    // Java CURSOR-RIGHT enters the chest menu; MOVE-RIGHT is not the menu key.
+    let mut move_only = Input::default();
+    move_only.right_pressed = true;
+    let _ = world.tick_container_ui(&move_only);
+    assert_eq!(world.inventory_pane, 0);
+    let mut enter_chest = Input::default();
+    enter_chest.cursor_right_pressed = true;
+    let _ = world.tick_container_ui(&enter_chest);
+    assert_eq!(world.inventory_pane, 1);
     world.inventory_selection = 0;
     let mut attack = Input::default();
     attack.attack = true;

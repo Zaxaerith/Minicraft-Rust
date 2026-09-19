@@ -46,6 +46,10 @@ rendered pixel-sharp sizes from 16 to 256 pixels. To regenerate the branding
 assets, install Pillow and run
 `python branding/generate.py`; normal builds do not require Pillow.
 
+2026-09-19 container fix: keyboard pane navigation now follows Java's
+`CURSOR-*` controls, the focused player/chest panel is visibly distinguished,
+and controllers can switch panels with the D-pad/stick or shoulder triggers.
+
 The root `minicraft-rust` package is a thin binary entry that launches the
 client in `minicraft-client`. It opens a native window with the original
 288×192 pixel canvas and local 2.2.4 artwork.

@@ -1671,12 +1671,14 @@ impl World {
             self.sound(SoundEffect::Craft);
             return WorldAction::None;
         }
-        // Left/right switch panes (Java ContainerDisplay selection 0/1).
-        if input.left_pressed {
+        // Java Display switches sibling menus with CURSOR-LEFT/RIGHT. Keep
+        // MOVE-LEFT/RIGHT independent so remapping movement cannot strand the
+        // keyboard user in the player pane.
+        if input.cursor_left_pressed {
             self.inventory_pane = 0;
             self.sound(SoundEffect::Select);
         }
-        if input.right_pressed {
+        if input.cursor_right_pressed {
             self.inventory_pane = 1;
             self.sound(SoundEffect::Select);
         }
@@ -1692,25 +1694,25 @@ impl World {
             )
         };
         if self.inventory_pane == 0 {
-            if input.up_pressed {
+            if input.cursor_up_pressed {
                 self.inventory_item_selection = self
                     .inventory_item_selection
                     .checked_sub(1)
                     .unwrap_or(from_count.saturating_sub(1));
                 self.sound(SoundEffect::Select);
             }
-            if input.down_pressed {
+            if input.cursor_down_pressed {
                 self.inventory_item_selection =
                     (self.inventory_item_selection + 1) % from_count.max(1);
                 self.sound(SoundEffect::Select);
             }
-        } else if input.up_pressed {
+        } else if input.cursor_up_pressed {
             self.inventory_selection = self
                 .inventory_selection
                 .checked_sub(1)
                 .unwrap_or(from_count.saturating_sub(1));
             self.sound(SoundEffect::Select);
-        } else if input.down_pressed {
+        } else if input.cursor_down_pressed {
             self.inventory_selection = (self.inventory_selection + 1) % from_count.max(1);
             self.sound(SoundEffect::Select);
         }
