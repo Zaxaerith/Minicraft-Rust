@@ -1,4 +1,5 @@
 //! Java `farming.FarmTile` — moisture farmland.
+#[cfg(test)]
 use crate::level::tile::Tile;
 
 /// Moisture nibble mask (3 bits).

@@ -1,5 +1,6 @@
 //! Java `SkinDisplay.java` — skin list and preview animation.
 use crate::gfx::{HEIGHT, WIDTH};
+#[cfg(test)]
 use crate::resource::localization::Localization;
 
 use super::entry::Entry;
@@ -70,7 +71,7 @@ pub fn help_select_y() -> i32 {
 }
 
 /// Java confirmExit: selected skin at menu selection index.
-pub fn selected_skin<'a>(skins: &'a [String], selection: usize) -> Option<&'a str> {
+pub fn selected_skin(skins: &[String], selection: usize) -> Option<&str> {
     skins.get(selection).map(String::as_str)
 }
 

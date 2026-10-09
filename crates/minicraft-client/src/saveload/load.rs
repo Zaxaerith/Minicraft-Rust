@@ -4,7 +4,7 @@
 //! `World`. Version gates follow Java `Load.loadGame` / `loadPlayer` /
 //! `loadInventory`; pre-2.2 name migrations live in `super::legacy_load`.
 
-use std::{fs, path::Path};
+use std::path::Path;
 
 use serde_json::Value;
 
@@ -17,6 +17,7 @@ use crate::world::{
 };
 
 use super::legacy_load::{self, sub_old_name};
+use super::storage::read_text_limited;
 use super::version::{Version, milestones};
 
 /// Reference layout stamp (Java `Game.VERSION` for this port).
@@ -69,8 +70,8 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     let seed = parse_seed(&game, &world_ver)?;
     let (mode, score_ticks, score_minutes) = parse_mode(field(&game, 2, "mode")?, &world_ver)?;
     let raw_difficulty = parse::<i32>(field(&game, 5, "difficulty")?, "difficulty")?;
-    let difficulty = (legacy_load::adjust_difficulty_index(raw_difficulty, &world_ver)).clamp(0, 2)
-        as usize;
+    let difficulty =
+        (legacy_load::adjust_difficulty_index(raw_difficulty, &world_ver)).clamp(0, 2) as usize;
 
     let first_level = read_save(&directory.join("Level0.miniplussave"))?;
     let width = parse::<usize>(field(&first_level, 0, "level width")?, "level width")?;
@@ -203,8 +204,8 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     world.levels = levels;
     world.signs = vec![Default::default(); LEVEL_COUNT];
 
-    import_inventory(directory, &mut world, &world_ver)?;
     import_player(directory, &mut world, &world_ver)?;
+    import_inventory(directory, &mut world, &world_ver)?;
     import_entities(directory, &mut world, &world_ver)?;
     import_signs(directory, &mut world)?;
     import_unlocks(directory, &mut world)?;
@@ -271,8 +272,7 @@ fn import_player(directory: &Path, world: &mut World, world_ver: &Version) -> Re
         world.player.hunger = parse::<u8>(take!("hunger"), "hunger")?.min(MAX_STAT);
     }
     world.player.armor = parse(take!("armor durability"), "armor durability")?;
-    world.player.armor_damage_buffer =
-        parse(take!("armor damage buffer"), "armor damage buffer")?;
+    world.player.armor_damage_buffer = parse(take!("armor damage buffer"), "armor damage buffer")?;
     let armor_name = take!("armor kind").to_owned();
     world.player.armor_kind = armor_from_java(&sub_old_name(&armor_name, world_ver));
     world.score = parse(take!("score"), "score")?;
@@ -283,7 +283,7 @@ fn import_player(directory: &Path, world: &mut World, world_ver: &Version) -> Re
             world.current_level
         ));
     }
-    let potions = take!("potion effects").to_owned();
+    let potions = field(&player, cursor, "potion effects")?.to_owned();
     import_potions(&potions, &mut world.player.potion_effects)?;
     Ok(())
 }
@@ -304,13 +304,19 @@ fn import_inventory(
     let mut active = None;
     for (index, entry) in saved.iter().filter(|entry| !entry.is_empty()).enumerate() {
         let migrated = sub_old_name(entry, world_ver);
-        if compact(&migrated).contains("powerglove") || compact(&migrated).contains("totemofwind")
-        {
+        if compact(&migrated).contains("powerglove") || compact(&migrated).contains("totemofwind") {
             continue;
         }
         match item_from_java(&migrated)? {
             ImportedItem::Stack(item, count) => {
-                inventory.add(item, count);
+                let remainder = inventory.add(item, count);
+                if remainder > 0 {
+                    world.levels[world.current_level].entities.spawn_item(
+                        crate::item::ItemStack::new(item, remainder),
+                        world.player.x,
+                        world.player.y,
+                    );
+                }
                 if index == 0 {
                     active = Some(ActiveItem::Stack(item));
                 }
@@ -338,11 +344,7 @@ fn import_inventory(
     Ok(())
 }
 
-fn import_entities(
-    directory: &Path,
-    world: &mut World,
-    world_ver: &Version,
-) -> Result<(), String> {
+fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> Result<(), String> {
     let path = directory.join("Entities.miniplussave");
     if !path.exists() {
         return Ok(());
@@ -427,11 +429,8 @@ fn import_signs(directory: &Path, world: &mut World) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
-    let value: Value = serde_json::from_str(
-        &fs::read_to_string(&path)
-            .map_err(|error| format!("cannot read {}: {error}", path.display()))?,
-    )
-    .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
+    let value: Value = serde_json::from_str(&read_text_limited(&path, MAX_JAVA_FILE_BYTES)?)
+        .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
     let Some(signs) = value.get("signs").and_then(Value::as_array) else {
         return Ok(());
     };
@@ -468,11 +467,8 @@ fn import_unlocks(directory: &Path, world: &mut World) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
-    let value: Value = serde_json::from_str(
-        &fs::read_to_string(&path)
-            .map_err(|error| format!("cannot read {}: {error}", path.display()))?,
-    )
-    .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
+    let value: Value = serde_json::from_str(&read_text_limited(&path, MAX_JAVA_FILE_BYTES)?)
+        .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
     if let Some(achievements) = value.get("unlockedAchievements").and_then(Value::as_array) {
         for id in achievements.iter().filter_map(Value::as_str) {
             world.progress.unlock_achievement(id);
@@ -482,14 +478,7 @@ fn import_unlocks(directory: &Path, world: &mut World) -> Result<(), String> {
 }
 
 fn read_save(path: &Path) -> Result<Vec<String>, String> {
-    let size = fs::metadata(path)
-        .map_err(|error| format!("cannot inspect Java save {}: {error}", path.display()))?
-        .len();
-    if size > MAX_JAVA_FILE_BYTES {
-        return Err(format!("Java save {} exceeds 64 MiB", path.display()));
-    }
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("cannot read Java save {}: {error}", path.display()))?;
+    let text = read_text_limited(path, MAX_JAVA_FILE_BYTES)?;
     split_unwrapped(&text).map_err(|error| format!("{}: {error}", path.display()))
 }
 
@@ -566,7 +555,8 @@ fn require_version(game: &[String]) -> Result<Version, String> {
 fn parse_mode(text: &str, world_ver: &Version) -> Result<(GameMode, i32, usize), String> {
     let fields: Vec<&str> = text.split(';').collect();
     let raw_mode = parse::<i32>(fields[0], "game mode")?;
-    let mode = GameMode::from_index(legacy_load::adjust_mode_index(raw_mode, world_ver).max(0) as usize);
+    let mode =
+        GameMode::from_index(legacy_load::adjust_mode_index(raw_mode, world_ver).max(0) as usize);
     let score_ticks = fields
         .get(1)
         .and_then(|value| value.parse().ok())
@@ -603,10 +593,7 @@ fn tile_from_java(
         } else if world_ver.less_than(&Version::parse("2.3.0-dev1")) {
             key = "whitewool".to_owned();
         }
-    } else if depth == 1
-        && key == "lapis"
-        && world_ver.less_than(&Version::parse("2.0.3-dev6"))
-    {
+    } else if depth == 1 && key == "lapis" && world_ver.less_than(&Version::parse("2.0.3-dev6")) {
         // Java randomly converts most surface lapis to gem ore on pre-2.0.3-dev6.
         key = "gemore".to_owned();
     }
@@ -968,7 +955,7 @@ mod tests {
             .set_len(MAX_JAVA_FILE_BYTES + 1)
             .unwrap();
         let error = probe_java_save(&root).unwrap_err();
-        assert!(error.contains("exceeds 64 MiB"));
+        assert!(error.contains("read limit"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -977,7 +964,7 @@ mod tests {
         let game = vec!["1.9.2".to_owned()];
         let error = require_version(&game).unwrap_err();
         assert!(error.contains("unsupported Java save version"), "{error}");
-        let modern = require_version(&vec![JAVA_VERSION.to_owned()]).unwrap();
+        let modern = require_version(&[JAVA_VERSION.to_owned()]).unwrap();
         assert_eq!(modern.to_string(), JAVA_VERSION);
     }
 
@@ -1035,7 +1022,8 @@ mod tests {
         let version = require_version(&parsed).unwrap();
         assert_eq!(version.to_string(), JAVA_VERSION);
         assert_eq!(parse_seed(&parsed, &version).unwrap(), 42);
-        let (mode, ticks, minutes) = parse_mode(field(&parsed, 2, "mode").unwrap(), &version).unwrap();
+        let (mode, ticks, minutes) =
+            parse_mode(field(&parsed, 2, "mode").unwrap(), &version).unwrap();
         assert_eq!(mode, GameMode::Score);
         assert_eq!((ticks, minutes), (600, 20));
         assert!(parse_bool(field(&parsed, 6, "Air Wizard state").unwrap()));

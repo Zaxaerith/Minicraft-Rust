@@ -6,8 +6,8 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::saveload::storage::{atomic_write, read_candidates_limited};
 use crate::io::key_names::key_name_exists;
+use crate::saveload::storage::{atomic_write, read_candidates_limited};
 
 #[derive(Debug, Clone)]
 pub struct KeyBindings {
@@ -170,10 +170,7 @@ impl KeyBindings {
         };
         let mut values: Vec<&str> = configured.split('|').collect();
         for alias in aliases {
-            if !values
-                .iter()
-                .any(|value| value.eq_ignore_ascii_case(alias))
-            {
+            if !values.iter().any(|value| value.eq_ignore_ascii_case(alias)) {
                 values.push(alias);
             }
         }
@@ -398,8 +395,11 @@ fn parse_settings(text: &str) -> Option<Settings> {
     settings.key_bindings.menu = binding(bindings, "menu", &settings.key_bindings.menu);
     settings.key_bindings.craft = binding(bindings, "craft", &settings.key_bindings.craft);
     settings.key_bindings.pickup = binding(bindings, "pickup", &settings.key_bindings.pickup);
-    settings.key_bindings.searcher_bar =
-        binding(bindings, "searcher_bar", &settings.key_bindings.searcher_bar);
+    settings.key_bindings.searcher_bar = binding(
+        bindings,
+        "searcher_bar",
+        &settings.key_bindings.searcher_bar,
+    );
     settings.key_bindings.page_up = binding(bindings, "page_up", &settings.key_bindings.page_up);
     settings.key_bindings.page_down =
         binding(bindings, "page_down", &settings.key_bindings.page_down);
@@ -428,8 +428,7 @@ fn binding(value: &Value, key: &str, default: &str) -> String {
                 && name.to_ascii_uppercase().split('|').all(|alternative| {
                     !alternative.is_empty()
                         && alternative.split(['-', '+']).all(|key| {
-                            matches!(key, "SHIFT" | "CTRL" | "ALT")
-                                || key_name_exists(key)
+                            matches!(key, "SHIFT" | "CTRL" | "ALT") || key_name_exists(key)
                         })
                 })
         })

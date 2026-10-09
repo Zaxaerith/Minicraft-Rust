@@ -53,15 +53,13 @@ fn tick(
                 }
             }
         }
-        Tile::TreeSapling | Tile::CactusSapling => {
-            match sapling::tick_age(level.data[index]) {
-                sapling::SaplingTick::ReadyToGrow => {
-                    let grown = sapling::grown_tile(tile == Tile::TreeSapling);
-                    set(level, index, grown, 0);
-                }
-                sapling::SaplingTick::Age(age) => level.data[index] = age,
+        Tile::TreeSapling | Tile::CactusSapling => match sapling::tick_age(level.data[index]) {
+            sapling::SaplingTick::ReadyToGrow => {
+                let grown = sapling::grown_tile(tile == Tile::TreeSapling);
+                set(level, index, grown, 0);
             }
-        }
+            sapling::SaplingTick::Age(age) => level.data[index] = age,
+        },
         Tile::Farmland => tick_farmland(level, width, height, x, y, random),
         Tile::Wheat
         | Tile::Potato
@@ -73,7 +71,9 @@ fn tick(
         Tile::Tree => decay(level, index, tree::tick_decay),
         Tile::HardRock => decay(level, index, crate::level::tile::hard_rock::tick_decay),
         Tile::Cactus => decay(level, index, crate::level::tile::cactus::tick_decay),
-        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => decay(level, index, wall::tick_decay),
+        Tile::WoodWall | Tile::StoneWall | Tile::ObsidianWall => {
+            decay(level, index, wall::tick_decay)
+        }
         _ => {}
     }
 }

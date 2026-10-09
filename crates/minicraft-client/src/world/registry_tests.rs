@@ -1,3 +1,5 @@
+// Multi-frame player scenarios deliberately mutate inputs between ticks.
+#![allow(clippy::field_reassign_with_default)]
 //! World registry / lifecycle characterization tests (was inlined in mod.rs).
 use super::{
     ActiveItem, DAY_LENGTH, Direction, FurnitureKind, GameMode, HUNGER_STAMINA_STEPS, Level,
@@ -8,15 +10,15 @@ use super::{
     random::JavaRandom,
     recipe_can_craft, spawn, time_name, try_queue_natural_spawn,
 };
+use crate::core::updater::Updater;
 use crate::{
     audio::SoundEffect,
     io::Input,
     item::{
-        crafting::sorted_recipe_views, recipe_views, ArmorKind, Inventory, ItemId, PotionKind,
-        ToolItem, ToolKind, ToolTier,
+        ArmorKind, Inventory, ItemId, PotionKind, ToolItem, ToolKind, ToolTier,
+        crafting::sorted_recipe_views, recipe_views,
     },
 };
-use crate::core::updater::Updater;
 
 pub(crate) fn tiny_world() -> World {
     World {
@@ -167,9 +169,10 @@ fn menu_key_opens_chest_container_and_transfers_items() {
     let mut world = tiny_world();
     let chest_x = world.player.x;
     let chest_y = world.player.y + 12;
-    let id = world.levels[0].entities.spawn_furniture(FurnitureKind::Chest, chest_x, chest_y);
-    world
-        .levels[0]
+    let id = world.levels[0]
+        .entities
+        .spawn_furniture(FurnitureKind::Chest, chest_x, chest_y);
+    world.levels[0]
         .entities
         .entities_mut_for_storage(id)
         .unwrap()
@@ -179,7 +182,7 @@ fn menu_key_opens_chest_container_and_transfers_items() {
 
     let mut menu = Input::default();
     menu.menu = true;
-    let _ = world.tick_gameplay_player(&menu);
+    world.tick_gameplay_player(&menu);
     // Furniture use runs from tick_after_prelude via input; call directly.
     assert!(world.use_furniture_front());
     assert!(world.inventory_open);
@@ -227,17 +230,17 @@ fn swimming_drains_stamina_every_60_ticks_without_swim_potion() {
     // World.tick increments before player body; drive the gameplay path.
     world.tick = 59;
     let input = Input::default();
-    let _ = world.tick_gameplay_player(&input);
+    world.tick_gameplay_player(&input);
     // After tick() this becomes 60 in the main loop; call the drain check by
     // setting tick so the in-body condition sees a multiple of 60.
     world.tick = 60;
-    let _ = world.tick_gameplay_player(&input);
+    world.tick_gameplay_player(&input);
     assert_eq!(world.player.stamina, 9);
     // Swim potion prevents drowning drain.
     world.player.stamina = 10;
     world.player.potion_effects[crate::item::PotionKind::Swim.id()] = 600;
     world.tick = 120;
-    let _ = world.tick_gameplay_player(&input);
+    world.tick_gameplay_player(&input);
     assert_eq!(world.player.stamina, 10);
 }
 
@@ -507,8 +510,7 @@ fn walking_into_furniture_pushes_it_like_java_touchedby() {
         world.player.x + 6,
         world.player.y,
     );
-    let before = world
-        .levels[0]
+    let before = world.levels[0]
         .entities
         .entities()
         .iter()
@@ -523,8 +525,7 @@ fn walking_into_furniture_pushes_it_like_java_touchedby() {
             ..Input::default()
         });
     }
-    let after = world
-        .levels[0]
+    let after = world.levels[0]
         .entities
         .entities()
         .iter()
@@ -556,8 +557,7 @@ fn furniture_push_moves_one_pixel_per_try_push_cool_down() {
         world.player.x + 6,
         world.player.y,
     );
-    let start_x = world
-        .levels[0]
+    let start_x = world.levels[0]
         .entities
         .entities()
         .iter()
@@ -569,8 +569,7 @@ fn furniture_push_moves_one_pixel_per_try_push_cool_down() {
         right: true,
         ..Input::default()
     });
-    let after_one = world
-        .levels[0]
+    let after_one = world.levels[0]
         .entities
         .entities()
         .iter()
@@ -585,8 +584,7 @@ fn furniture_push_moves_one_pixel_per_try_push_cool_down() {
     for _ in 0..5 {
         world.tick(&Input::default());
     }
-    let after_idle = world
-        .levels[0]
+    let after_idle = world.levels[0]
         .entities
         .entities()
         .iter()
@@ -733,7 +731,10 @@ fn quest_tree_navigation_and_detail_return_preserve_cursor_and_viewport() {
         ..Input::default()
     };
     world.tick(&select);
-    world.prepare_quest_layout(&crate::resource::localization::Localization::load("en-us", &[]));
+    world.prepare_quest_layout(&crate::resource::localization::Localization::load(
+        "en-us",
+        &[],
+    ));
     world.tick(&select);
     let right = Input {
         right_pressed: true,
@@ -823,8 +824,7 @@ fn successful_crafting_sound_is_not_deferred_or_duplicated() {
     world.tick(&select);
     let craft_sounds = world.take_sound_events();
     assert!(
-        craft_sounds.contains(&SoundEffect::Craft)
-            || craft_sounds.contains(&SoundEffect::Confirm),
+        craft_sounds.contains(&SoundEffect::Craft) || craft_sounds.contains(&SoundEffect::Confirm),
         "crafting select should emit an audio event, got {craft_sounds:?}"
     );
     assert_eq!(world.player.inventory.count(ItemId::Workbench), 1);
@@ -1048,8 +1048,7 @@ fn focused_and_unfocused_frames_produce_identical_live_worlds_at_four_fps() {
             // One second playing, one unfocused, one playing. Timestamps
             // are exact fixtures; this does not test OS event sampling.
             let focused = frame <= fps || frame > fps * 2;
-            for _ in
-                0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
+            for _ in 0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
             {
                 world.begin_display_tick();
                 world.tick_after_display(focused, &input);
@@ -1249,8 +1248,7 @@ fn core_prelude_autosave_and_score_are_identical_at_four_render_rates() {
         let mut clock = GameLoopClock::starting_at(start);
         let mut saves = Vec::new();
         for frame in 1..=fps {
-            for _ in
-                0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
+            for _ in 0..clock.updates_at(start + Duration::from_nanos(frame * 1_000_000_000 / fps))
             {
                 world.begin_display_tick();
                 world
@@ -1273,8 +1271,7 @@ fn core_prelude_autosave_and_score_are_identical_at_four_render_rates() {
         assert_eq!(saves.len(), 1);
         let state = (
             saves,
-            serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap())
-                .unwrap(),
+            serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap()).unwrap(),
         );
         if let Some(expected) = &expected {
             assert_eq!(&state, expected);
@@ -1417,7 +1414,11 @@ fn open_menus_freeze_hunger_and_stamina_like_java_player_tick() {
     for _ in 0..5 {
         world.tick(&Input::default());
     }
-    assert_eq!(snapshot(&world), frozen, "pause must freeze Player.tick timers");
+    assert_eq!(
+        snapshot(&world),
+        frozen,
+        "pause must freeze Player.tick timers"
+    );
 
     world.pause.close();
     world.inventory_open = true;
@@ -1435,7 +1436,11 @@ fn open_menus_freeze_hunger_and_stamina_like_java_player_tick() {
     for _ in 0..5 {
         world.tick(&Input::default());
     }
-    assert_eq!(snapshot(&world), frozen, "book must freeze Player.tick timers");
+    assert_eq!(
+        snapshot(&world),
+        frozen,
+        "book must freeze Player.tick timers"
+    );
 
     world.book_open = None;
     world.tick(&Input::default());
@@ -1625,12 +1630,18 @@ fn notifications_save_success_is_once_only_and_failure_is_silent() {
 fn notifications_localize_at_enqueue_and_preserve_java_boss_order() {
     use std::sync::Arc;
     let mut world = tiny_world();
-    let french = Arc::new(crate::resource::localization::Localization::load("fr-fr", &[]));
+    let french = Arc::new(crate::resource::localization::Localization::load(
+        "fr-fr",
+        &[],
+    ));
     let saved_text = french.text("minicraft.notification.world_saved").to_owned();
     world.set_notification_context(french, "Q");
     world.record_save_success();
     world.set_notification_context(
-        Arc::new(crate::resource::localization::Localization::load("en-us", &[])),
+        Arc::new(crate::resource::localization::Localization::load(
+            "en-us",
+            &[],
+        )),
         "ESCAPE",
     );
     assert_eq!(world.notifications.messages(), [saved_text]);
@@ -1872,9 +1883,9 @@ fn workbench_placement_and_tool_use_are_in_the_normal_world_path() {
         false,
     )
     .iter()
-    .position(|recipe| {
-        matches!(recipe.output, RecipeOutput::Tool(tool) if tool.kind == ToolKind::Axe)
-    })
+    .position(
+        |recipe| matches!(recipe.output, RecipeOutput::Tool(tool) if tool.kind == ToolKind::Axe),
+    )
     .unwrap();
     world.tick(&Input {
         select: true,
@@ -2112,10 +2123,10 @@ fn all_2_2_4_tile_ids_round_trip() {
     assert_eq!(Tile::from_legacy_id(123), Some((Tile::ObsidianDoor, 0)));
     assert_eq!(Tile::from_legacy_id(999), None);
     for legacy_id in [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24,
-        30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
-        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 100, 101, 102, 103, 104, 105,
-        107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 119, 120, 121, 122, 123, 127,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 30,
+        31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+        54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 100, 101, 102, 103, 104, 105, 107, 108,
+        109, 110, 111, 112, 113, 114, 115, 116, 117, 119, 120, 121, 122, 123, 127,
     ] {
         assert!(
             Tile::from_legacy_id(legacy_id).is_some(),
@@ -2493,6 +2504,89 @@ fn gameplay_ticks_feed_fluid_animation_phase_reader() {
 }
 
 #[test]
+fn release_regression_crafting_and_placement_consume_owned_items() {
+    let mut world = tiny_world();
+    world.player.inventory.add(ItemId::Wood, 10);
+    assert!(world.craft_stack(crate::item::HAND_RECIPES[0]));
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 0);
+    world.player.active_item = Some(ActiveItem::Stack(ItemId::Workbench));
+    world.attack();
+    assert_eq!(world.player.inventory.count(ItemId::Workbench), 0);
+    let recipe = crate::item::ANVIL_TOOL_RECIPES[1];
+    world.player.inventory.add(ItemId::Shard, 15);
+    world
+        .player
+        .inventory
+        .add_tool(ToolItem::new(ToolKind::Sword, ToolTier::Iron))
+        .unwrap();
+    assert!(world.craft_tool(recipe));
+    assert_eq!(world.player.inventory.count(ItemId::Shard), 0);
+    assert_eq!(world.player.inventory.tools().len(), 1);
+    assert_eq!(world.player.inventory.tools()[0].kind, ToolKind::Claymore);
+}
+
+#[test]
+fn crafting_missing_material_and_full_bag_keep_all_owned_items() {
+    let mut world = tiny_world();
+    world.player.inventory.add(ItemId::Wood, 9);
+    let before = world.player.inventory.clone();
+    assert!(!world.craft_stack(crate::item::HAND_RECIPES[0]));
+    assert_eq!(world.player.inventory, before);
+    world.player.inventory.set_capacity(1);
+    world.player.inventory.add(ItemId::Wood, 1);
+    let before = world.player.inventory.clone();
+    // One plank recipe leaves the wood slot occupied, so output cannot fit.
+    assert!(!world.craft_stack(crate::item::HAND_RECIPES[2]));
+    assert_eq!(world.player.inventory, before);
+    world.player.inventory.remove(ItemId::Wood, 10);
+    world.player.inventory.add(ItemId::Wood, 1);
+    assert!(world.craft_stack(crate::item::HAND_RECIPES[2]));
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 0);
+    assert_eq!(world.player.inventory.count(ItemId::Plank), 2);
+}
+
+#[test]
+fn death_moves_owned_items_once_and_preserves_full_bag_and_armor() {
+    let mut world = tiny_world();
+    for &item in ItemId::ALL
+        .iter()
+        .filter(|item| **item != ItemId::PowerGlove)
+        .take(26)
+    {
+        world.player.inventory.add(item, 1);
+    }
+    let tool = ToolItem::new(ToolKind::Axe, ToolTier::Iron);
+    world.player.inventory.add_tool(tool).unwrap();
+    let expected = world.player.inventory.clone();
+    let active = expected.slots()[0].item;
+    world.player.active_item = Some(ActiveItem::Stack(active));
+    world.player.armor_kind = Some(crate::item::ArmorKind::Gem);
+    world.die_player();
+    assert_eq!(world.player.inventory.used_slots(), 0);
+    assert!(world.player.active_item.is_none());
+    let chest = world.levels[0]
+        .entities
+        .entities()
+        .last()
+        .unwrap()
+        .storage
+        .as_ref()
+        .unwrap();
+    for stack in expected.slots() {
+        let armor = u16::from(stack.item == ItemId::GemArmor);
+        assert_eq!(chest.count(stack.item), stack.count + armor);
+    }
+    assert_eq!(
+        chest.count(ItemId::GemArmor),
+        expected.count(ItemId::GemArmor) + 1
+    );
+    assert_eq!(chest.tools(), &[tool]);
+    let loaded = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+    assert_eq!(loaded.player.inventory.used_slots(), 0);
+    assert!(loaded.player_removed);
+}
+
+#[test]
 fn last_tool_durability_removes_equipped_tool_and_frees_bag_slot() {
     let mut world = tiny_world();
     let target = 9 + 8 * world.width;
@@ -2500,7 +2594,10 @@ fn last_tool_durability_removes_equipped_tool_and_frees_bag_slot() {
     let mut axe = ToolItem::new(ToolKind::Axe, ToolTier::Wood);
     axe.durability = 1;
     world.player.inventory.add_tool(axe);
-    world.player.inventory.add_tool(ToolItem::new(ToolKind::Sword, ToolTier::Wood));
+    world
+        .player
+        .inventory
+        .add_tool(ToolItem::new(ToolKind::Sword, ToolTier::Wood));
     world.player.active_item = Some(ActiveItem::Tool(0));
 
     world.attack();
@@ -2509,4 +2606,28 @@ fn last_tool_durability_removes_equipped_tool_and_frees_bag_slot() {
     assert_eq!(world.player.inventory.tools()[0].kind, ToolKind::Sword);
     assert_eq!(world.player.active_item, None);
     assert_eq!(world.player.attack_item, None);
+}
+
+#[test]
+fn extreme_saved_counters_survive_live_survival_and_calendar_ticks() {
+    let mut world = tiny_world();
+    world.days = u32::MAX;
+    world.clock.set_day_tick(DAY_LENGTH - 1);
+    world.player.health = 1;
+    world.player.stamina = 0;
+    world.player.hunger_ticks = i16::MIN;
+    world.player.hunger_stamina_count = i16::MIN;
+    world.player.hunger_charge_delay = u16::MAX;
+    world.player.inventory.add(ItemId::Wood, 7);
+    let mut restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+    restored.tick_survival_stats();
+    restored.begin_display_tick();
+    restored.tick_after_display(false, &Input::default());
+    assert_eq!(restored.days, u32::MAX);
+    assert!(restored.player.hunger_ticks > 0);
+    assert!(restored.player.hunger_stamina_count > 0);
+    assert_eq!(restored.player.inventory.count(ItemId::Wood), 7);
+    restored.player.hunger = u8::MAX;
+    restored.player.hunger_charge_delay = u16::MAX;
+    restored.tick_survival_stats();
 }

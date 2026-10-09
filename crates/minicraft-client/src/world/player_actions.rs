@@ -7,13 +7,13 @@ use super::{
 };
 use std::collections::HashMap;
 
-use crate::progression::{Book, ProgressEvent};
 use crate::io::Input;
 use crate::item::{
     ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES, ItemStack,
     LOOM_RECIPES, OVEN_RECIPES, RecipeOutput, ToolKind, ToolTier, WORKBENCH_STATION_RECIPES,
     WORKBENCH_TOOL_RECIPES, ordered_recipe_views, recipe_can_craft, recipe_views,
 };
+use crate::progression::{Book, ProgressEvent};
 
 impl World {
     pub(super) fn tick_gameplay_player(&mut self, input: &Input) {
@@ -523,7 +523,8 @@ impl World {
         if self.mode == GameMode::Creative {
             return;
         }
-        debug_assert!(self.player.inventory.remove(item, 1));
+        let removed = self.player.inventory.remove(item, 1);
+        debug_assert!(removed);
         if self.player.inventory.count(item) == 0 {
             self.player.active_item = None;
         }
@@ -740,27 +741,32 @@ impl World {
 
         let difficulty = self.difficulty.min(2);
         if self.player.stamina < MAX_STAT {
-            self.player.hunger_ticks -= difficulty as i16;
+            self.player.hunger_ticks = self.player.hunger_ticks.saturating_sub(difficulty as i16);
             if self.player.stamina == 0 {
-                self.player.hunger_ticks -= difficulty as i16;
+                self.player.hunger_ticks =
+                    self.player.hunger_ticks.saturating_sub(difficulty as i16);
             }
         }
         if self.tick.is_multiple_of(HUNGER_TICK_INTERVALS[difficulty]) {
-            self.player.hunger_ticks -= 1;
+            self.player.hunger_ticks = self.player.hunger_ticks.saturating_sub(1);
         }
         if self.player.step_count >= HUNGER_MOVE_STEPS[difficulty] {
-            self.player.hunger_ticks -= 1;
+            self.player.hunger_ticks = self.player.hunger_ticks.saturating_sub(1);
             self.player.step_count = 0;
         }
         if self.player.hunger_charge_delay > 0 {
-            self.player.hunger_ticks -= (2 + difficulty) as i16;
+            self.player.hunger_ticks = self
+                .player
+                .hunger_ticks
+                .saturating_sub((2 + difficulty) as i16);
             if self.player.hunger == 0 {
-                self.player.hunger_ticks -= difficulty as i16;
+                self.player.hunger_ticks =
+                    self.player.hunger_ticks.saturating_sub(difficulty as i16);
             }
         }
         while self.player.hunger_ticks <= 0 {
             self.player.hunger_ticks += MAX_HUNGER_TICKS;
-            self.player.hunger_stamina_count -= 1;
+            self.player.hunger_stamina_count = self.player.hunger_stamina_count.saturating_sub(1);
         }
         while self.player.hunger_stamina_count <= 0 {
             self.player.hunger = self.player.hunger.saturating_sub(1);
@@ -768,8 +774,8 @@ impl World {
         }
 
         if self.player.health < self.player.max_health && self.player.hunger > MAX_STAT / 2 {
-            self.player.hunger_charge_delay += 1;
-            let distance = u16::from(MAX_STAT - self.player.hunger + 2);
+            self.player.hunger_charge_delay = self.player.hunger_charge_delay.saturating_add(1);
+            let distance = u16::from(MAX_STAT.saturating_sub(self.player.hunger) + 2);
             if self.player.hunger_charge_delay > 20 * distance * distance {
                 self.player.health = self
                     .player

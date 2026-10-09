@@ -1,22 +1,22 @@
 //! Per-client login, presence, state, and heartbeat lifecycle.
-use minicraft_common::protocol::{GAME_VERSION, Message, PlayerState, PROTOCOL_VERSION};
+use minicraft_common::protocol::{GAME_VERSION, Message, PROTOCOL_VERSION, PlayerState};
 use std::{
     collections::HashMap,
-    sync::{
-        Mutex,
-        mpsc::Sender,
-    },
+    sync::{Mutex, mpsc::SyncSender},
 };
 
 #[derive(Clone)]
 pub struct Peer {
     pub username: String,
     pub latest: Option<PlayerState>,
+    /// Broadcasts may start only after INIT and replay are queued.
+    pub ready: bool,
 }
 
 #[derive(Default)]
 pub struct Shared {
-    pub senders: HashMap<u64, Sender<Message>>,
+    pub senders: HashMap<u64, SyncSender<Message>>,
+    pub sockets: HashMap<u64, std::net::TcpStream>,
     pub peers: HashMap<u64, Peer>,
 }
 
@@ -46,7 +46,17 @@ pub fn accept_login(
     if username.is_empty() {
         return Err("username must contain a letter or number".to_owned());
     }
-    let mut state = shared.lock().unwrap();
+    let mut state = shared.lock().unwrap_or_else(|error| error.into_inner());
+    if state.peers.contains_key(&client_id) {
+        return Err("session already logged in".to_owned());
+    }
+    if state
+        .peers
+        .values()
+        .any(|peer| peer.username.eq_ignore_ascii_case(&username))
+    {
+        return Err("username is already in use".to_owned());
+    }
     let existing_users = state
         .peers
         .iter()
@@ -62,6 +72,7 @@ pub fn accept_login(
         Peer {
             username: username.clone(),
             latest: None,
+            ready: false,
         },
     );
     Ok(LoginAccepted {
@@ -89,26 +100,38 @@ pub fn apply_move(
     y: i32,
     level: usize,
     health: u8,
-) -> Message {
+) -> Result<Message, String> {
+    // The relay has no authoritative world. These are format/domain limits
+    // for fixed 2.2.4 maps (up to 512 tiles), not movement/health anti-cheat.
+    if !(0..512 * 16).contains(&x) || !(0..512 * 16).contains(&y) || level >= 6 || health > 20 {
+        return Err("invalid player coordinates, level or health".to_owned());
+    }
+    let mut shared = shared.lock().unwrap_or_else(|error| error.into_inner());
+    let peer = shared
+        .peers
+        .get_mut(&client_id)
+        .ok_or("MOVE requires a logged-in session")?;
+    if peer.username != username {
+        return Err("MOVE identity does not match session".to_owned());
+    }
     let state = PlayerState {
         client_id,
-        username: username.to_owned(),
+        username: peer.username.clone(),
         x,
         y,
         level,
         health,
     };
-    if let Some(peer) = shared.lock().unwrap().peers.get_mut(&client_id) {
-        peer.latest = Some(state.clone());
-    }
-    Message::Player { state }
+    peer.latest = Some(state.clone());
+    Ok(Message::Player { state })
 }
 
 /// Drop the peer and report whether a logged-in presence should be announced.
 pub fn end_session(shared: &Mutex<Shared>, client_id: u64) -> bool {
-    let mut state = shared.lock().unwrap();
+    let mut state = shared.lock().unwrap_or_else(|error| error.into_inner());
     let was_logged_in = state.peers.remove(&client_id).is_some();
     state.senders.remove(&client_id);
+    state.sockets.remove(&client_id);
     was_logged_in
 }
 
@@ -116,6 +139,26 @@ pub fn end_session(shared: &Mutex<Shared>, client_id: u64) -> bool {
 mod tests {
     use super::*;
     use std::sync::mpsc;
+
+    #[test]
+    fn identity_and_move_validation_do_not_mutate_replay_state() {
+        let shared = Mutex::new(Shared::default());
+        accept_login(&shared, 1, "Alice!", GAME_VERSION, PROTOCOL_VERSION).unwrap();
+        assert!(accept_login(&shared, 2, "alice", GAME_VERSION, PROTOCOL_VERSION).is_err());
+        for (x, y, level, health) in [
+            (i32::MAX, 0, 0, 10),
+            (-1, 0, 0, 10),
+            (0, 8192, 0, 10),
+            (0, 0, usize::MAX, 10),
+            (0, 0, 0, 255),
+        ] {
+            assert!(apply_move(&shared, 1, "Alice", x, y, level, health).is_err());
+        }
+        assert!(apply_move(&shared, 1, "Bob", 0, 0, 0, 10).is_err());
+        assert!(apply_move(&shared, 2, "Bob", 0, 0, 0, 10).is_err());
+        assert!(shared.lock().unwrap().peers[&1].latest.is_none());
+        assert!(apply_move(&shared, 1, "Alice", 8191, 8191, 5, 20).is_ok());
+    }
 
     #[test]
     fn accept_login_rejects_version_mismatch_and_empty_username() {
@@ -134,7 +177,7 @@ mod tests {
         let first = accept_login(&shared, 1, "Alice!", GAME_VERSION, PROTOCOL_VERSION).unwrap();
         assert_eq!(first.username, "Alice");
         assert!(first.existing_users.is_empty());
-        apply_move(&shared, 1, &first.username, 80, 96, 1, 9);
+        apply_move(&shared, 1, &first.username, 80, 96, 1, 9).unwrap();
         let second = accept_login(&shared, 2, "Bob", GAME_VERSION, PROTOCOL_VERSION).unwrap();
         assert_eq!(second.existing_users, vec![(1, "Alice".to_owned())]);
         assert_eq!(second.replay_states.len(), 1);
@@ -146,7 +189,7 @@ mod tests {
 
     #[test]
     fn apply_move_updates_latest_snapshot() {
-        let (sender, _receiver) = mpsc::channel();
+        let (sender, _receiver) = mpsc::sync_channel(16);
         let mut shared = Shared::default();
         shared.senders.insert(9, sender);
         shared.peers.insert(
@@ -154,14 +197,18 @@ mod tests {
             Peer {
                 username: "Zoe".to_owned(),
                 latest: None,
+                ready: true,
             },
         );
         let shared = Mutex::new(shared);
-        let message = apply_move(&shared, 9, "Zoe", 1, 2, 0, 10);
+        let message = apply_move(&shared, 9, "Zoe", 1, 2, 0, 10).unwrap();
         let Message::Player { state } = message else {
             panic!("expected PLAYER");
         };
-        assert_eq!(shared.lock().unwrap().peers[&9].latest.as_ref(), Some(&state));
+        assert_eq!(
+            shared.lock().unwrap().peers[&9].latest.as_ref(),
+            Some(&state)
+        );
         assert!(end_session(&shared, 9));
         assert!(shared.lock().unwrap().senders.is_empty());
     }

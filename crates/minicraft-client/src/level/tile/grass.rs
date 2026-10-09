@@ -37,6 +37,8 @@ mod tests {
     #[test]
     fn grass_underlay_is_dirt() {
         assert_eq!(underlay(), [Some(Tile::Dirt), None]);
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

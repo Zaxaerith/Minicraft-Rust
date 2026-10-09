@@ -12,11 +12,7 @@ pub fn may_pass(data: u16) -> bool {
 
 /// Java `DoorTile.hurt` (player bump) toggles closed/open.
 pub fn toggle_data(data: u16) -> u16 {
-    if is_closed(data) {
-        1
-    } else {
-        0
-    }
+    if is_closed(data) { 1 } else { 0 }
 }
 
 /// Java `DoorTile.interact` breaks the door into the matching floor (`id + 3`).

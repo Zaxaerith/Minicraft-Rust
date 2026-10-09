@@ -2,8 +2,8 @@
 use crate::resource::pack::ResourcePack;
 use crate::{
     assets::Assets,
-    io::KeyBindings,
     gfx::{Screen, WIDTH},
+    io::KeyBindings,
     resource::localization::Localization,
 };
 
@@ -28,7 +28,7 @@ pub(crate) fn render_info(
         .collect();
     let width = lines
         .iter()
-        .map(|line| crate::gfx::font::text_width(&line))
+        .map(|line| crate::gfx::font::text_width(line))
         .max()
         .unwrap_or(0)
         + 16;
@@ -88,7 +88,7 @@ pub(crate) fn render(
             screen.text(
                 assets.font(),
                 " <",
-                x + crate::gfx::font::text_width(&name),
+                x + crate::gfx::font::text_width(name),
                 y,
             );
         }

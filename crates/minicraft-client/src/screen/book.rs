@@ -1,6 +1,6 @@
 //! Java `BookDisplay.java` — page geometry, pagination, and page menu layout.
-use crate::gfx::{HEIGHT, WIDTH};
 use crate::gfx::font;
+use crate::gfx::{HEIGHT, WIDTH};
 
 use super::entry::Entry;
 use super::menu::{Menu, MenuBuilder};
@@ -59,10 +59,7 @@ pub fn build_page_menu(lines: &[String]) -> Menu {
         .map(|line| Entry::string(line.clone()))
         .collect();
     MenuBuilder::new(true, LINE_SPACING, RelPos::CENTER, entries)
-        .set_size(
-            PAGE_WIDTH + 8 * 2,
-            PAGE_HEIGHT + 8 * 2,
-        )
+        .set_size(PAGE_WIDTH + 8 * 2, PAGE_HEIGHT + 8 * 2)
         .set_positioning((WIDTH as i32 / 2, MIN_Y), RelPos::CENTER)
         .create_menu()
 }
@@ -71,10 +68,7 @@ pub fn build_page_menu(lines: &[String]) -> Menu {
 pub fn build_menu(crate_book_pages: &[Vec<String>], page: usize) -> Menu {
     let page_count = crate_book_pages.len().max(1);
     let page = page.min(page_count - 1);
-    let lines = crate_book_pages
-        .get(page)
-        .cloned()
-        .unwrap_or_default();
+    let lines = crate_book_pages.get(page).cloned().unwrap_or_default();
     build_page_menu(&lines)
 }
 

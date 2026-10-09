@@ -24,11 +24,7 @@ pub const FPS_MIN: i32 = 10;
 pub const FPS_MAX: i32 = 300;
 
 /// Java OptionsMainMenuDisplay: `Builder(false, 6, LEFT, …).setTitle(options_main_menu)`.
-pub fn build_menu(
-    localization: &Localization,
-    settings: &Settings,
-    selection: usize,
-) -> Menu {
+pub fn build_menu(localization: &Localization, settings: &Settings, selection: usize) -> Menu {
     let entries = vec![
         Entry::range(
             localization.text("minicraft.settings.fps"),
@@ -168,11 +164,7 @@ mod tests {
         let show_quests = settings.show_quests;
         let hwa = settings.hwa;
         for selection in 1..=3 {
-            let mut menu = build_menu(
-                &Localization::load("en-us", &[]),
-                &settings,
-                selection,
-            );
+            let mut menu = build_menu(&Localization::load("en-us", &[]), &settings, selection);
             // Select on boolean/array rows must not change values by itself.
             let _ = menu.tick(&super::super::menu::MenuInput {
                 select: true,

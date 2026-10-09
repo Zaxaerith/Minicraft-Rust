@@ -1,0 +1,48 @@
+name: Rust checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust tooling
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - name: Linux window and bundled SDL build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev
+      # Windows hosted runners include the Windows SDK rc.exe used by build.rs.
+      # Non-Windows builds use bundled SDL; no physical audio device is needed.
+      - run: cargo fmt --all -- --check
+      - run: cargo build --workspace --locked
+      - run: cargo test --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Check optimized item consumption
+        run: cargo test --release -p minicraft-client --lib release_regression --locked
+      - name: Embedded resource and PCM smoke check
+        run: cargo run --locked -p minicraft-rust -- --self-check --savedir test-data/ci-smoke

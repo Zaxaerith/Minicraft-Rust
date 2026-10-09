@@ -154,14 +154,8 @@ mod tests {
         // Java LegacyLoad.subOldName replaces "P." with "Potion", then
         // Load.subOldName's <2.2.0-dev4 rule replaces "Potion" prefix with
         // "Awkward Potion" — same as Java.
-        assert_eq!(
-            legacy_prefixed_name("P.Speed", &ver),
-            "Awkward PotionSpeed"
-        );
-        assert_eq!(
-            legacy_prefixed_name("Fish Rod", &ver),
-            "Wood Fishing Rod"
-        );
+        assert_eq!(legacy_prefixed_name("P.Speed", &ver), "Awkward PotionSpeed");
+        assert_eq!(legacy_prefixed_name("Fish Rod", &ver), "Wood Fishing Rod");
     }
 
     #[test]

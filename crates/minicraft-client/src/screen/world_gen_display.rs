@@ -186,15 +186,15 @@ pub fn apply_menu_to_settings(
     seed: &mut String,
 ) -> bool {
     let mut changed = false;
-    if let Some(Entry::Input { user_input, .. }) = menu.entries.get(indices::NAME) {
-        if user_input != name {
-            *name = user_input.clone();
-        }
+    if let Some(Entry::Input { user_input, .. }) = menu.entries.get(indices::NAME)
+        && user_input != name
+    {
+        *name = user_input.clone();
     }
-    if let Some(Entry::Input { user_input, .. }) = menu.entries.get(indices::SEED) {
-        if user_input != seed {
-            *seed = user_input.clone();
-        }
+    if let Some(Entry::Input { user_input, .. }) = menu.entries.get(indices::SEED)
+        && user_input != seed
+    {
+        *seed = user_input.clone();
     }
     if let Some(Entry::Array { selection, .. }) = menu.entries.get(indices::MODE)
         && *selection != settings.game_mode
@@ -225,15 +225,13 @@ pub fn apply_menu_to_settings(
     if let Some(Entry::Array {
         selection, options, ..
     }) = menu.entries.get(indices::SIZE)
-    {
-        if let Some(value) = options
+        && let Some(value) = options
             .get(*selection)
             .and_then(|s| s.parse::<usize>().ok())
-            && value != settings.world_size
-        {
-            settings.world_size = value;
-            changed = true;
-        }
+        && value != settings.world_size
+    {
+        settings.world_size = value;
+        changed = true;
     }
     if let Some(Entry::Array { selection, .. }) = menu.entries.get(indices::THEME)
         && *selection != settings.theme
@@ -315,11 +313,15 @@ mod tests {
     #[test]
     fn create_requested_requires_select_entry_and_non_empty_name() {
         let localization = Localization::load("en-us", &[]);
-        let mut menu = build_menu(&localization, &Settings::default(), "World", "", indices::CREATE, 0);
-        assert_eq!(
-            create_requested(&menu, "World"),
-            Some("World".to_owned())
+        let mut menu = build_menu(
+            &localization,
+            &Settings::default(),
+            "World",
+            "",
+            indices::CREATE,
+            0,
         );
+        assert_eq!(create_requested(&menu, "World"), Some("World".to_owned()));
         menu.selection = indices::NAME;
         assert_eq!(create_requested(&menu, "World"), None);
         menu.selection = indices::CREATE;

@@ -9,10 +9,12 @@ pub(crate) fn animation_millis() -> i64 {
 }
 
 use crate::{
+    entity::furniture::FurnitureKind,
+    entity::mob::NaturalMob,
     gfx::{Image, Screen},
     item::{ItemId, ToolItem, ToolKind, ToolTier},
+    level::tile::Tile,
     resource::pack::ResourcePack,
-    entity::furniture::FurnitureKind, level::tile::Tile, entity::mob::NaturalMob,
 };
 
 use crate::gfx::connection::Connection;
@@ -22,8 +24,7 @@ pub struct Assets {
         std::collections::HashMap<String, crate::gfx::sprite_animation::SpriteAnimation>,
     >,
     sheets: SpriteLinker,
-    tile_metadata:
-        std::collections::HashMap<String, crate::gfx::sprite_animation::SpriteMeta>,
+    tile_metadata: std::collections::HashMap<String, crate::gfx::sprite_animation::SpriteMeta>,
     pub default_pack_logo: Image,
     pub fallback_pack_logo: Image,
     pub skin_row: usize,
@@ -622,9 +623,23 @@ impl Assets {
             return Err(format!("invalid skin id {id:?}"));
         }
 
-        let path = game_dir.join("skins").join(format!("{id}.png"));
-        let bytes = fs::read(&path)
+        let relative = format!("{id}.png");
+        crate::resource::pack::validate_resource_path(&relative)?;
+        let root = fs::canonicalize(game_dir.join("skins")).map_err(|error| error.to_string())?;
+        let path = fs::canonicalize(root.join(relative)).map_err(|error| error.to_string())?;
+        if !path.starts_with(&root) {
+            return Err("custom skin escapes skins directory".to_owned());
+        }
+        let file = fs::File::open(&path)
             .map_err(|error| format!("cannot read skin {}: {error}", path.display()))?;
+        if !file
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .is_file()
+        {
+            return Err("custom skin is not a regular file".to_owned());
+        }
+        let bytes = crate::resource::pack::read_entry(file)?;
         let image = Image::from_png(&bytes)?;
         if image.width < 64
             || image.height < 32
@@ -1110,6 +1125,47 @@ fn item_image(name: &str) -> Result<Image, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_connector_cannot_read_outside_folder_pack() {
+        let root = std::env::temp_dir().join(format!(
+            "minicraft-connector-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let folder = root.join("resourcepacks/pack");
+        std::fs::create_dir_all(folder.join("assets/textures/tile")).unwrap();
+        std::fs::write(
+            folder.join("pack.json"),
+            br#"{"pack_format":1,"name":"Connector"}"#,
+        )
+        .unwrap();
+        let tile = include_bytes!("../../../assets/assets/textures/tile/water.png");
+        std::fs::write(folder.join("assets/textures/tile/water.png"), tile).unwrap();
+        std::fs::write(root.join("resourcepacks/outside.png"), tile).unwrap();
+        let (packs, warnings) = crate::resource::pack::discover(&root);
+        assert!(warnings.is_empty());
+        let mut assets = Assets::load(&[]).unwrap();
+        assets
+            .apply_tile_metadata_pack(
+                &packs[0],
+                "water",
+                br#"{"border":{"key":"../../../../outside"},"animation":{"frametime":4}}"#,
+            )
+            .unwrap();
+        assert!(assets.tile_metadata["water"].border.is_none());
+        assert_eq!(assets.tile_metadata["water"].frame_time, 4);
+        assert!(
+            assets
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("invalid resource-pack path"))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn every_java_item_with_a_named_sprite_has_a_real_texture() {

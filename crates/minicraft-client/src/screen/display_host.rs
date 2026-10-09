@@ -78,7 +78,7 @@ impl MenuDisplay {
                 let mut next = prev as i32;
                 loop {
                     next = (next + delta).rem_euclid(count);
-                    if self.menus[next as usize].selectable || next as i32 == prev as i32 {
+                    if self.menus[next as usize].selectable || next == prev as i32 {
                         break;
                     }
                 }
@@ -124,20 +124,11 @@ impl MenuDisplay {
     }
 }
 
+#[derive(Default)]
 pub struct DisplayTick {
     pub events: Vec<MenuEvent>,
     pub exited: bool,
     pub activated: bool,
-}
-
-impl Default for DisplayTick {
-    fn default() -> Self {
-        Self {
-            events: Vec::new(),
-            exited: false,
-            activated: false,
-        }
-    }
 }
 
 /// Convenience: TitleDisplay's default centered spacing=2 no-frame list.

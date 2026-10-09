@@ -12,11 +12,7 @@ pub fn locked(knight_beaten: bool, knight_active: bool, creative: bool) -> bool 
 
 /// Broken boss floor follows floor rules (sky → cloud).
 pub fn broken_tile(depth: i8) -> Tile {
-    if depth == 1 {
-        Tile::Cloud
-    } else {
-        Tile::Hole
-    }
+    if depth == 1 { Tile::Cloud } else { Tile::Hole }
 }
 
 #[cfg(test)]

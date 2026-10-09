@@ -21,7 +21,11 @@ pub fn build_menu(localization: &Localization, keyboard: bool, selection: usize)
     } else {
         "minicraft.displays.controls.display.controller"
     };
-    let count = if keyboard { KEYBOARD_LINES } else { CONTROLLER_LINES };
+    let count = if keyboard {
+        KEYBOARD_LINES
+    } else {
+        CONTROLLER_LINES
+    };
     let mut entries = Vec::with_capacity(count);
     for i in 0..count {
         let key = format!("{prefix}.{i:02}");
@@ -79,7 +83,11 @@ mod tests {
         let localization = Localization::load("en-us", &[]);
         let menu = build_menu(&localization, true, 0);
         assert!(menu.entries.len() > KEYBOARD_LINES);
-        assert!(menu.entries.iter().all(|entry| entry.width() <= WIDTH as i32 - 20));
+        assert!(
+            menu.entries
+                .iter()
+                .all(|entry| entry.width() <= WIDTH as i32 - 20)
+        );
         assert_eq!(menu.display_length, DISPLAY_LENGTH);
         assert_eq!(menu.spacing, 0);
         assert!(menu.selectable);
@@ -92,7 +100,11 @@ mod tests {
         let localization = Localization::load("en-us", &[]);
         let menu = build_menu(&localization, false, 0);
         assert!(menu.entries.len() >= CONTROLLER_LINES);
-        assert!(menu.entries.iter().all(|entry| entry.width() <= WIDTH as i32 - 20));
+        assert!(
+            menu.entries
+                .iter()
+                .all(|entry| entry.width() <= WIDTH as i32 - 20)
+        );
     }
 
     #[test]

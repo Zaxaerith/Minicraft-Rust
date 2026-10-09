@@ -35,7 +35,7 @@ fn render_root(
     screen.text_colored(
         assets.font(),
         unlocked,
-        WIDTH as i32 / 2 - crate::gfx::font::text_width(&unlocked) - 16,
+        WIDTH as i32 / 2 - crate::gfx::font::text_width(unlocked) - 16,
         26,
         if world.pause.render_view().quest_tab == 0 {
             0xFFFFFF
@@ -65,7 +65,7 @@ fn render_root(
     // recalculate its fixed 44px-high entry bounds, centered at (144,76).
     for (row, group) in groups.iter().skip(first).take(5).enumerate() {
         let label = localization.text(&group.id);
-        let width = crate::gfx::font::text_width(&label);
+        let width = crate::gfx::font::text_width(label);
         let x = (WIDTH as i32 - width) / 2;
         let y = 54 + row as i32 * 9;
         if first + row == selection {
@@ -119,7 +119,7 @@ fn render_info_panel(
     let content_width = entries
         .iter()
         .map(|(text, _, select)| {
-            (crate::gfx::font::text_width(&text)
+            (crate::gfx::font::text_width(text)
                 - if selectable && !select {
                     cursor_inset
                 } else {
@@ -143,7 +143,7 @@ fn render_info_panel(
         height,
     );
     for (row, (text, color, select)) in entries.iter().take(count).enumerate() {
-        let x = (WIDTH as i32 - crate::gfx::font::text_width(&text)) / 2;
+        let x = (WIDTH as i32 - crate::gfx::font::text_width(text)) / 2;
         let y = top + 8 + row as i32 * step;
         screen.text_colored(assets.font(), text, x, y, *color);
         if *select {
@@ -151,7 +151,7 @@ fn render_info_panel(
             screen.text(
                 assets.font(),
                 " <",
-                x + crate::gfx::font::text_width(&text),
+                x + crate::gfx::font::text_width(text),
                 y,
             );
         }

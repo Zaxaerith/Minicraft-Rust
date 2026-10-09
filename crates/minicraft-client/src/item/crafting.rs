@@ -2,13 +2,13 @@
 //! Have/Cost sort, and `can_craft` (Java `Recipe.checkCanCraft`).
 use crate::entity::furniture::FurnitureKind;
 
-use super::{
-    Inventory, ItemStack, Recipe, ToolItem, ToolKind, ToolRecipe, ToolTier,
-    WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
-};
 use super::recipe::{
     ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES,
     LOOM_RECIPES, OVEN_RECIPES,
+};
+use super::{
+    Inventory, ItemStack, Recipe, ToolItem, ToolKind, ToolRecipe, ToolTier,
+    WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
 };
 
 #[derive(Clone, Copy)]

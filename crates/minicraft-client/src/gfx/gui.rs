@@ -145,6 +145,8 @@ pub fn render_inventory_counter_minimized(
     }
 }
 
+// Keep the existing coordinate/render API without adding wrapper state.
+#[allow(clippy::too_many_arguments)]
 fn render_counter_digits(
     screen: &mut Screen,
     counter: &Image,

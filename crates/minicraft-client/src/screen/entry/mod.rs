@@ -335,7 +335,9 @@ impl Entry {
                     COL_RED
                 }
             }
-            Self::Select { color: Some(color), .. } => *color,
+            Self::Select {
+                color: Some(color), ..
+            } => *color,
             // Java RecipeEntry: craftable → white, else gray (ignores selection).
             Self::Recipe { can_craft, .. } => {
                 if *can_craft {
@@ -411,7 +413,10 @@ impl Entry {
     /// Java ArrayEntry.tick: left/right change the option; play Select on change.
     pub fn tick(&mut self, input: &EntryInput) -> EntryTick {
         match self {
-            Self::Blank | Self::String { .. } | Self::Item { .. } | Self::Recipe { .. }
+            Self::Blank
+            | Self::String { .. }
+            | Self::Item { .. }
+            | Self::Recipe { .. }
             | Self::KeyInput { .. } => EntryTick::None,
             Self::Input {
                 user_input,
@@ -475,15 +480,6 @@ impl Entry {
                 range_step,
                 ..
             } => {
-                let step = if *range_step && input.select {
-                    10
-                } else if *range_step {
-                    1
-                } else {
-                    1
-                };
-                // RangeEntry uses ALT for *10; host folds that into `select` for step 10.
-                let _ = step;
                 let mut next = *selection as i32;
                 let step = if *range_step {
                     // Production host passes select=true for ALT step; EntryInput has no ALT.
@@ -536,6 +532,8 @@ impl Entry {
         }
     }
 
+    // Keep the existing coordinate/render API without adding wrapper state.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         screen: &mut Screen,
@@ -584,7 +582,10 @@ fn char_matches_pattern(ch: char, pattern: &str) -> bool {
     // Seed pattern: [-!"#%/()=+,a-zA-Z0-9]+
     if pattern.starts_with("[-!") {
         return ch.is_ascii_alphanumeric()
-            || matches!(ch, '-' | '!' | '"' | '#' | '%' | '/' | '(' | ')' | '=' | '+' | ',');
+            || matches!(
+                ch,
+                '-' | '!' | '"' | '#' | '%' | '/' | '(' | ')' | '=' | '+' | ','
+            );
     }
     !ch.is_control()
 }

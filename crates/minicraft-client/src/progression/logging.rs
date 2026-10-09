@@ -4,7 +4,7 @@
 //! parity hooks and future log sinks so call sites can stay 1:1 with Java.
 
 /// Java `Logging` format flags (from `assets/tinylog.properties`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LoggingFlags {
     pub log_time: bool,
     pub log_thread: bool,
@@ -12,18 +12,6 @@ pub struct LoggingFlags {
     pub log_trace: bool,
     pub log_level: bool,
     pub file_log_full: bool,
-}
-
-impl Default for LoggingFlags {
-    fn default() -> Self {
-        Self {
-            log_time: false,
-            log_thread: false,
-            log_trace: false,
-            log_level: false,
-            file_log_full: false,
-        }
-    }
 }
 
 /// Java `Logging` tag constants.

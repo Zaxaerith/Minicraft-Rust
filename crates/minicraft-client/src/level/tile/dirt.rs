@@ -38,6 +38,8 @@ mod tests {
         assert_eq!(depth_sprite_index(-4), 2);
         assert_eq!(depth_sprite_index(-1), 1);
         assert_eq!(depth_sprite_index(1), 1);
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

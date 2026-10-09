@@ -70,11 +70,7 @@ pub fn increment_tile_tick() {
 /// Fluid (water/lava) animation phase derived from the global tile tick.
 /// Equivalent to Java `Tile.tickCount % period` readers.
 pub fn fluid_animation_phase(period: u32) -> u32 {
-    if period == 0 {
-        0
-    } else {
-        tile_tick() % period
-    }
+    if period == 0 { 0 } else { tile_tick() % period }
 }
 
 /// Java `Tile.Material` — wall/floor/door/fence construction material.
@@ -548,7 +544,7 @@ mod tests {
         let before = tile_tick();
         increment_tile_tick();
         // Other threads may also increment; the contract is monotonic +1 from us.
-        assert!(tile_tick() >= before + 1);
+        assert!(tile_tick() > before);
         increment_tile_tick();
         assert!(tile_tick() >= before + 2);
     }

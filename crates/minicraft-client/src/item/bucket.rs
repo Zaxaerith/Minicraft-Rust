@@ -86,11 +86,7 @@ pub fn bucket_action(item: ItemId, target: Tile) -> Option<(Tile, ItemId)> {
 }
 
 /// Java `BucketItem` instances.
-pub const ALL: [ItemId; 3] = [
-    ItemId::EmptyBucket,
-    ItemId::WaterBucket,
-    ItemId::LavaBucket,
-];
+pub const ALL: [ItemId; 3] = [ItemId::EmptyBucket, ItemId::WaterBucket, ItemId::LavaBucket];
 
 #[cfg(test)]
 mod tests {

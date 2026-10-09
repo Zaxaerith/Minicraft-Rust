@@ -31,9 +31,7 @@ pub const ALL: [ItemId; 6] = [
 /// Placement result when `item` is used on `target`.
 pub fn placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
     let tile = wool_tile(item)?;
-    VALID_TILES
-        .contains(&target)
-        .then_some((tile, 0))
+    VALID_TILES.contains(&target).then_some((tile, 0))
 }
 
 #[cfg(test)]

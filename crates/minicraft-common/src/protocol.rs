@@ -209,6 +209,12 @@ pub fn encode_line(message: &Message) -> std::io::Result<Vec<u8>> {
     let mut encoded = serde_json::to_vec(message)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     encoded.push(b'\n');
+    if encoded.len() > MAX_MESSAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "message exceeds 64 KiB",
+        ));
+    }
     Ok(encoded)
 }
 
@@ -219,9 +225,37 @@ pub fn decode_line(line: &str) -> Result<Message, serde_json::Error> {
 
 /// Read one bounded UTF-8 line. `Ok(None)` means clean EOF before any bytes.
 pub fn read_bounded_line(reader: &mut impl BufRead) -> std::io::Result<Option<String>> {
+    read_bounded_line_until(reader, None)
+}
+
+/// Preserve partial frames across socket read timeouts, but enforce a total
+/// frame deadline (not merely a timeout reset by each arriving byte).
+/// Callers supplying a deadline must also configure a finite socket timeout.
+pub fn read_bounded_line_until(
+    reader: &mut impl BufRead,
+    deadline: Option<std::time::Instant>,
+) -> std::io::Result<Option<String>> {
     let mut line = Vec::new();
     loop {
-        let available = reader.fill_buf()?;
+        if deadline.is_some_and(|limit| std::time::Instant::now() >= limit) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "protocol frame deadline expired",
+            ));
+        }
+        let available = match reader.fill_buf() {
+            Ok(bytes) => bytes,
+            Err(error)
+                if deadline.is_some()
+                    && matches!(
+                        error.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         if available.is_empty() {
             if line.is_empty() {
                 return Ok(None);
@@ -258,6 +292,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn oversized_outgoing_frame_is_rejected_too() {
+        assert!(
+            encode_line(&Message::Notify {
+                text: "x".repeat(MAX_MESSAGE_BYTES)
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
     fn protocol_registry_matches_java_2_2_4_order_and_port() {
         assert_eq!(DEFAULT_PORT, 4225);
         assert_eq!(PROTOCOL_VERSION, 1);
@@ -275,7 +319,10 @@ mod tests {
         );
         for (index, input) in InputType::VALUES.iter().enumerate() {
             assert_eq!(*input as usize, index);
-            assert_eq!(input.wire_name(), serde_json::to_string(input).unwrap().trim_matches('"'));
+            assert_eq!(
+                input.wire_name(),
+                serde_json::to_string(input).unwrap().trim_matches('"')
+            );
         }
     }
 

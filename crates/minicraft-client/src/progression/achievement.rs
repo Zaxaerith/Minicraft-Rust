@@ -12,9 +12,10 @@ pub struct Achievement {
 
 /// Load bundled Java `resources/achievements.json`.
 pub fn achievements() -> Result<Vec<Achievement>, String> {
-    let value: Value =
-        serde_json::from_str(include_str!("../../../../assets/resources/achievements.json"))
-            .map_err(|error| format!("cannot parse bundled achievements: {error}"))?;
+    let value: Value = serde_json::from_str(include_str!(
+        "../../../../assets/resources/achievements.json"
+    ))
+    .map_err(|error| format!("cannot parse bundled achievements: {error}"))?;
     value
         .as_array()
         .ok_or_else(|| "bundled achievements must be an array".to_owned())?

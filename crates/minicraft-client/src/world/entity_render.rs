@@ -1,6 +1,8 @@
 //! Per-kind entity drawing (Java Entity.render / MobAi / Furniture / particles).
 use super::{Assets, EntityKind, Screen, TILE_SIZE, Tile, entity, spawn};
 
+// Keep the existing coordinate/render API without adding wrapper state.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_entity(
     screen: &mut Screen,
     assets: &Assets,

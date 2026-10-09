@@ -31,15 +31,10 @@ pub fn arrow_velocity(dx: i32, dy: i32, damage: u8) -> (i16, i16) {
 
 /// Java Spark life: 360 + rand(30) ticks; no solid-tile destroy.
 pub fn spark_life(seed: u64) -> u16 {
-    let life = 360 + (crate::entity::helpers::split_mix(seed) % 30) as u16;
-    life
+    360 + (crate::entity::helpers::split_mix(seed) % 30) as u16
 }
 
 /// Java Spark damage: FireSpark 2, Spark 1.
 pub const fn spark_damage(fire: bool) -> u8 {
-    if fire {
-        2
-    } else {
-        1
-    }
+    if fire { 2 } else { 1 }
 }

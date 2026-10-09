@@ -151,6 +151,9 @@ impl EntityArena {
         if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id) {
             entity.state = chest::DEATH_CHEST_STATE;
             if let Some(storage) = entity.storage.as_mut() {
+                // Java DeathChest has unlimited storage: a full bag plus armor
+                // must fit even though a normal chest has only 27 slots.
+                storage.set_capacity(usize::MAX);
                 for stack in stacks {
                     storage.add(stack.item, stack.count);
                 }
@@ -300,7 +303,8 @@ impl EntityArena {
     }
 
     pub fn furniture_near(&self, x: i32, y: i32, radius: i32) -> Option<FurnitureKind> {
-        self.furniture_entry_near(x, y, radius).map(|(_, kind, _)| kind)
+        self.furniture_entry_near(x, y, radius)
+            .map(|(_, kind, _)| kind)
     }
 
     /// Java Entity.interact / use search: nearest furniture with its id and state.
@@ -314,8 +318,11 @@ impl EntityArena {
             let EntityKind::Furniture(kind) = entity.kind else {
                 return None;
             };
-            (squared_distance(entity.x, entity.y, x, y) <= radius * radius)
-                .then_some((entity.id, kind, entity.state))
+            (squared_distance(entity.x, entity.y, x, y) <= radius * radius).then_some((
+                entity.id,
+                kind,
+                entity.state,
+            ))
         })
     }
 
@@ -596,7 +603,7 @@ impl EntityArena {
                 entity.kind,
                 EntityKind::Furniture(FurnitureKind::Chest | FurnitureKind::DungeonChest)
             ) && entity.state != chest::DEATH_CHEST_STATE
-            && squared_distance(entity.x, entity.y, target_x, target_y) <= 14 * 14
+                && squared_distance(entity.x, entity.y, target_x, target_y) <= 14 * 14
         })?;
         let EntityKind::Furniture(kind) = entity.kind else {
             unreachable!();
@@ -685,7 +692,18 @@ impl EntityArena {
 }
 
 /// Java Rectangle.intersects: inclusive edges.
-fn aabb_overlap(ax: i32, ay: i32, axr: i32, ayr: i32, bx: i32, by: i32, bxr: i32, byr: i32) -> bool {
+// Keep the existing coordinate/render API without adding wrapper state.
+#[allow(clippy::too_many_arguments)]
+fn aabb_overlap(
+    ax: i32,
+    ay: i32,
+    axr: i32,
+    ayr: i32,
+    bx: i32,
+    by: i32,
+    bxr: i32,
+    byr: i32,
+) -> bool {
     let ax0 = ax - axr;
     let ax1 = ax + axr;
     let ay0 = ay - ayr;

@@ -34,10 +34,16 @@ impl ToolRecipe {
         }
         let snapshot = inventory.clone();
         for cost in self.costs {
-            debug_assert!(inventory.remove(cost.item, cost.count));
+            if !inventory.remove(cost.item, cost.count) {
+                *inventory = snapshot;
+                return None;
+            }
         }
-        if let Some((kind, tier)) = self.tool_cost {
-            debug_assert!(inventory.remove_tool(kind, tier));
+        if let Some((kind, tier)) = self.tool_cost
+            && !inventory.remove_tool(kind, tier)
+        {
+            *inventory = snapshot;
+            return None;
         }
         let Some(index) = inventory.add_tool(self.output) else {
             *inventory = snapshot;
@@ -60,7 +66,10 @@ impl Recipe {
         }
         let snapshot = inventory.clone();
         for cost in self.costs {
-            debug_assert!(inventory.remove(cost.item, cost.count));
+            if !inventory.remove(cost.item, cost.count) {
+                *inventory = snapshot;
+                return false;
+            }
         }
         if inventory.add(self.output.item, self.output.count) != 0 {
             *inventory = snapshot;

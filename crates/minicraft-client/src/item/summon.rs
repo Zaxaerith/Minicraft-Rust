@@ -61,7 +61,10 @@ mod tests {
     fn summon_depths_match_java() {
         assert_eq!(SummonBoss::AirWizard.required_depth(), 1);
         assert_eq!(SummonBoss::ObsidianKnight.required_depth(), -4);
-        assert_eq!(summon_for_item(ItemId::AirTotem), Some(SummonBoss::AirWizard));
+        assert_eq!(
+            summon_for_item(ItemId::AirTotem),
+            Some(SummonBoss::AirWizard)
+        );
         assert_eq!(
             summon_for_item(ItemId::ObsidianPoppet),
             Some(SummonBoss::ObsidianKnight)

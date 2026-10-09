@@ -149,6 +149,6 @@ mod tests {
         let px_mirror = 0b01u8;
         let draw_mirror = 0b10u8;
         assert_eq!(px_mirror ^ draw_mirror, 0b11);
-        assert_eq!(px_mirror ^ 0, 0b01);
+        assert_eq!(px_mirror, 0b01);
     }
 }

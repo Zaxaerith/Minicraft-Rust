@@ -16,11 +16,7 @@ pub const SCROLL_WRAP: bool = true;
 pub const NO_WORLDS_FOUND: &str = "NO WORLDS FOUND";
 
 /// Java `updateEntries` menu from world names.
-pub fn build_menu(
-    worlds: &[WorldRecord],
-    _localization: &Localization,
-    selection: usize,
-) -> Menu {
+pub fn build_menu(worlds: &[WorldRecord], _localization: &Localization, selection: usize) -> Menu {
     let entries: Vec<Entry> = if worlds.is_empty() {
         vec![Entry::string(NO_WORLDS_FOUND)]
     } else {
@@ -102,10 +98,7 @@ mod tests {
         assert_eq!(menu.display_length, 3);
         assert!(menu.wrap);
         // Java clamps displayLength before padding: floor(1.0 * 3 / 2) = 1.
-        assert_eq!(
-            menu.padding,
-            (SCROLL_PADDING * 3 as f32 / 2.0) as i32
-        );
+        assert_eq!(menu.padding, (SCROLL_PADDING * 3_f32 / 2.0) as i32);
         assert_eq!(menu.selection, 2);
         assert_eq!(menu.bounds.0 + menu.bounds.2 / 2, WIDTH as i32 / 2);
     }

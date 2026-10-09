@@ -19,11 +19,7 @@ pub fn required_material(ornate_obsidian: bool) -> Material {
 
 /// Broken decor becomes cloud on sky depth, otherwise hole.
 pub fn broken_tile(depth: i8) -> Tile {
-    if depth == 1 {
-        Tile::Cloud
-    } else {
-        Tile::Hole
-    }
+    if depth == 1 { Tile::Cloud } else { Tile::Hole }
 }
 
 #[cfg(test)]
@@ -37,6 +33,8 @@ mod tests {
         assert_eq!(required_material(true), Material::Obsidian);
         assert_eq!(broken_tile(1), Tile::Cloud);
         assert_eq!(broken_tile(-1), Tile::Hole);
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

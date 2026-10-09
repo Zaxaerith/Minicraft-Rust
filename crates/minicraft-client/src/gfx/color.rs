@@ -130,25 +130,13 @@ mod tests {
     #[test]
     fn to_string_code_round_trips_through_parse() {
         for color in [
-            WHITE,
-            GRAY,
-            DARK_GRAY,
-            BLACK,
-            RED,
-            GREEN,
-            BLUE,
-            YELLOW,
-            MAGENTA,
-            CYAN,
+            WHITE, GRAY, DARK_GRAY, BLACK, RED, GREEN, BLUE, YELLOW, MAGENTA, CYAN,
         ] {
             let code = to_string_code(color);
             assert_eq!(code.chars().count(), 5);
             assert_eq!(code.chars().next(), Some(COLOR_CHAR));
             assert_eq!(parse_code(&code), Some(color));
-            assert_eq!(
-                parse_code(&code[COLOR_CHAR.len_utf8()..]),
-                Some(color)
-            );
+            assert_eq!(parse_code(&code[COLOR_CHAR.len_utf8()..]), Some(color));
         }
     }
 

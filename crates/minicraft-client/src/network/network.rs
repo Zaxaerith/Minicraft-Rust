@@ -5,8 +5,8 @@
 //! shape; the live HTTP call itself is intentionally out of scope (no HTTP
 //! client in this crate) — callers supply the releases array or the fallback.
 
-use std::cmp::Ordering;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::sync::Mutex;
 
 use crate::entity::Entity;
@@ -108,10 +108,7 @@ pub fn select_latest_release(releases: &[serde_json::Value]) -> Option<VersionIn
 }
 
 /// Java `Network.getEntity(int eid)` — first match across every level.
-pub fn get_entity<'a>(
-    eid: i32,
-    levels: impl IntoIterator<Item = &'a Level>,
-) -> Option<&'a Entity> {
+pub fn get_entity<'a>(eid: i32, levels: impl IntoIterator<Item = &'a Level>) -> Option<&'a Entity> {
     if eid <= 0 {
         return None;
     }
@@ -132,7 +129,7 @@ pub fn collect_entity_ids<'a>(levels: impl IntoIterator<Item = &'a Level>) -> Ve
 
 /// Java `Network.idIsAvailable(int eid)` — reserved 0, must be positive, unique.
 pub fn id_is_available(eid: i32, occupied_ids: impl IntoIterator<Item = u64>) -> bool {
-    if eid == 0 || eid < 0 {
+    if eid <= 0 {
         return false;
     }
     let candidate = eid as u64;
@@ -149,7 +146,7 @@ pub fn generate_unique_entity_id<'a>(levels: impl IntoIterator<Item = &'a Level>
     let occupied = collect_entity_ids(levels);
     ID_RANDOM.with(|cell| {
         let mut random = cell.borrow_mut();
-        generate_unique_entity_id_with(&mut *random, &occupied)
+        generate_unique_entity_id_with(&mut random, &occupied)
     })
 }
 
@@ -205,7 +202,9 @@ mod tests {
         assert!(get_entity(eid, [&surface, &cave]).is_some());
         assert!(get_entity(999_999, [&surface, &cave]).is_none());
         assert!(get_entity(0, [&surface, &cave]).is_none());
-        let _ = cave.entities.spawn_item(ItemStack::new(ItemId::Key, 1), 1, 1);
+        let _ = cave
+            .entities
+            .spawn_item(ItemStack::new(ItemId::Key, 1), 1, 1);
         assert_eq!(collect_entity_ids([&surface, &cave]).len(), 2);
     }
 

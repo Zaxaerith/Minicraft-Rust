@@ -4,20 +4,13 @@ use super::{GameMode, TILE_SIZE, Tile, World};
 impl World {
     pub(super) fn can_stand(&self, x: i32, y: i32) -> bool {
         // Java Entity moveX/Y: tile solidity plus full furniture hitbox overlap.
-        [
-            (-4, -3),
-            (4, -3),
-            (-4, 3),
-            (4, 3),
-            (0, 0),
-        ]
-        .into_iter()
-        .all(|(offset_x, offset_y)| {
-            let (tile, data) = self.tile_and_data_at_pixel(x + offset_x, y + offset_y);
-            self.mode == GameMode::Creative && tile == Tile::InfiniteFall || !tile.solid(data)
-        })
-            && !self
-                .levels[self.current_level]
+        [(-4, -3), (4, -3), (-4, 3), (4, 3), (0, 0)]
+            .into_iter()
+            .all(|(offset_x, offset_y)| {
+                let (tile, data) = self.tile_and_data_at_pixel(x + offset_x, y + offset_y);
+                self.mode == GameMode::Creative && tile == Tile::InfiniteFall || !tile.solid(data)
+            })
+            && !self.levels[self.current_level]
                 .entities
                 .furniture_blocks_player(x, y)
     }

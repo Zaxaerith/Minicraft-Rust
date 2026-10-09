@@ -10,11 +10,7 @@ pub fn may_pass() -> bool {
 
 /// Broken raw material becomes cloud on sky depth, otherwise hole.
 pub fn broken_tile(depth: i8) -> Tile {
-    if depth == 1 {
-        Tile::Cloud
-    } else {
-        Tile::Hole
-    }
+    if depth == 1 { Tile::Cloud } else { Tile::Hole }
 }
 
 pub fn tile_for(material: Material) -> Tile {
@@ -36,6 +32,8 @@ mod tests {
         assert_eq!(broken_tile(0), Tile::Hole);
         assert_eq!(tile_for(Material::Stone), Tile::RawStone);
         assert_eq!(tile_for(Material::Obsidian), Tile::RawObsidian);
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

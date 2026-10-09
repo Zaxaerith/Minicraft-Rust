@@ -1,7 +1,7 @@
 //! Java Renderer HUD layer: hearts, stamina, score, quests, potions, boss bar.
 use super::{ActiveItem, Assets, GameMode, HEIGHT, Player, Screen, WIDTH, World};
-use crate::item::{ItemId, PotionKind, ToolKind};
 use crate::gfx::gui::render_menu_frame;
+use crate::item::{ItemId, PotionKind, ToolKind};
 
 pub(crate) fn render_score_overlay(
     screen: &mut Screen,

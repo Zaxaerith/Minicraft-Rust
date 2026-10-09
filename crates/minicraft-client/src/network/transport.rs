@@ -4,13 +4,12 @@
 //! the socket client itself is the Rust probe surface. LOGIN is always the
 //! first frame; PING/PONG is the heartbeat (Java `InputType.PING`).
 use minicraft_common::protocol::{
-    GAME_VERSION, Message, PROTOCOL_VERSION, decode_line, encode_line, read_bounded_line,
+    GAME_VERSION, Message, PROTOCOL_VERSION, decode_line, encode_line,
 };
 use std::{
-    collections::VecDeque,
     io::{BufReader, Write},
-    net::TcpStream,
-    sync::mpsc::{self, Receiver, Sender},
+    net::{Shutdown, TcpStream, ToSocketAddrs},
+    sync::mpsc::{self, Receiver, SyncSender},
     thread,
     time::Duration,
 };
@@ -42,21 +41,39 @@ pub struct MultiplayerClient {
     pub client_id: u64,
     writer: TcpStream,
     receiver: Receiver<Message>,
-    backlog: VecDeque<Message>,
+    reader: Option<thread::JoinHandle<()>>,
 }
 
 impl MultiplayerClient {
     pub fn connect(address: &str, username: &str) -> Result<Self, String> {
-        let mut writer = TcpStream::connect(address)
-            .map_err(|error| format!("cannot connect to multiplayer server {address}: {error}"))?;
+        let mut connected = None;
+        for endpoint in address
+            .to_socket_addrs()
+            .map_err(|error| error.to_string())?
+        {
+            if let Ok(stream) = TcpStream::connect_timeout(&endpoint, Duration::from_secs(3)) {
+                connected = Some(stream);
+                break;
+            }
+        }
+        let mut writer =
+            connected.ok_or_else(|| format!("cannot connect to multiplayer server {address}"))?;
         writer
             .set_nodelay(true)
             .map_err(|error| format!("cannot configure multiplayer client: {error}"))?;
-        let reader = writer
-            .try_clone()
-            .map_err(|error| format!("cannot clone multiplayer connection: {error}"))?;
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || client_reader(reader, sender));
+        writer
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .map_err(|error| error.to_string())?;
+        writer
+            .set_write_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        // Finish the bounded handshake before spawning a reader. Any failed
+        // handshake then closes every socket without leaving a detached reader.
+        let mut reader = BufReader::new(
+            writer
+                .try_clone()
+                .map_err(|error| format!("cannot clone multiplayer connection: {error}"))?,
+        );
         send_message(
             &mut writer,
             &Message::Login {
@@ -65,28 +82,29 @@ impl MultiplayerClient {
                 protocol_version: PROTOCOL_VERSION,
             },
         )?;
-        let mut backlog = VecDeque::new();
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        let client_id = loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let message = receiver
-                .recv_timeout(remaining)
-                .map_err(|_| "multiplayer login timed out".to_owned())?;
-            match message {
-                Message::Init {
-                    client_id,
-                    protocol_version: PROTOCOL_VERSION,
-                    ..
-                } => break client_id,
-                Message::Notify { text } => return Err(text),
-                other => backlog.push_back(other),
-            }
+        let line = minicraft_common::protocol::read_bounded_line_until(&mut reader, Some(deadline))
+            .map_err(|error| format!("multiplayer login failed: {error}"))?
+            .ok_or("multiplayer server closed during login")?;
+        let client_id = match decode_line(&line).map_err(|error| error.to_string())? {
+            Message::Init {
+                client_id,
+                protocol_version: PROTOCOL_VERSION,
+                server_version,
+            } if client_id != 0 && server_version == GAME_VERSION => client_id,
+            Message::Notify { text } => return Err(text),
+            _ => return Err("expected compatible INIT as the first server message".to_owned()),
         };
+        let (sender, receiver) = mpsc::sync_channel(256);
+        let reader = thread::Builder::new()
+            .name("multiplayer-reader".to_owned())
+            .spawn(move || client_reader(reader, sender))
+            .map_err(|error| error.to_string())?;
         Ok(Self {
             client_id,
             writer,
             receiver,
-            backlog,
+            reader: Some(reader),
         })
     }
 
@@ -107,28 +125,41 @@ impl MultiplayerClient {
     }
 
     pub fn poll(&mut self) -> Vec<Message> {
-        self.backlog
-            .drain(..)
-            .chain(self.receiver.try_iter())
-            .collect()
+        self.receiver.try_iter().take(256).collect()
     }
 }
 
 impl Drop for MultiplayerClient {
     fn drop(&mut self) {
         let _ = send_message(&mut self.writer, &Message::Disconnect);
+        let _ = self.writer.shutdown(Shutdown::Both);
+        if let Some(reader) = self.reader.take() {
+            let _ = reader.join();
+        }
     }
 }
 
-fn client_reader(stream: TcpStream, sender: Sender<Message>) {
-    let mut reader = BufReader::new(stream);
-    while let Ok(Some(line)) = read_bounded_line(&mut reader) {
-        if let Ok(message) = decode_line(&line)
-            && sender.send(message).is_err()
+fn client_reader(mut reader: BufReader<TcpStream>, sender: SyncSender<Message>) {
+    while let Ok(Some(line)) = minicraft_common::protocol::read_bounded_line_until(
+        &mut reader,
+        Some(std::time::Instant::now() + Duration::from_secs(35)),
+    ) {
+        let Ok(message) = decode_line(&line) else {
+            break;
+        };
+        if matches!(
+            message,
+            Message::Login { .. }
+                | Message::Move { .. }
+                | Message::Ping { .. }
+                | Message::Disconnect
+                | Message::Init { .. }
+        ) || sender.try_send(message).is_err()
         {
             break;
         }
     }
+    let _ = reader.get_ref().shutdown(Shutdown::Both);
 }
 
 fn send_message(stream: &mut TcpStream, message: &Message) -> Result<(), String> {

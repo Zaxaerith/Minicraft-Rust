@@ -274,9 +274,7 @@ mod tests {
         assert_eq!(stops[13], 254);
         assert!(stops[25] < stops[13]);
         assert!(
-            stops
-                .windows(2)
-                .all(|pair| pair[0] >= pair[1]),
+            stops.windows(2).all(|pair| pair[0] >= pair[1]),
             "stops must be non-increasing"
         );
     }

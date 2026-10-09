@@ -49,7 +49,7 @@ impl DyeColor {
             Self::Black => 0x1_1D_1D_21,
             Self::Red => 0x1_B0_2E_26,
             Self::Green => 0x1_5E_7C_16,
-            Self::Brown => 0x1_83_54_32,
+            Self::Brown => 0x0183_5432,
             Self::Blue => 0x1_3C_44_AA,
             Self::Purple => 0x1_89_32_B8,
             Self::Cyan => 0x1_16_9C_9C,

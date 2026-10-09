@@ -18,10 +18,9 @@ pub struct TutorialStep {
 
 /// Load bundled Java `resources/tutorials.json`, ordered by `index`.
 pub fn tutorials() -> Result<Vec<TutorialStep>, String> {
-    let value: Value = serde_json::from_str(include_str!(
-        "../../../../assets/resources/tutorials.json"
-    ))
-    .map_err(|error| format!("cannot parse bundled tutorials: {error}"))?;
+    let value: Value =
+        serde_json::from_str(include_str!("../../../../assets/resources/tutorials.json"))
+            .map_err(|error| format!("cannot parse bundled tutorials: {error}"))?;
     let mut steps = object(&value, "tutorial root")?
         .iter()
         .map(|(id, entry)| {

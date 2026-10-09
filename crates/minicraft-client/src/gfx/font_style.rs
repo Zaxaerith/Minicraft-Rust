@@ -155,6 +155,8 @@ impl FontStyle {
         }
     }
 
+    // Keep the existing coordinate/render API without adding wrapper state.
+    #[allow(clippy::too_many_arguments)]
     fn draw_line_in(
         &self,
         screen: &mut Screen,
@@ -268,7 +270,10 @@ mod tests {
         let style = FontStyle::new(0);
         assert_eq!(
             style.anchor,
-            (super::super::WIDTH as i32 / 2, super::super::HEIGHT as i32 / 2)
+            (
+                super::super::WIDTH as i32 / 2,
+                super::super::HEIGHT as i32 / 2
+            )
         );
         assert_eq!(style.rel_text_pos, RelPos::CENTER);
         assert_eq!(style.shadow_mask, 0);

@@ -68,8 +68,13 @@ impl ProgressState {
                 if self.tutorial_completed.contains(&tutorial.id) {
                     continue;
                 }
-                if self.owner_criteria_met(&tutorial.id, &tutorial.criteria, &tutorial.requirements, event, inventory)
-                {
+                if self.owner_criteria_met(
+                    &tutorial.id,
+                    &tutorial.criteria,
+                    &tutorial.requirements,
+                    event,
+                    inventory,
+                ) {
                     self.tutorial_completed.insert(tutorial.id.clone());
                     update.completed_tutorials.push(tutorial.id.clone());
                 }

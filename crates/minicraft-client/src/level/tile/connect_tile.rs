@@ -18,7 +18,9 @@ mod tests {
     #[test]
     fn connect_tile_blocks_and_never_spawns() {
         assert!(!super::may_pass());
-        assert!(!super::MAY_SPAWN);
+        const {
+            assert!(!super::MAY_SPAWN);
+        }
         assert!(super::is_debug_only());
     }
 }

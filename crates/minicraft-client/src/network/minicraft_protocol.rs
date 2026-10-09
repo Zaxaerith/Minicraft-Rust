@@ -125,6 +125,9 @@ mod tests {
         let older = crate::saveload::Version::parse("2.2.3");
         assert_eq!(newer.compare(&release), Ordering::Greater);
         assert_eq!(older.compare(&release), Ordering::Less);
-        assert_eq!(release.compare(&crate::saveload::Version::parse("2.2.4")), Ordering::Equal);
+        assert_eq!(
+            release.compare(&crate::saveload::Version::parse("2.2.4")),
+            Ordering::Equal
+        );
     }
 }

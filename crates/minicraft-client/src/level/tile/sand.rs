@@ -40,6 +40,8 @@ mod tests {
         assert!(should_emit_step_particle(0));
         assert!(should_emit_step_particle(8));
         assert!(!should_emit_step_particle(7));
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

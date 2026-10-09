@@ -308,15 +308,17 @@ impl EntityArena {
 
 /// Java ItemEntity.tick: ballistic hop + lifetime.
 fn tick_item(entity: &mut super::types::Entity) {
-    let motion = entity.item_motion.get_or_insert_with(|| super::types::ItemMotion {
-        precise_x: f64::from(entity.x),
-        precise_y: f64::from(entity.y),
-        height: 0.0,
-        velocity_x: 0.0,
-        velocity_y: 0.0,
-        velocity_z: 0.0,
-        lifetime: 600,
-    });
+    let motion = entity
+        .item_motion
+        .get_or_insert_with(|| super::types::ItemMotion {
+            precise_x: f64::from(entity.x),
+            precise_y: f64::from(entity.y),
+            height: 0.0,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
+            lifetime: 600,
+        });
     motion.precise_x += motion.velocity_x;
     motion.precise_y += motion.velocity_y;
     motion.height += motion.velocity_z;
@@ -353,7 +355,16 @@ fn tick_furniture(
 ) {
     if let Some(species) = kind.spawner_mob()
         && let Some((species, sx, sy)) = spawner::try_spawn(
-            species, x, y, age, tiles, data, width, height, player, level_depth,
+            species,
+            x,
+            y,
+            age,
+            tiles,
+            data,
+            width,
+            height,
+            player,
+            level_depth,
         )
     {
         queued_mobs.push((species, sx, sy));

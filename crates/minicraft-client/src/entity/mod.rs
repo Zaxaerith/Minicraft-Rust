@@ -19,9 +19,7 @@ pub use helpers::{can_stand, furniture_can_stand, squared_distance};
 pub use particle::{ParticleKind, text_particle_motion};
 pub use projectile::{Projectile, ProjectileKind};
 pub use stats::{mob_drops, mob_health};
-pub use types::{
-    DESPAWN_AGE, Entity, EntityKind, HitResult, ItemMotion, Mob, TickOutcome,
-};
+pub use types::{DESPAWN_AGE, Entity, EntityKind, HitResult, ItemMotion, Mob, TickOutcome};
 
 #[cfg(test)]
 mod tests {
@@ -68,10 +66,12 @@ mod tests {
         assert_eq!(tiles[8 + 8 * 16], Tile::Hole);
         assert_eq!(tiles[7 + 7 * 16], Tile::Hole);
         assert_eq!(tiles[9 + 9 * 16], Tile::Hole);
-        assert!(arena
-            .entities()
-            .iter()
-            .all(|entity| !matches!(entity.kind, EntityKind::ExplosionTicker)));
+        assert!(
+            arena
+                .entities()
+                .iter()
+                .all(|entity| !matches!(entity.kind, EntityKind::ExplosionTicker))
+        );
     }
 
     #[test]

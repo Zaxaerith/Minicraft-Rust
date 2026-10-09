@@ -1,8 +1,6 @@
 //! Platform audio backends and PCM stream adapters.
 //! Sound IDs and WAVE validation live in `crate::io::audio`.
-pub use crate::io::audio::{
-    SoundEffect, validate_embedded_sounds as validate_embedded_assets,
-};
+pub use crate::io::audio::{SoundEffect, validate_embedded_sounds as validate_embedded_assets};
 
 /// Asset adapter; mixing arithmetic and device scheduling remain unchanged.
 pub(crate) struct JavaPcmMixer(crate::io::audio::PcmMixer);

@@ -72,15 +72,13 @@ pub fn menu_selection_for_action(action: usize) -> usize {
 
 /// Map a full menu selection index onto TITLE_KEYS (0=Play).
 pub fn action_for_menu_selection(selection: usize) -> usize {
-    selection.saturating_sub(LEADING_ROWS).min(TITLE_KEYS.len() - 1)
+    selection
+        .saturating_sub(LEADING_ROWS)
+        .min(TITLE_KEYS.len() - 1)
 }
 
 /// Java TitleDisplay: checking line (DARK_GRAY / Color.get(1,51)) + blank + selects.
-pub fn build_menu(
-    localization: &Localization,
-    _world_count: usize,
-    selection: usize,
-) -> Menu {
+pub fn build_menu(localization: &Localization, _world_count: usize, selection: usize) -> Menu {
     let mut entries = vec![
         Entry::string_colored(
             localization.text("minicraft.displays.title.display.latest_already"),
@@ -126,11 +124,7 @@ pub fn splash_text_y() -> i32 {
 }
 
 /// Footer help lines: h-30, h-20, h-10 (DARK_GRAY).
-pub const HELP_LINE_Y: [i32; 3] = [
-    HEIGHT as i32 - 30,
-    HEIGHT as i32 - 20,
-    HEIGHT as i32 - 10,
-];
+pub const HELP_LINE_Y: [i32; 3] = [HEIGHT as i32 - 30, HEIGHT as i32 - 20, HEIGHT as i32 - 10];
 
 #[cfg(test)]
 mod tests {
@@ -145,10 +139,7 @@ mod tests {
         assert_eq!(menu.spacing, 2);
         assert!(!menu.has_frame);
         assert!(menu.selectable);
-        assert_eq!(
-            menu.bounds.0 + menu.bounds.2 / 2,
-            WIDTH as i32 / 2
-        );
+        assert_eq!(menu.bounds.0 + menu.bounds.2 / 2, WIDTH as i32 / 2);
         // Anchor is (w/2, h*3/5) with RelPos::CENTER.
         let center_y = menu.bounds.1 + menu.bounds.3 / 2;
         assert!((center_y - HEIGHT as i32 * 3 / 5).abs() <= 8);

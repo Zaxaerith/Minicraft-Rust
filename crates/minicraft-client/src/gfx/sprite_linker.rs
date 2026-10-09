@@ -144,6 +144,8 @@ impl LinkedSprite {
     }
 
     /// Java Screen.render(x, y, LinkedSprite) / render(..., mirror, fullbright, color).
+    // Keep the existing coordinate/render API without adding wrapper state.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         linker: &SpriteLinker,
@@ -216,8 +218,8 @@ mod tests {
         // Java: xOffset = flipX ? w-1-c : c, plus the sprite origin.
         assert_eq!(sprite.rows[0][0].sheet_x, 1 + 1);
         assert_eq!(sprite.rows[0][0].sheet_y, 2 + 1);
-        assert_eq!(sprite.rows[1][1].sheet_x, 1 + 0);
-        assert_eq!(sprite.rows[1][1].sheet_y, 2 + 0);
+        assert_eq!(sprite.rows[1][1].sheet_x, 1);
+        assert_eq!(sprite.rows[1][1].sheet_y, 2);
     }
 
     #[test]
@@ -249,9 +251,11 @@ mod tests {
     fn gui_has_no_missing_sheet() {
         let linker = SpriteLinker::default();
         assert!(linker.missing(SpriteType::Gui).is_none());
-        assert!(LinkedSprite::new(SpriteType::Gui, "font")
-            .resolve(&linker)
-            .is_none());
+        assert!(
+            LinkedSprite::new(SpriteType::Gui, "font")
+                .resolve(&linker)
+                .is_none()
+        );
     }
 
     #[test]

@@ -138,7 +138,10 @@ pub fn draw_color(screen: &mut Screen, font: &Image, text: &str, x: i32, y: i32)
                 .wrapping_add((units[1] as u32) << 16)
                 .wrapping_add((units[2] as u32) << 8)
                 .wrapping_add(units[3] as u32);
-            (String::from_utf16_lossy(&units[4..]), color::upgrade(packed))
+            (
+                String::from_utf16_lossy(&units[4..]),
+                color::upgrade(packed),
+            )
         } else {
             (segment.to_owned(), color::WHITE_RGB)
         };

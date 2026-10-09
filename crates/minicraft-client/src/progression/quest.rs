@@ -63,10 +63,9 @@ pub struct QuestView {
 
 /// Load bundled Java `resources/quests.json`.
 pub fn quests() -> Result<Vec<QuestGroup>, String> {
-    let value: Value = serde_json::from_str(include_str!(
-        "../../../../assets/resources/quests.json"
-    ))
-    .map_err(|error| format!("cannot parse bundled quests: {error}"))?;
+    let value: Value =
+        serde_json::from_str(include_str!("../../../../assets/resources/quests.json"))
+            .map_err(|error| format!("cannot parse bundled quests: {error}"))?;
     object(&value, "quest root")?
         .iter()
         .map(|(id, group)| {

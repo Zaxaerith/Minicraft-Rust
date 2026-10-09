@@ -85,9 +85,7 @@ pub fn display_stack_snapshots(trace: &ParityTrace) -> Result<Vec<ParitySnapshot
                         game.enter_title();
                     }
                     if probe.name.starts_with("world") {
-                        game.enter_world(crate::core::game::ClockSnapshot::new(
-                            0, 0, true,
-                        ));
+                        game.enter_world(crate::core::game::ClockSnapshot::new(0, 0, true));
                     }
                 }
                 let hook = if event == LifecycleEvent::Init {

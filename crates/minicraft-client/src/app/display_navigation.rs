@@ -9,10 +9,7 @@ use crate::{
 use super::State;
 
 #[cfg(test)]
-pub(super) fn observe_world(
-    world: &crate::world::World,
-    game: &mut crate::core::game::Game,
-) {
+pub(super) fn observe_world(world: &crate::world::World, game: &mut crate::core::game::Game) {
     // Runtime handles already share state; no per-tick snapshot propagation.
     let _ = (world, game);
 }
@@ -107,9 +104,7 @@ mod tests {
         };
         let mut stack = title();
         let mut game = crate::core::game::Game::default();
-        game.enter_world(crate::core::game::ClockSnapshot::new(
-            99, 0, true,
-        ));
+        game.enter_world(crate::core::game::ClockSnapshot::new(99, 0, true));
         stack.open(State::Playing {
             world: Box::new(world),
             record,
@@ -235,9 +230,7 @@ mod tests {
         let mut stack = title();
         let mut game = crate::core::game::Game::default();
         // Model a ready outgoing session without allocating a generated world.
-        game.enter_world(crate::core::game::ClockSnapshot::new(
-            120, 0, true,
-        ));
+        game.enter_world(crate::core::game::ClockSnapshot::new(120, 0, true));
         stack.open(State::title(0, 0));
         assert!(game.ready());
         assert_eq!(game.game_time(), 120);

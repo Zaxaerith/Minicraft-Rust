@@ -90,12 +90,7 @@ pub(crate) fn render_resource_pack_parity(
         &KeyBindings::default(),
     );
     if scene == RenderScene::ResourcePacksInfo {
-        crate::resource_pack_ui::render_info(
-            screen,
-            assets,
-            localization,
-            packs.get(selection),
-        );
+        crate::resource_pack_ui::render_info(screen, assets, localization, packs.get(selection));
     }
 }
 
@@ -177,12 +172,12 @@ pub(crate) fn render_title(
         let item = localization.text(key);
         let y = 96 + index as i32 * 10;
         if index == selection {
-            let width = crate::gfx::font::text_width(&item);
+            let width = crate::gfx::font::text_width(item);
             let x = (WIDTH as i32 - width) / 2;
             screen.text(assets.font(), ">", x - 8, y);
             screen.text(assets.font(), "<", x + width, y);
         }
-        let x = (WIDTH as i32 - crate::gfx::font::text_width(&item)) / 2;
+        let x = (WIDTH as i32 - crate::gfx::font::text_width(item)) / 2;
         screen.text_colored(
             assets.font(),
             item,
@@ -470,7 +465,7 @@ pub(super) fn render_achievements(
         screen.text_colored(
             assets.font(),
             status,
-            (WIDTH as i32 - crate::gfx::font::text_width(&status)) / 2,
+            (WIDTH as i32 - crate::gfx::font::text_width(status)) / 2,
             48,
             if achieved { 0x00FF00 } else { 0xFF3030 },
         );
@@ -482,13 +477,13 @@ pub(super) fn render_achievements(
         let index = first + row;
         let y = 72 + row as i32 * 10;
         let name = localization.text(&achievement.id);
-        let x = (WIDTH as i32 - crate::gfx::font::text_width(&name)) / 2;
+        let x = (WIDTH as i32 - crate::gfx::font::text_width(name)) / 2;
         if index == selection {
             screen.text(assets.font(), ">", x - 8, y);
             screen.text(
                 assets.font(),
                 "<",
-                x + crate::gfx::font::text_width(&name),
+                x + crate::gfx::font::text_width(name),
                 y,
             );
         }
@@ -569,13 +564,17 @@ pub(super) fn render_key_bindings(
             &[&bindings.exit],
         ),
     ];
-    for (line, y) in help.iter().enumerate().map(|(i, line)| (line, HEIGHT as i32 - 8 * (4 - i as i32))) {
+    for (line, y) in help
+        .iter()
+        .enumerate()
+        .map(|(i, line)| (line, HEIGHT as i32 - 8 * (4 - i as i32)))
+    {
         screen.text_colored(assets.font(), line, 8, y, 0x999999);
     }
     if let Some((_, _append)) = capture {
         let message =
             localization.text("minicraft.displays.key_input.popup_display.press_key_sequence");
-        let width = crate::gfx::font::text_width(&message) + 16;
+        let width = crate::gfx::font::text_width(message) + 16;
         let x = (WIDTH as i32 - width) / 2;
         render_app_menu_frame(screen, assets.hud(), x, 82, width, 24);
         screen.text_colored(assets.font(), message, x + 8, 90, 0xFFFF00);
@@ -614,7 +613,7 @@ pub(super) fn render_control_guide(
         let label = localization.text(&key);
         let y = 20 + row as i32 * 8;
         if index == selection {
-            let width = crate::gfx::font::text_width(&label);
+            let width = crate::gfx::font::text_width(label);
             let x = (WIDTH as i32 - width) / 2;
             screen.text(assets.font(), ">", x - 8, y);
             screen.text(assets.font(), "<", x + width, y);
@@ -644,12 +643,12 @@ pub(super) fn render_centered_menu(
     for (index, label) in labels.iter().enumerate() {
         let y = start_y + index as i32 * spacing;
         if index == selection {
-            let width = crate::gfx::font::text_width(&label);
+            let width = crate::gfx::font::text_width(label);
             let x = (WIDTH as i32 - width) / 2;
             screen.text(assets.font(), ">", x - 8, y);
             screen.text(assets.font(), "<", x + width, y);
         }
-        let x = (WIDTH as i32 - crate::gfx::font::text_width(&label)) / 2;
+        let x = (WIDTH as i32 - crate::gfx::font::text_width(label)) / 2;
         screen.text_colored(
             assets.font(),
             label,
@@ -666,7 +665,7 @@ pub(super) fn render_centered_menu(
 
 pub(crate) fn render_focus_nagger(screen: &mut Screen, assets: &Assets, ticks: u64) {
     let message = "Click to focus!";
-    let width = crate::gfx::font::text_width(&message) + 16;
+    let width = crate::gfx::font::text_width(message) + 16;
     let height = 24;
     let x = (WIDTH as i32 - width) / 2;
     let y = (HEIGHT as i32 - height) / 2;
@@ -795,31 +794,32 @@ pub(super) fn render_skins_menu(
         16,
         flip_x,
     );
-    let menu = crate::screen::menu::MenuBuilder::new(false, 2, crate::screen::rel_pos::RelPos::CENTER, {
-        use crate::screen::entry::Entry;
-        skins
-            .iter()
-            .map(|skin| {
-                let name = if skin.starts_with("minicraft.skin.") {
-                    localization.text(skin).to_owned()
-                } else {
-                    skin.clone()
-                };
-                Entry::select(name, false)
-            })
-            .collect()
-    })
-    .set_display_length(8)
-    .set_positioning((WIDTH as i32 / 2, HEIGHT as i32 * 3 / 5), crate::screen::rel_pos::RelPos::CENTER)
-    .set_selection(selection as i32)
-    .create_menu();
+    let menu =
+        crate::screen::menu::MenuBuilder::new(false, 2, crate::screen::rel_pos::RelPos::CENTER, {
+            use crate::screen::entry::Entry;
+            skins
+                .iter()
+                .map(|skin| {
+                    let name = if skin.starts_with("minicraft.skin.") {
+                        localization.text(skin).to_owned()
+                    } else {
+                        skin.clone()
+                    };
+                    Entry::select(name, false)
+                })
+                .collect()
+        })
+        .set_display_length(8)
+        .set_positioning(
+            (WIDTH as i32 / 2, HEIGHT as i32 * 3 / 5),
+            crate::screen::rel_pos::RelPos::CENTER,
+        )
+        .set_selection(selection as i32)
+        .create_menu();
     menu.render(screen, assets.hud(), assets.font());
     screen.centered_text(
         assets.font(),
-        &localization.format(
-            "minicraft.displays.skin.display.help.move",
-            &["DOWN", "UP"],
-        ),
+        &localization.format("minicraft.displays.skin.display.help.move", &["DOWN", "UP"]),
         HEIGHT as i32 - 17,
     );
     screen.centered_text(
@@ -836,4 +836,3 @@ pub(super) fn render_skins_menu(
 pub(super) fn skin_preview_frame(ticks: u64) -> (usize, bool) {
     crate::screen::skin_display::skin_preview_frame(ticks)
 }
-

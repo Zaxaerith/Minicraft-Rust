@@ -8,30 +8,30 @@ mod death_transition;
 mod end_game;
 mod level_update;
 pub(crate) mod notifications;
-mod pause;
-mod pause_ui;
-mod pause_save;
-mod player_update;
 mod parity_hooks;
+mod pause;
+mod pause_save;
+mod pause_ui;
+mod player_update;
 mod render;
 mod sleep;
 
 mod boss;
 mod entity;
 mod entity_render;
-mod overlay_ui;
-mod player_render;
 mod furniture_action;
 mod generation;
 mod hud;
 mod inventory_ui;
 mod level_map;
+mod overlay_ui;
 mod player_actions;
+mod player_render;
 mod quest_tree;
 mod quest_ui;
+pub(crate) mod random;
 #[cfg(test)]
 pub(crate) mod registry_tests;
-pub(crate) mod random;
 pub mod spawn;
 mod structure;
 mod tile;
@@ -39,6 +39,7 @@ mod tile_attack;
 mod tile_behavior;
 mod tile_interact;
 
+pub use crate::gfx::gui::render_menu_frame;
 pub use hud::render_hud_parity;
 pub(crate) use hud::{
     render_boss_bar, render_hud, render_potion_overlay, render_quest_overlay, render_score_overlay,
@@ -48,10 +49,9 @@ pub(crate) use inventory_ui::{creative_entries, render_inventory, render_menu_ti
 pub use level_map::Level;
 pub(crate) use pause_ui::render_pause;
 pub(crate) use player_render::player_sprite_frame;
-pub use crate::gfx::gui::render_menu_frame;
 pub use tile::{
-    Tile, connection_mask, damage_tile, find_stair_site, fluid_animation_phase, increment_tile_tick,
-    tile_placement, tile_tick, underlay_layers,
+    Tile, connection_mask, damage_tile, find_stair_site, fluid_animation_phase,
+    increment_tile_tick, tile_placement, tile_tick, underlay_layers,
 };
 
 use std::collections::HashMap;
@@ -59,19 +59,19 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::assets::Assets;
+use crate::gfx::{HEIGHT, Screen, WIDTH};
 use crate::io::Input;
 use crate::io::audio::SoundEffect;
-use crate::progression::{Book, ProgressEvent, ProgressState};
-use crate::gfx::{HEIGHT, Screen, WIDTH};
 use crate::item::{
     ArmorKind, Inventory, ItemId, ItemStack, PotionKind, ToolItem, ToolKind, ToolTier,
     WORKBENCH_STATION_RECIPES, WORKBENCH_TOOL_RECIPES,
 };
+use crate::progression::{Book, ProgressEvent, ProgressState};
 use crate::resource::localization::Localization;
 
 pub use crate::entity::furniture::FurnitureKind;
-use entity::{EntityArena, EntityKind};
 pub use crate::saveload::{import_java_save, probe_java_save};
+use entity::{EntityArena, EntityKind};
 use random::JavaRandom;
 
 const TILE_SIZE: i32 = 16;
@@ -860,9 +860,8 @@ impl World {
         // Java Updater no-menu branch. `Some` from death/transition means the
         // death menu or LevelTransitionDisplay owns this tick (player early-out,
         // no level tick). Terminal actions already returned via that path.
-        match self.tick_death_and_transition(input) {
-            Some(action) => return action,
-            None => {}
+        if let Some(action) = self.tick_death_and_transition(input) {
+            return action;
         }
         if input.exit {
             if self.inventory_open {
@@ -902,7 +901,10 @@ impl World {
                 self.inventory_open = false;
                 self.personal_crafting = false;
                 self.sound(SoundEffect::Craft);
-            } else if self.inventory_open && self.crafting_station.is_none() && self.container_id.is_none() {
+            } else if self.inventory_open
+                && self.crafting_station.is_none()
+                && self.container_id.is_none()
+            {
                 // Make the Java personal-crafting display reachable directly from
                 // the already-open player inventory instead of closing the menu.
                 self.personal_crafting = true;
@@ -1098,7 +1100,6 @@ impl World {
     }
 
     /// Java Player.tick gameplay body, after the no-menu early returns.
-
     fn move_player(&mut self, horizontal: i32, vertical: i32) -> bool {
         let old_x = self.player.x;
         let old_y = self.player.y;
@@ -1110,12 +1111,9 @@ impl World {
                 self.player.x = next_x;
             } else {
                 // Java moveByEntityHitBoxChecks: touchedBy uses the *new* hitbox.
-                self.levels[self.current_level].entities.try_push_furniture_near(
-                    next_x,
-                    self.player.y,
-                    horizontal.signum(),
-                    0,
-                );
+                self.levels[self.current_level]
+                    .entities
+                    .try_push_furniture_near(next_x, self.player.y, horizontal.signum(), 0);
             }
         }
         if vertical != 0 {
@@ -1124,12 +1122,9 @@ impl World {
             if self.can_stand(self.player.x, next_y) {
                 self.player.y = next_y;
             } else {
-                self.levels[self.current_level].entities.try_push_furniture_near(
-                    self.player.x,
-                    next_y,
-                    0,
-                    vertical.signum(),
-                );
+                self.levels[self.current_level]
+                    .entities
+                    .try_push_furniture_near(self.player.x, next_y, 0, vertical.signum());
             }
         }
         self.player.x != old_x || self.player.y != old_y
@@ -1144,13 +1139,19 @@ impl World {
         let Some(ActiveItem::Tool(index)) = self.player.active_item else {
             return;
         };
-        if self.player.inventory.tools().get(index).is_some_and(|tool| tool.is_depleted()) {
+        if self
+            .player
+            .inventory
+            .tools()
+            .get(index)
+            .is_some_and(|tool| tool.is_depleted())
+        {
             self.player.inventory.tools.remove(index);
             self.player.active_item = None;
             self.player.attack_item = None;
-            self.inventory_item_selection = self.inventory_item_selection.min(
-                self.player.inventory.used_slots().saturating_sub(1)
-            );
+            self.inventory_item_selection = self
+                .inventory_item_selection
+                .min(self.player.inventory.used_slots().saturating_sub(1));
         }
     }
 
@@ -1371,12 +1372,14 @@ impl World {
         }
         // Java ExplosionTileTicker settles explode tiles into holes after 18 ticks.
         let depth = self.levels[self.current_level].depth;
-        self.levels[self.current_level].entities.spawn_explosion_ticker(
-            center_x * TILE_SIZE + 8,
-            center_y * TILE_SIZE + 8,
-            radius,
-            depth,
-        );
+        self.levels[self.current_level]
+            .entities
+            .spawn_explosion_ticker(
+                center_x * TILE_SIZE + 8,
+                center_y * TILE_SIZE + 8,
+                radius,
+                depth,
+            );
     }
 
     fn active_tool(&self) -> Option<crate::item::ToolItem> {
@@ -1528,10 +1531,7 @@ impl World {
                     }
                 }
             } else if kind == FurnitureKind::Bed {
-                if !crate::core::sleep::can_sleep(
-                    self.clock.get().day_tick,
-                    self.days > 1,
-                ) {
+                if !crate::core::sleep::can_sleep(self.clock.get().day_tick, self.days > 1) {
                     let seconds =
                         (40_500_u32.saturating_sub(self.clock.get().day_tick)).div_ceil(60);
                     self.add_notification_args(
@@ -1542,7 +1542,6 @@ impl World {
                     self.enter_bed();
                 }
             }
-            return;
         }
 
         // Stairs/infinite fall are scheduled from Player.tick while standing on
@@ -1616,10 +1615,7 @@ impl World {
                 true
             }
             FurnitureKind::Bed => {
-                if !crate::core::sleep::can_sleep(
-                    self.clock.get().day_tick,
-                    self.days > 1,
-                ) {
+                if !crate::core::sleep::can_sleep(self.clock.get().day_tick, self.days > 1) {
                     let seconds =
                         (40_500_u32.saturating_sub(self.clock.get().day_tick)).div_ceil(60);
                     self.add_notification_args(
@@ -1915,7 +1911,6 @@ fn time_name(tick: u32) -> &'static str {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 use crate::item::{RecipeOutput, RecipeView, ordered_recipe_views, recipe_can_craft};
 
 fn recipe_image<'a>(recipe: &RecipeView, assets: &'a Assets) -> &'a crate::gfx::Image {

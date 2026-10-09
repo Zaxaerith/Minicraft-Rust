@@ -50,8 +50,7 @@ impl World {
                 let data = self.levels[self.current_level].data[index];
                 let arcane = item == ItemId::ArcaneFertilizer;
                 let current = crate::level::tile::farming::crop::fertilization(data);
-                let amount =
-                    crate::level::tile::farming::crop::fertilizer_amount(current, arcane);
+                let amount = crate::level::tile::farming::crop::fertilizer_amount(current, arcane);
                 self.levels[self.current_level].data[index] =
                     crate::level::tile::farming::crop::apply_fertilizer(data, amount, arcane);
                 self.consume_active_stack(item);
@@ -238,7 +237,8 @@ impl World {
                 };
                 if let Some(tool) = self.active_tool()
                     && tool.kind == required
-                    && (self.mode == GameMode::Creative || self.pay_tool_terrain_damage(required, 4).is_some())
+                    && (self.mode == GameMode::Creative
+                        || self.pay_tool_terrain_damage(required, 4).is_some())
                 {
                     let item = match door {
                         Tile::WoodDoor => ItemId::WoodDoor,

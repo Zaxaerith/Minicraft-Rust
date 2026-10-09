@@ -19,6 +19,7 @@ use minicraft_common::parity::{
     ParityTrace, RenderScene,
 };
 
+use crate::core::game_loop::FixedTickAccumulator;
 use crate::world::random::JavaRandom;
 use crate::{
     app::{
@@ -30,7 +31,6 @@ use crate::{
     io::Input,
     world::{GameMode, PlayOptions, World, WorldAction, WorldSpec},
 };
-use crate::core::game_loop::FixedTickAccumulator;
 
 /// Executes a trace against the Rust Java-compatible random implementation.
 pub fn java_random_snapshots(trace: &ParityTrace) -> Result<Vec<ParitySnapshot>, String> {
@@ -1277,7 +1277,10 @@ mod tests {
             assert_eq!(first, second, "unstable render hash for {scene:?}");
             // Hash fields are non-empty hex from the live RGB buffer.
             if let Observation::RenderFrame {
-                rgb_hash, width, height, ..
+                rgb_hash,
+                width,
+                height,
+                ..
             } = &first[0].observation
             {
                 assert!(!rgb_hash.is_empty());
@@ -1337,10 +1340,7 @@ mod tests {
         } else {
             panic!("expected combat observation after setup");
         }
-        let after_hits = match &first[3].observation {
-            Observation::Combat { .. } => true,
-            _ => false,
-        };
+        let after_hits = matches!(&first[3].observation, Observation::Combat { .. });
         assert!(after_hits);
         assert!(
             first

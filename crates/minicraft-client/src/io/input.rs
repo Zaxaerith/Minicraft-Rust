@@ -209,17 +209,14 @@ mod tests {
         let half = binding_state("SHIFT-E", pressed_map(&["E"]));
         assert!(!half.down);
         // Single-key clicked may fire after release; compound requires all down.
-        let released_mod = binding_state(
-            "SHIFT-E",
-            |name| match name {
-                "SHIFT" => KeyState::default(),
-                "E" => KeyState {
-                    down: false,
-                    clicked: true,
-                },
-                _ => KeyState::default(),
+        let released_mod = binding_state("SHIFT-E", |name| match name {
+            "SHIFT" => KeyState::default(),
+            "E" => KeyState {
+                down: false,
+                clicked: true,
             },
-        );
+            _ => KeyState::default(),
+        });
         assert!(!released_mod.down && !released_mod.clicked);
     }
 

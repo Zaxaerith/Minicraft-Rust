@@ -81,7 +81,7 @@ pub(crate) fn render_pause(
     for (index, label) in labels.iter().enumerate() {
         // The first Java entry is BlankEntry; selectable entries begin on row 1.
         let draw_y = y + 20 + index as i32 * 12;
-        let draw_x = x + (width - crate::gfx::font::text_width(&label)) / 2;
+        let draw_x = x + (width - crate::gfx::font::text_width(label)) / 2;
         let selected = if world.pause.render_view().confirm
             && world.pause.render_view().page == PausePage::Main
         {
@@ -99,7 +99,7 @@ pub(crate) fn render_pause(
             screen.text(
                 assets.font(),
                 " <",
-                draw_x + crate::gfx::font::text_width(&label),
+                draw_x + crate::gfx::font::text_width(label),
                 draw_y,
             );
         }
@@ -158,7 +158,7 @@ pub(crate) fn render_pause(
         screen.text_colored(
             assets.font(),
             warning,
-            (WIDTH as i32 - crate::gfx::font::text_width(&warning)) / 2,
+            (WIDTH as i32 - crate::gfx::font::text_width(warning)) / 2,
             popup_y + 24,
             0xC62C2C,
         );
@@ -183,5 +183,3 @@ pub(crate) fn render_pause(
         }
     }
 }
-
-

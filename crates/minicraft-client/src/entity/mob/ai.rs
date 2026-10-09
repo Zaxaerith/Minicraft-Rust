@@ -1,7 +1,7 @@
 //! Java MobAi.tick: walk AI, despawn, sheep eat, species attacks, contact damage.
 use crate::entity::helpers::{can_stand, squared_distance};
-use crate::entity::types::{DESPAWN_AGE, Entity, EntityKind, Mob, TickOutcome};
 use crate::entity::projectile::ProjectileKind;
+use crate::entity::types::{DESPAWN_AGE, Entity, EntityKind, Mob, TickOutcome};
 use crate::level::noise::JavaRandom;
 use crate::level::tile::Tile;
 
@@ -59,28 +59,39 @@ pub fn tick_mob(
 
     match mob.species {
         NaturalMob::Skeleton => {
-            skeleton::tick_attack(mob, entity.x, entity.y, player_x, player_y, distance, queued_projectiles);
+            skeleton::tick_attack(
+                mob,
+                entity.x,
+                entity.y,
+                player_x,
+                player_y,
+                distance,
+                queued_projectiles,
+            );
         }
         NaturalMob::Creeper => {
-            if creeper::tick_fuse(mob, entity.x, entity.y, distance, player_difficulty, outcome) {
+            if creeper::tick_fuse(
+                mob,
+                entity.x,
+                entity.y,
+                distance,
+                player_difficulty,
+                outcome,
+            ) {
                 entity.removed = true;
                 return;
             }
         }
         NaturalMob::AirWizard | NaturalMob::ObsidianKnight => {
-            air_wizard::tick_boss_attack(
-                mob,
-                entity.x,
-                entity.y,
-                distance,
-                queued_projectiles,
-            );
+            air_wizard::tick_boss_attack(mob, entity.x, entity.y, distance, queued_projectiles);
             let _ = obsidian_knight::phase_speed(mob);
         }
         _ => {}
     }
 
-    tick_walk_ai(mob, entity.x, entity.y, distance, player_x, player_y, random);
+    tick_walk_ai(
+        mob, entity.x, entity.y, distance, player_x, player_y, random,
+    );
 
     // Java Mob.move: walkTime (2) skips movement on even ticks; slime jump window.
     let slime_jumping = mob.species != NaturalMob::Slime || entity.age % 20 < 10;

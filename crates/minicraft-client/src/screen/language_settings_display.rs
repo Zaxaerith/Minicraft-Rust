@@ -31,9 +31,7 @@ pub fn locale_labels() -> Vec<&'static str> {
 /// Locale id for a menu selection index.
 pub fn locale_for_selection(selection: usize) -> Option<&'static str> {
     let order = crate::resource::localization::sorted_locale_indices();
-    order
-        .get(selection)
-        .map(|index| LOCALES[*index].0)
+    order.get(selection).map(|index| LOCALES[*index].0)
 }
 
 #[cfg(test)]
@@ -45,7 +43,10 @@ mod tests {
         let localization = Localization::load("en-us", &[]);
         let menu = build_menu(&localization, 0);
         assert_eq!(menu.spacing, 2);
-        assert_eq!(menu.title, localization.text("minicraft.displays.language_settings.title"));
+        assert_eq!(
+            menu.title,
+            localization.text("minicraft.displays.language_settings.title")
+        );
         // setSize(w, h-30) with BOTTOM at y=10.
         assert_eq!(menu.bounds.2, WIDTH as i32);
         assert_eq!(menu.bounds.3, HEIGHT as i32 - 30);

@@ -85,7 +85,7 @@ impl World {
             || self.level_transition.is_some();
         let plan = self.updater.plan_tick(focused, has_display);
         if self.clock.advance_day(plan.advance_calendar) {
-            self.days += 1;
+            self.days = self.days.saturating_add(1);
         }
         if advance_score_time(
             plan.advance_calendar,

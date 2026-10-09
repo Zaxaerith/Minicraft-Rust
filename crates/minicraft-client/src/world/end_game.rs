@@ -152,8 +152,8 @@ impl World {
         // non-selectable entries contribute width minus 32, no title.
         let content_width = rows
             .iter()
-            .map(|(text, _)| (crate::gfx::font::text_width(&text) - 32).max(0))
-            .chain([crate::gfx::font::text_width(&exit)])
+            .map(|(text, _)| (crate::gfx::font::text_width(text) - 32).max(0))
+            .chain([crate::gfx::font::text_width(exit)])
             .max()
             .unwrap_or(0);
         let width = content_width + 48;

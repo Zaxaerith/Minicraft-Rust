@@ -6,7 +6,7 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::{
-    saveload::storage::{atomic_write, read_candidates},
+    saveload::storage::{atomic_write, read_candidates, read_candidates_limited, restore_primary},
     world::{GameMode, World, WorldSpec, import_java_save, probe_java_save},
 };
 
@@ -30,8 +30,10 @@ pub fn load(game_dir: &Path) -> Result<Vec<WorldRecord>, String> {
     for entry in entries.flatten() {
         let directory = entry.path();
         let path = directory.join("world.json");
-        if let Ok(text) = fs::read_to_string(&path)
-            && let Some(record) = parse_at(&text, directory.clone())
+        if let Ok(candidates) = read_candidates_limited(&path, 1024 * 1024)
+            && let Some(record) = candidates
+                .iter()
+                .find_map(|(_, text)| parse_at(text, directory.clone()))
         {
             records.push(record);
             continue;
@@ -150,6 +152,14 @@ fn validate_new_name(
     {
         return Err("world name is not a valid save-folder name".to_owned());
     }
+    // A corrupt/unknown world may be absent from the menu. Its directory is
+    // still user data and must not be reused by create_dir_all + world.json.
+    let destination = game_dir.join("saves").join(name);
+    if fs::symlink_metadata(&destination).is_ok()
+        && ignored_existing.is_none_or(|ignored| !name.eq_ignore_ascii_case(ignored))
+    {
+        return Err(format!("save directory {name} already exists"));
+    }
     if load(game_dir)?.iter().any(|world| {
         world.name.eq_ignore_ascii_case(name)
             && ignored_existing.is_none_or(|ignored| !world.name.eq_ignore_ascii_case(ignored))
@@ -163,6 +173,11 @@ fn ensure_record_in_save_root(game_dir: &Path, record: &WorldRecord) -> Result<(
     let expected_parent = game_dir.join("saves");
     if record.directory.parent() != Some(expected_parent.as_path()) {
         return Err("world record is outside the configured save directory".to_owned());
+    }
+    let root = fs::canonicalize(&expected_parent).map_err(|error| error.to_string())?;
+    let target = fs::canonicalize(&record.directory).map_err(|error| error.to_string())?;
+    if target.parent() != Some(root.as_path()) {
+        return Err("world record resolves outside the configured save directory".to_owned());
     }
     Ok(())
 }
@@ -188,11 +203,22 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
 
 fn update_record_name(directory: &Path, name: &str) -> Result<(), String> {
     let path = directory.join("world.json");
-    let Ok(text) = fs::read_to_string(&path) else {
+    let candidates = read_candidates_limited(&path, 1024 * 1024)?;
+    if candidates.is_empty() {
         return Ok(());
-    };
-    let mut value: Value = serde_json::from_str(&text)
-        .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
+    }
+    let (candidate, original, mut value): (_, _, Value) = candidates
+        .iter()
+        .find_map(|(candidate, text)| {
+            parse_at(text, directory.to_owned())?;
+            serde_json::from_str(text)
+                .ok()
+                .map(|value| (candidate, text, value))
+        })
+        .ok_or_else(|| format!("cannot parse {} or its backup", path.display()))?;
+    if *candidate != path {
+        restore_primary(&path, original.as_bytes())?;
+    }
     value["name"] = Value::String(name.to_owned());
     let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
     atomic_write(&path, text.as_bytes())
@@ -217,7 +243,19 @@ pub fn load_state(record: &WorldRecord) -> Result<Option<World>, String> {
     let mut errors = Vec::new();
     for (candidate, text) in candidates {
         match World::from_save_string(&text) {
-            Ok(world) => return Ok(Some(world)),
+            Ok(world) => {
+                if candidate != path {
+                    // Read-only worlds may still be loaded from backup. Report
+                    // repair failure, but never discard the recovered state.
+                    if let Err(error) = restore_primary(&path, text.as_bytes()) {
+                        eprintln!(
+                            "world recovered from {} but primary repair failed: {error}",
+                            candidate.display()
+                        );
+                    }
+                }
+                return Ok(Some(world));
+            }
             Err(error) => errors.push(format!("{}: {error}", candidate.display())),
         }
     }
@@ -275,6 +313,63 @@ mod tests {
     }
 
     #[test]
+    fn world_metadata_recovers_backup_and_hidden_directory_is_not_overwritten() {
+        let root = std::env::temp_dir().join(format!(
+            "minicraft-metadata-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let record = create_named(
+            &root,
+            "world",
+            42,
+            crate::world::WorldSpec::default(),
+            crate::world::GameMode::Survival,
+            20,
+        )
+        .unwrap();
+        let path = record.directory.join("world.json");
+        std::fs::copy(&path, record.directory.join("world.json.bak")).unwrap();
+        std::fs::write(&path, "broken").unwrap();
+        assert_eq!(load(&root).unwrap()[0].seed, 42);
+        rename_record(&root, &record, "renamed").unwrap();
+        assert_eq!(load(&root).unwrap()[0].name, "renamed");
+        let directory = root.join("saves/renamed");
+        let backup = directory.join("world.json.bak");
+        assert!(
+            super::parse_at(
+                &std::fs::read_to_string(&backup).unwrap(),
+                directory.clone()
+            )
+            .is_some()
+        );
+        std::fs::write(directory.join("world.json"), "null").unwrap();
+        super::update_record_name(&directory, "renamed").unwrap();
+        assert_eq!(load(&root).unwrap()[0].seed, 42);
+        std::fs::create_dir_all(root.join("saves/hidden")).unwrap();
+        std::fs::write(root.join("saves/hidden/state.json"), b"protected data").unwrap();
+        assert!(
+            create_named(
+                &root,
+                "hidden",
+                1,
+                crate::world::WorldSpec::default(),
+                crate::world::GameMode::Survival,
+                20
+            )
+            .is_err()
+        );
+        assert_eq!(
+            std::fs::read(root.join("saves/hidden/state.json")).unwrap(),
+            b"protected data"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn corrupt_primary_world_recovers_from_atomic_backup() {
         let directory = std::env::temp_dir().join(format!(
             "minicraft-rust-world-backup-{}-{}",
@@ -309,7 +404,25 @@ mod tests {
         save_state(&record, &world).unwrap();
         save_state(&record, &world).unwrap();
         std::fs::write(directory.join("state.json"), "broken").unwrap();
-        assert!(load_state(&record).unwrap().is_some());
+        let recovered = load_state(&record).unwrap().unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&recovered.to_save_string().unwrap())
+                .unwrap(),
+            serde_json::from_str::<serde_json::Value>(&world.to_save_string().unwrap()).unwrap()
+        );
+        assert!(
+            crate::world::World::from_save_string(
+                &std::fs::read_to_string(directory.join("state.json")).unwrap()
+            )
+            .is_ok()
+        );
+        save_state(&record, &recovered).unwrap();
+        assert!(
+            crate::world::World::from_save_string(
+                &std::fs::read_to_string(directory.join("state.json.bak")).unwrap()
+            )
+            .is_ok()
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -345,7 +458,8 @@ mod tests {
         let loaded = load_state(&record).unwrap().unwrap();
         assert!(!loaded.to_save_string().unwrap().is_empty());
         // Format 1 is rejected rather than silently accepted.
-        let bad = text.replace("\"format\": 2", "\"format\": 1")
+        let bad = text
+            .replace("\"format\": 2", "\"format\": 1")
             .replace("\"format\":2", "\"format\":1");
         assert!(crate::world::World::from_save_string(&bad).is_err());
         std::fs::remove_dir_all(directory).unwrap();

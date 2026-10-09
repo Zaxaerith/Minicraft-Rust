@@ -94,6 +94,8 @@ pub(crate) fn render_container(
     );
 }
 
+// Keep the existing coordinate/render API without adding wrapper state.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_inventory(
     screen: &mut Screen,
     assets: &Assets,
@@ -240,7 +242,7 @@ pub(crate) fn render_inventory_description(
     x: i32,
     y: i32,
 ) {
-    let width = ((crate::gfx::font::text_width(&description) + 16).max(32) + 7) / 8 * 8;
+    let width = ((crate::gfx::font::text_width(description) + 16).max(32) + 7) / 8 * 8;
     render_menu_frame(screen, assets.hud(), x, y, width, 24);
     screen.text(assets.font(), description, x + 8, y + 8);
 }
@@ -271,7 +273,7 @@ pub(crate) fn render_inventory_panel(
             screen.text(
                 assets.font(),
                 " <",
-                entry_x + crate::gfx::font::text_width(&label),
+                entry_x + crate::gfx::font::text_width(label),
                 entry_y,
             );
         }
@@ -414,7 +416,7 @@ pub(crate) fn render_menu_title(
     width: i32,
     color: u32,
 ) {
-    let title_width = crate::gfx::font::text_width(&title);
+    let title_width = crate::gfx::font::text_width(title);
     let title_x = x + (width - title_width) / 2;
     crate::gfx::gui::render_title(
         screen,

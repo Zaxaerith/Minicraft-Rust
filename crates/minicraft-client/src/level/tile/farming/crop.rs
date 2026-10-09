@@ -52,11 +52,7 @@ pub fn apply_fertilizer(data: u16, amount: u16, arcane: bool) -> u16 {
 
 /// Base growth points: 4 when moist, 2 when dry (before neighbour modifiers).
 pub fn base_growth_points(moisture: u16) -> f64 {
-    if moisture > 0 {
-        4.0
-    } else {
-        2.0
-    }
+    if moisture > 0 { 4.0 } else { 2.0 }
 }
 
 /// Harvest drops the crop when mature (Java `age == maxAge`).

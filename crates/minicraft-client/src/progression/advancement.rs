@@ -36,15 +36,15 @@ impl Rangeable<i64> {
         if self.min.is_none() && self.max.is_none() {
             return true;
         }
-        if let Some(min) = self.min {
-            if value < min {
-                return false;
-            }
+        if let Some(min) = self.min
+            && value < min
+        {
+            return false;
         }
-        if let Some(max) = self.max {
-            if value > max {
-                return false;
-            }
+        if let Some(max) = self.max
+            && value > max
+        {
+            return false;
         }
         true
     }
@@ -68,10 +68,10 @@ impl ItemRequirement {
         if count < self.minimum {
             return false;
         }
-        if let Some(maximum) = self.maximum {
-            if count > maximum {
-                return false;
-            }
+        if let Some(maximum) = self.maximum
+            && count > maximum
+        {
+            return false;
         }
         true
     }
@@ -133,10 +133,11 @@ impl Criterion {
             "inventory_changed" => {
                 // Host inventory is a name→count map (no max-slot ceiling),
                 // so slots.empty / slots.full cannot be evaluated 1:1.
-                if let Some(range) = self.slots_occupied {
-                    if !range.is_absent() && !range.in_range(inventory.len() as i64) {
-                        return false;
-                    }
+                if let Some(range) = self.slots_occupied
+                    && !range.is_absent()
+                    && !range.in_range(inventory.len() as i64)
+                {
+                    return false;
                 }
                 self.items.iter().all(|requirement| {
                     requirement.alternatives.iter().any(|item| {
@@ -182,9 +183,12 @@ impl AdvancementElement {
                 .all(|criterion| completed.contains(&criterion.name))
         } else {
             self.requirements.iter().all(|sublist| {
-                sublist
-                    .iter()
-                    .any(|name| completed.contains(name) || self.criterion_named(name).is_some_and(|c| completed.contains(&c.name)))
+                sublist.iter().any(|name| {
+                    completed.contains(name)
+                        || self
+                            .criterion_named(name)
+                            .is_some_and(|c| completed.contains(&c.name))
+                })
             })
         }
     }
@@ -196,11 +200,9 @@ impl AdvancementElement {
                 .iter()
                 .all(|criterion| completed.contains(&criterion.name))
         } else {
-            self.unlocking_requirements.iter().all(|sublist| {
-                sublist
-                    .iter()
-                    .any(|name| completed.contains(name))
-            })
+            self.unlocking_requirements
+                .iter()
+                .all(|sublist| sublist.iter().any(|name| completed.contains(name)))
         }
     }
 
@@ -454,10 +456,7 @@ mod tests {
     use std::collections::HashMap;
 
     fn inv(entries: &[(&str, u16)]) -> HashMap<String, u16> {
-        entries
-            .iter()
-            .map(|(k, v)| ((*k).to_owned(), *v))
-            .collect()
+        entries.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect()
     }
 
     #[test]
@@ -478,10 +477,7 @@ mod tests {
             slots_full: None,
             slots_occupied: None,
         };
-        assert!(criterion.matches(
-            &ProgressEvent::InventoryChanged,
-            &inv(&[("wood hoe", 1)])
-        ));
+        assert!(criterion.matches(&ProgressEvent::InventoryChanged, &inv(&[("wood hoe", 1)])));
         assert!(!criterion.matches(&ProgressEvent::InventoryChanged, &inv(&[])));
     }
 

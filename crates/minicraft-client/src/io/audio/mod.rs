@@ -1,9 +1,9 @@
 //! Platform-independent clip decoding, event scheduling, and PCM mixing.
 mod mixer;
 pub mod sound;
-use std::sync::atomic::{AtomicU64, Ordering};
 pub use mixer::PcmMixer;
 pub use sound::{SoundEffect, validate_embedded_sounds};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Java `Sound.tick()` cadence counter. Incremented once per Updater tick
 /// (before the focus/input branch), matching Java's mixer pump call site.
@@ -28,7 +28,7 @@ mod tests {
         let before = sound_tick();
         tick_sound_pump();
         // Other threads may also pump; the contract is monotonic +1 from us.
-        assert!(sound_tick() >= before + 1);
+        assert!(sound_tick() > before);
         tick_sound_pump();
         tick_sound_pump();
         assert!(sound_tick() >= before + 3);

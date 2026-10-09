@@ -15,14 +15,7 @@ pub fn tick_attack(
 ) {
     mob.attack_delay = mob.attack_delay.saturating_sub(1);
     if distance < 100 * 100 && mob.attack_delay == 0 {
-        queued_projectiles.push((
-            ProjectileKind::Arrow,
-            _x,
-            _y,
-            _player_x,
-            _player_y,
-            1,
-        ));
+        queued_projectiles.push((ProjectileKind::Arrow, _x, _y, _player_x, _player_y, 1));
         mob.attack_delay = 83;
     }
 }

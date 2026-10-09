@@ -187,7 +187,7 @@ impl Menu {
                 offset += len;
             }
             if offset > 0 {
-                offset = offset % len;
+                offset %= len;
             }
         }
         self.offset = offset;
@@ -313,7 +313,7 @@ impl Menu {
         let mut next = prev_sel as i32;
         loop {
             next = (next + delta).rem_euclid(count);
-            if self.entries[next as usize].is_selectable() || next as i32 == prev_sel as i32 {
+            if self.entries[next as usize].is_selectable() || next == prev_sel as i32 {
                 break;
             }
         }
@@ -476,11 +476,13 @@ impl MenuBuilder {
         entry_pos: RelPos,
         entries: Vec<Entry>,
     ) -> Self {
-        let mut menu = Menu::default();
-        menu.entries = entries;
-        menu.has_frame = has_frame;
-        menu.spacing = entry_spacing;
-        menu.entry_pos = entry_pos;
+        let menu = Menu {
+            entries,
+            has_frame,
+            spacing: entry_spacing,
+            entry_pos,
+            ..Menu::default()
+        };
         Self {
             menu,
             set_selectable: false,
@@ -649,9 +651,10 @@ impl MenuBuilder {
         );
         // Java: titlePos.positionRect(titleDim, menu.bounds) — relative to the
         // full menu box (including borders), not the top-left anchor point.
-        self.menu.title_loc =
-            self.title_pos
-                .in_rect(title_dim, (top_left.0, top_left.1, menu_size.0, menu_size.1));
+        self.menu.title_loc = self.title_pos.in_rect(
+            title_dim,
+            (top_left.0, top_left.1, menu_size.0, menu_size.1),
+        );
         // Java nudges corner titles one box inward.
         if self.title_pos.x_index() == 0 && self.title_pos.y_index() != 1 {
             self.menu.title_loc = (self.menu.title_loc.0 + 8, self.menu.title_loc.1);

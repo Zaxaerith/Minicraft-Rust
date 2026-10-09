@@ -67,6 +67,10 @@ impl Inventory {
         std::mem::take(&mut self.slots)
     }
 
+    pub(crate) fn take_tools(&mut self) -> Vec<ToolItem> {
+        std::mem::take(&mut self.tools)
+    }
+
     pub fn add_tool(&mut self, tool: ToolItem) -> Option<usize> {
         if self.used_slots() >= self.capacity {
             return None;
@@ -92,13 +96,13 @@ impl Inventory {
             .iter()
             .filter(|stack| stack.item == item)
             .map(|stack| stack.count)
-            .sum()
+            .fold(0, u16::saturating_add)
     }
 
     /// Adds as much as possible and returns the uninserted remainder.
     pub fn add(&mut self, item: ItemId, mut count: u16) -> u16 {
         for stack in self.slots.iter_mut().filter(|stack| stack.item == item) {
-            let room = MAX_STACK - stack.count;
+            let room = MAX_STACK.saturating_sub(stack.count);
             let inserted = room.min(count);
             stack.count += inserted;
             count -= inserted;
@@ -131,5 +135,23 @@ impl Inventory {
         }
         self.slots.retain(|stack| stack.count > 0);
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn oversized_saved_stacks_do_not_overflow_or_delete_items() {
+        let mut bag = Inventory::new(3);
+        bag.slots = vec![
+            ItemStack::new(ItemId::Wood, u16::MAX),
+            ItemStack::new(ItemId::Wood, u16::MAX),
+        ];
+        assert_eq!(bag.count(ItemId::Wood), u16::MAX);
+        assert_eq!(bag.add(ItemId::Wood, 1), 0);
+        assert_eq!(bag.slots[0].count, u16::MAX);
+        assert_eq!(bag.slots[1].count, u16::MAX);
+        assert_eq!(bag.slots[2].count, 1);
     }
 }

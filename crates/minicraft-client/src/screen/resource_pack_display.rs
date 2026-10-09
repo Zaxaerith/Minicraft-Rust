@@ -26,11 +26,7 @@ pub fn build_menu(packs: &[ResourcePack], _enabled: &[String], selection: usize)
 }
 
 /// Java toggle indicator column (✓ / empty) at BOTTOM_RIGHT.
-pub fn build_indicator_menu(
-    packs: &[ResourcePack],
-    enabled: &[String],
-    selection: usize,
-) -> Menu {
+pub fn build_indicator_menu(packs: &[ResourcePack], enabled: &[String], selection: usize) -> Menu {
     let entries: Vec<Entry> = packs
         .iter()
         .map(|pack| {
@@ -85,7 +81,10 @@ pub fn order_packs_for_menu(packs: &mut [ResourcePack], enabled: &[String]) {
 
 /// Rewrite enabled list to match the reordered pack list (enabled only).
 pub fn sync_enabled_pack_order(enabled: &mut Vec<String>, packs: &[ResourcePack]) {
-    let was_enabled = enabled.iter().cloned().collect::<std::collections::HashSet<_>>();
+    let was_enabled = enabled
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
     enabled.clear();
     enabled.extend(
         packs

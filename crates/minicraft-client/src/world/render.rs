@@ -1,9 +1,9 @@
 //! World drawing adapters, split at Java Renderer level/GUI/Display boundaries.
-use super::*;
 use super::entity_render::render_entity;
+use super::inventory_ui::render_container;
 use super::overlay_ui::{render_sign_editor, render_world_book};
 use super::player_render::render_attack_slash;
-use super::inventory_ui::render_container;
+use super::*;
 use crate::core::renderer::{RenderHost, Renderer};
 
 impl World {
@@ -528,8 +528,7 @@ impl World {
         localization: &Localization,
     ) {
         if self.inventory_open {
-            if self.container_id.is_some() {
-                let chest_id = self.container_id.unwrap();
+            if let Some(chest_id) = self.container_id {
                 let chest_slots = self.levels[self.current_level]
                     .entities
                     .death_chest_storage(chest_id)

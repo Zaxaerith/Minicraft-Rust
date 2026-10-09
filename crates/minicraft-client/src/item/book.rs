@@ -50,8 +50,8 @@ mod tests {
             book_for_item(ItemId::AntidiousBook),
             Some(BookKind::Antidious)
         );
-        assert_eq!(BookKind::Antidious.has_title_page(), true);
-        assert_eq!(BookKind::GameGuide.has_title_page(), false);
+        assert!(BookKind::Antidious.has_title_page());
+        assert!(!BookKind::GameGuide.has_title_page());
         assert_eq!(book_for_item(ItemId::Wood), None);
     }
 }

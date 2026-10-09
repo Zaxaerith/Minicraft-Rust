@@ -6,6 +6,8 @@
 //! - `transport` — line-delimited TCP client used by `--multiplayer-probe`
 
 mod minicraft_protocol;
+// Preserve the established Java class/module naming.
+#[allow(clippy::module_inception)]
 mod network;
 mod transport;
 

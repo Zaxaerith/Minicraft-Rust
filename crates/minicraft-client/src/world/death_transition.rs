@@ -1,5 +1,5 @@
 //! Java player-death delay menu and LevelTransitionDisplay timing.
-use super::{ActiveItem, Assets, GameMode, Localization, World, WorldAction};
+use super::{Assets, GameMode, Localization, World, WorldAction};
 use crate::io::Input;
 use serde::{Deserialize, Serialize};
 
@@ -57,16 +57,13 @@ impl World {
         let drop_x = self.player.x;
         let drop_y = self.player.y;
         let stacks = self.player.inventory.take_all();
-        let tools = self.player.inventory.tools().to_vec();
-        self.player
-            .inventory
-            .set_capacity(self.player.inventory.capacity());
+        let tools = self.player.inventory.take_tools();
         // Java DeathChest copies inventory + activeItem + armor; tools stay in
         // the chest storage as well so death does not delete them.
         let mut chest_stacks = stacks;
-        if let Some(ActiveItem::Stack(item)) = self.player.active_item.take() {
-            chest_stacks.push(crate::item::ItemStack::new(item, 1));
-        }
+        // Rust active_item references inventory contents; Java owns a separate
+        // held item. The transferred bag already includes the equipped stack/tool.
+        self.player.active_item = None;
         if let Some(armor) = self.player.armor_kind.take() {
             chest_stacks.push(crate::item::ItemStack::new(armor.item(), 1));
         }
@@ -201,7 +198,6 @@ impl World {
             if self.on_fall_delay == 0 {
                 self.schedule_level_change(-1);
                 self.on_fall_delay = 40;
-                return;
             }
         } else if self.on_fall_delay > 0 {
             self.on_fall_delay -= 1;
@@ -215,7 +211,7 @@ impl World {
         // Java LevelTransitionDisplay: 200×150 cells of 8px, dd pattern.
         for x in 0..200 {
             for y in 0..150 {
-                let dd = (y + x % 2 * 2 + x / 3) as i32 - (transition.time as i32) * 2;
+                let dd = (y + x % 2 * 2 + x / 3) - (transition.time as i32) * 2;
                 if (dd < 0) && (dd > -30) {
                     let draw_x = x * 8;
                     let draw_y = if transition.dir > 0 {

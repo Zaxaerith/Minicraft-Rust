@@ -1,8 +1,8 @@
 //! Java entity/mob/* — species IDs plus AI tick split by Java class.
 use serde::{Deserialize, Serialize};
 
-pub mod air_wizard;
 pub mod ai;
+pub mod air_wizard;
 pub mod creeper;
 pub mod obsidian_knight;
 pub mod skeleton;

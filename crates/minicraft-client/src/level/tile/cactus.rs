@@ -30,11 +30,7 @@ pub fn tick_decay(data: u16) -> Option<u16> {
 
 /// Java `CactusTile.bumpedInto` damage by difficulty (easy/normal 1, hard 2).
 pub fn bump_damage(difficulty: u8) -> u8 {
-    if difficulty.min(2) == 2 {
-        2
-    } else {
-        1
-    }
+    if difficulty.min(2) == 2 { 2 } else { 1 }
 }
 
 #[cfg(test)]

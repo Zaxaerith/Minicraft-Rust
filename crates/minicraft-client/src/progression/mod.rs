@@ -119,10 +119,12 @@ mod tests {
     fn tutorial_and_quest_triggers_align_with_java_events() {
         let mut progress = ProgressState::load().unwrap();
         // First tutorial needs 1 wood.
-        assert!(progress
-            .update(&ProgressEvent::InventoryChanged, &HashMap::new())
-            .completed_tutorials
-            .is_empty());
+        assert!(
+            progress
+                .update(&ProgressEvent::InventoryChanged, &HashMap::new())
+                .completed_tutorials
+                .is_empty()
+        );
         let inventory = HashMap::from([("wood".to_owned(), 1)]);
         let update = progress.update(&ProgressEvent::InventoryChanged, &inventory);
         assert!(

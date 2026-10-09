@@ -24,9 +24,13 @@ pub fn game_fields(world: &World) -> Vec<String> {
     vec![
         EXPORT_VERSION.to_owned(),
         world.seed.to_string(),
-        mode_field(world.mode, world.score_ticks, default_score_minutes(world.mode)),
+        mode_field(
+            world.mode,
+            world.score_ticks,
+            default_score_minutes(world.mode),
+        ),
         // Java Updater.tickCount.
-        world.tick.to_string(),
+        world.clock.get().day_tick.to_string(),
         // Java Updater.gameTime.
         world.clock.get().game_time.to_string(),
         world.difficulty.to_string(),
@@ -99,15 +103,30 @@ fn potion_effects_field(effects: &[u16; PotionKind::ALL.len()]) -> String {
 /// Java `Save.writeInventory` — active item first, then inventory stacks/tools.
 pub fn inventory_fields(world: &World) -> Vec<String> {
     let mut fields = Vec::new();
-    if let Some(active) = world.player.active_item {
-        if let Some(encoded) = encode_active_item(world, active) {
-            fields.push(encoded);
-        }
+    let active_stack = match world.player.active_item {
+        Some(ActiveItem::Stack(item)) => world
+            .player
+            .inventory
+            .slots()
+            .iter()
+            .position(|stack| stack.item == item),
+        _ => None,
+    };
+    if let Some(active) = world.player.active_item
+        && let Some(encoded) = encode_active_item(world, active)
+    {
+        fields.push(encoded);
     }
-    for stack in world.player.inventory.slots() {
+    for (index, stack) in world.player.inventory.slots().iter().enumerate() {
+        if Some(index) == active_stack {
+            continue;
+        }
         fields.push(encode_item(stack.item, stack.count));
     }
-    for tool in world.player.inventory.tools() {
+    for (index, tool) in world.player.inventory.tools().iter().enumerate() {
+        if world.player.active_item == Some(ActiveItem::Tool(index)) {
+            continue;
+        }
         fields.push(format!("{}_{}", tool.display_name(), tool.durability));
     }
     fields.push(String::new());
@@ -116,10 +135,13 @@ pub fn inventory_fields(world: &World) -> Vec<String> {
 
 fn encode_active_item(world: &World, active: ActiveItem) -> Option<String> {
     match active {
-        ActiveItem::Stack(item) => {
-            let count = world.player.inventory.count(item);
-            Some(encode_item(item, count.max(1)))
-        }
+        ActiveItem::Stack(item) => world
+            .player
+            .inventory
+            .slots()
+            .iter()
+            .find(|stack| stack.item == item)
+            .map(|stack| encode_item(item, stack.count)),
         ActiveItem::Tool(index) => world
             .player
             .inventory
@@ -256,18 +278,14 @@ mod tests {
     fn inventory_fields_encode_stacks_and_tools() {
         let mut world = tiny_score_world();
         world.player.inventory.add(ItemId::Wood, 3);
-        let mut tool = crate::item::ToolItem::new(
-            crate::item::ToolKind::Pickaxe,
-            crate::item::ToolTier::Iron,
-        );
+        let mut tool =
+            crate::item::ToolItem::new(crate::item::ToolKind::Pickaxe, crate::item::ToolTier::Iron);
         tool.durability = 70;
         world.player.inventory.add_tool(tool).unwrap();
         let fields = inventory_fields(&world);
         assert!(fields.iter().any(|field| field == "Wood_3"));
         assert!(
-            fields
-                .iter()
-                .any(|field| field == "Iron Pickaxe_70"),
+            fields.iter().any(|field| field == "Iron Pickaxe_70"),
             "{fields:?}"
         );
     }
@@ -276,7 +294,7 @@ mod tests {
     fn signs_json_round_trips_java_shape() {
         let mut world = tiny_score_world();
         world.signs = vec![Default::default(); 6];
-        world.signs[1].insert(0 + 1 * world.width, "HELLO RUST".to_owned());
+        world.signs[1].insert(world.width, "HELLO RUST".to_owned());
         let value = signs_json(&world);
         assert_eq!(value["Version"], "2.2.4");
         let signs = value["signs"].as_array().unwrap();
@@ -286,6 +304,39 @@ mod tests {
         assert_eq!(signs[0]["y"], 1);
         assert_eq!(signs[0]["lines"][0], "HELLO");
         assert_eq!(signs[0]["lines"][1], "RUST");
+    }
+
+    #[test]
+    fn java_export_counts_equipped_items_once_and_uses_calendar_tick() {
+        let mut world = tiny_score_world();
+        world.player.inventory.add(ItemId::Wood, 1000);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::Wood));
+        let fields = inventory_fields(&world);
+        let exported: u16 = fields
+            .iter()
+            .filter_map(|field| field.strip_prefix("Wood_"))
+            .map(|count| count.parse::<u16>().unwrap())
+            .sum();
+        assert_eq!(exported, 1000);
+        let index = world
+            .player
+            .inventory
+            .add_tool(crate::item::ToolItem::new(
+                crate::item::ToolKind::Pickaxe,
+                crate::item::ToolTier::Iron,
+            ))
+            .unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(index));
+        assert_eq!(
+            inventory_fields(&world)
+                .iter()
+                .filter(|field| field.starts_with("Iron Pickaxe_"))
+                .count(),
+            1
+        );
+        world.tick = 999;
+        world.clock.set_day_tick(123);
+        assert_eq!(game_fields(&world)[3], "123");
     }
 
     #[test]

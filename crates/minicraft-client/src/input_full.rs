@@ -322,8 +322,10 @@ pub fn poll_input(
 
 #[cfg(test)]
 mod tests {
-    use crate::io::Input;
+    // Tests deliberately mutate input state between sequential frames.
+    #![allow(clippy::field_reassign_with_default)]
     use super::{Gamepad, InputBuffer, RawGamepadState, gamepad_platform};
+    use crate::io::Input;
 
     #[test]
     fn pressed_inputs_are_latched_until_the_next_fixed_tick() {
@@ -412,10 +414,9 @@ mod tests {
         use crate::io::KeyBindings;
         let mut buffer = InputBuffer::default();
         buffer.bindings = Some(KeyBindings::default());
-        buffer.keyboard.insert(
-            "W".to_owned(),
-            crate::io::input::PhysicalKey::default(),
-        );
+        buffer
+            .keyboard
+            .insert("W".to_owned(), crate::io::input::PhysicalKey::default());
         buffer.keyboard.insert(
             "ESCAPE".to_owned(),
             crate::io::input::PhysicalKey::default(),

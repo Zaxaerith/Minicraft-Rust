@@ -1,12 +1,12 @@
 //! Compatibility bridge for notification serialization, localization and GUI.
 //! The shared queue/timer policy belongs to client/core, not this adapter.
 use super::World;
+use crate::core::notifications::Notifications;
 use crate::{
     assets::Assets,
     gfx::{HEIGHT, Screen, WIDTH},
     resource::localization::Localization,
 };
-use crate::core::notifications::Notifications;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::{Arc, OnceLock};
 
@@ -149,8 +149,7 @@ pub(crate) fn render_status(
     let visible = notes.prepare_gui(has_permanent);
     // Java Renderer: permanent status uses TOP relTextPos + spacing 1;
     // notifications use TOP with spacing 0 and keep the same bottom-right shadow.
-    let style = crate::gfx::font_style::FontStyle::new(0xFFFFFF)
-        .set_shadow_type(0x33_33_33, false);
+    let style = crate::gfx::font_style::FontStyle::new(0xFFFFFF).set_shadow_type(0x33_33_33, false);
     let style = if has_permanent {
         style
             .set_y_pos(HEIGHT as i32 / 2 - 25)

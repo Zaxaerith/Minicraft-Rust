@@ -10,7 +10,8 @@ pub const INTERVAL_SPAN: u32 = 301;
 pub const PLAYER_RANGE: i32 = 128;
 
 /// Candidate offsets tried around the spawner before falling back.
-pub const SPAWN_OFFSETS: [(i32, i32); 6] = [(16, 0), (-16, 0), (0, 16), (0, -16), (16, 16), (-16, -16)];
+pub const SPAWN_OFFSETS: [(i32, i32); 6] =
+    [(16, 0), (-16, 0), (0, 16), (0, -16), (16, 16), (-16, -16)];
 
 /// Java Spawner.trySpawn: returns (species, x, y) when a spawn should occur.
 #[allow(clippy::too_many_arguments)]
@@ -26,8 +27,8 @@ pub fn try_spawn(
     player: Option<(i32, i32)>,
     level_depth: i8,
 ) -> Option<(NaturalMob, i32, i32)> {
-    let interval = INTERVAL_BASE + (age % INTERVAL_SPAN) as u32;
-    if age % interval != 0 {
+    let interval = INTERVAL_BASE + (age % INTERVAL_SPAN);
+    if !age.is_multiple_of(interval) {
         return None;
     }
     let hostile = species.hostile();
@@ -42,7 +43,8 @@ pub fn try_spawn(
     };
     // Java Spawner.trySpawn: surface/day skip + light skip for hostiles.
     let surface_day = level_depth >= 0 && hostile && lit;
-    let near_player = player.is_some_and(|(px, py)| squared_distance(x, y, px, py) <= PLAYER_RANGE * PLAYER_RANGE);
+    let near_player = player
+        .is_some_and(|(px, py)| squared_distance(x, y, px, py) <= PLAYER_RANGE * PLAYER_RANGE);
     if !near_player || (hostile && lit) || (hostile && surface_day) {
         return None;
     }

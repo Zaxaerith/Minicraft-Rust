@@ -20,6 +20,8 @@ pub mod food;
 pub mod furniture_item;
 pub mod heart;
 pub mod inventory;
+// Preserve the established Java class/module naming.
+#[allow(clippy::module_inception)]
 pub mod item;
 pub mod items;
 pub mod potion;
@@ -38,8 +40,10 @@ pub use armor::ArmorKind;
 pub use book::{BookKind, book_for_item};
 pub use bucket::{BucketFill, bucket_action};
 pub use clothing::is_clothing;
-pub use crafting::{RecipeOutput, RecipeView, ordered_recipe_views, recipe_can_craft, recipe_views};
-pub use fishing_rod::{fishing_level, breaks_after_use};
+pub use crafting::{
+    RecipeOutput, RecipeView, ordered_recipe_views, recipe_can_craft, recipe_views,
+};
+pub use fishing_rod::{breaks_after_use, fishing_level};
 pub use food::{FOOD_STAMINA_COST, food_value};
 pub use furniture_item::{furniture_for_item, item_for_furniture};
 pub use inventory::{Inventory, ItemStack};
@@ -350,17 +354,19 @@ mod tests {
     fn recipe_tables_only_reference_registered_items_and_positive_costs() {
         let stacks: Vec<ItemStack> = HAND_RECIPES
             .iter()
-            .flat_map(|recipe| {
-                std::iter::once(recipe.output).chain(recipe.costs.iter().copied())
-            })
+            .flat_map(|recipe| std::iter::once(recipe.output).chain(recipe.costs.iter().copied()))
             .chain(WORKBENCH_STATION_RECIPES.iter().flat_map(|recipe| {
                 std::iter::once(recipe.output).chain(recipe.costs.iter().copied())
             }))
             .chain(WORKBENCH_TOOL_RECIPES.iter().flat_map(|recipe| {
-                recipe.costs.iter().copied().chain(std::iter::once(ItemStack {
-                    item: ItemId::Wood, // tool outputs are not stacks; costs only
-                    count: 0,
-                }))
+                recipe
+                    .costs
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(ItemStack {
+                        item: ItemId::Wood, // tool outputs are not stacks; costs only
+                        count: 0,
+                    }))
             }))
             .collect();
         for stack in stacks {

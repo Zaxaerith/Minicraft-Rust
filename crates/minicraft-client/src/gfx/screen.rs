@@ -245,6 +245,12 @@ impl Screen {
     }
 }
 
+impl Default for Screen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{HEIGHT, Screen, WIDTH};
@@ -342,6 +348,9 @@ mod tests {
         let mut night = Screen::new();
         night.clear(0x80_80_80);
         night.overlay(java_level_index(0), 0, 0, DAY_QUARTER * 3 + 10, true);
-        assert!(night.pixels[0] < 0x50_5050, "night surface is clearly darker");
+        assert!(
+            night.pixels[0] < 0x50_5050,
+            "night surface is clearly darker"
+        );
     }
 }

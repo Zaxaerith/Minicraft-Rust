@@ -130,7 +130,10 @@ mod tests {
     fn paginate_wraps_like_existing_host() {
         assert_eq!(
             paginate("one two three four", 7, 2),
-            vec![vec!["one two".to_owned(), "three".to_owned()], vec!["four".to_owned()]]
+            vec![
+                vec!["one two".to_owned(), "three".to_owned()],
+                vec!["four".to_owned()]
+            ]
         );
     }
 }

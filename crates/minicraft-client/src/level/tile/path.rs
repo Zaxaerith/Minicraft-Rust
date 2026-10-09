@@ -32,7 +32,9 @@ mod tests {
         assert!(connects_to_grass());
         assert!(!connects(Tile::Grass));
         assert!(!connects(Tile::Sand));
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
         assert_eq!(broken_tile(), Tile::Hole);
     }
 }

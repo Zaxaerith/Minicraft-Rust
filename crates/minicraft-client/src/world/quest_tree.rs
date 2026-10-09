@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    progression::QuestView,
     gfx::{Image, Screen, WIDTH},
     io::Input,
+    progression::QuestView,
 };
 
 pub(super) const GREEN: u32 = 0x4DD44D;

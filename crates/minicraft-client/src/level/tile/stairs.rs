@@ -6,7 +6,10 @@ pub const MAY_SPAWN: bool = false;
 
 /// Java `StairsTile.render`: cloud underlay on sky depth, else dirt.
 pub fn underlay(depth: i8) -> [Option<Tile>; 2] {
-    [Some(if depth == 1 { Tile::Cloud } else { Tile::Dirt }), None]
+    [
+        Some(if depth == 1 { Tile::Cloud } else { Tile::Dirt }),
+        None,
+    ]
 }
 
 /// Java `StairsTile.mayPass`: furniture cannot climb stairs.
@@ -44,6 +47,8 @@ mod tests {
         assert!(is_site(Tile::Rock));
         assert!(is_site(Tile::Grass));
         assert!(!is_site(Tile::Water));
-        assert!(!MAY_SPAWN);
+        const {
+            assert!(!MAY_SPAWN);
+        }
     }
 }

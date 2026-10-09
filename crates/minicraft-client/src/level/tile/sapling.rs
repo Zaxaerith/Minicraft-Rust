@@ -90,6 +90,8 @@ mod tests {
         assert!(cactus_connects_to_sand());
         assert!(!tree_connects(Tile::Path));
         assert!(!cactus_connects(Tile::Lava));
-        assert!(MAY_SPAWN);
+        const {
+            assert!(MAY_SPAWN);
+        }
     }
 }

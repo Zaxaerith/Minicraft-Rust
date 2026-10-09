@@ -12,20 +12,18 @@ mod menu_render;
 use display_navigation::navigate as navigate_display;
 use menu_build::*;
 use menu_render::*;
-pub(crate) use menu_render::{
-    render_focus_nagger, render_resource_pack_parity, render_title,
-};
+pub(crate) use menu_render::{render_focus_nagger, render_resource_pack_parity, render_title};
 use minifb::{Key, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 
 use crate::{
     assets::{Assets, skin_options},
     audio::{Audio, SoundEffect, validate_embedded_assets, validate_pcm_stream},
-    io::{Config, Input, KeyBindings, Settings},
-    progression::{Book, achievements},
     gfx::{HEIGHT, Screen, WIDTH},
     input_full::{Gamepad, key_name},
-    resource::localization::{LOCALES, Localization},
+    io::{Config, Input, KeyBindings, Settings},
     presenter::Presenter,
+    progression::{Book, achievements},
+    resource::localization::{LOCALES, Localization},
     resource_pack::{ResourcePack, discover, display::render as render_resource_packs},
     world::{GameMode, PlayOptions, World, WorldAction, WorldSpec},
     worlds::{
@@ -59,7 +57,8 @@ fn set_embedded_window_icon(window: &Window) {
     // layer for the title bar and taskbar; no external file is needed at run time.
     unsafe {
         let module = GetModuleHandleW(std::ptr::null());
-        let resource = 1usize as *const u16;
+        // MAKEINTRESOURCEW(1): the low pointer bits encode an ID, not alignment.
+        let resource = std::ptr::without_provenance::<u16>(1);
         let hwnd = window.get_window_handle();
         let small = LoadImageW(module, resource, 1, 16, 16, 0);
         let large = LoadImageW(module, resource, 1, 32, 32, 0);
@@ -133,9 +132,7 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             .get(index + 1)
             .zip(arguments.get(index + 2))
             .ok_or_else(|| "--multiplayer-probe requires an address and username".to_owned())
-            .and_then(|(address, username)| {
-                crate::network::run_client_probe(address, username)
-            })
+            .and_then(|(address, username)| crate::network::run_client_probe(address, username))
     } else if let Some(index) = arguments
         .iter()
         .position(|value| value == "--render-preview")
@@ -162,9 +159,7 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             .ok_or_else(|| {
                 "--render-ui-preview requires a screen name and output PNG path".to_owned()
             })
-            .and_then(|(name, path)| {
-                render_ui_preview(arguments, name, std::path::Path::new(path))
-            })
+            .and_then(|(name, path)| render_ui_preview(arguments, name, std::path::Path::new(path)))
     } else {
         run(arguments)
     }
@@ -175,7 +170,11 @@ impl State {
     pub(super) fn title(selection: usize, ticks: u64) -> Self {
         // Compatibility index is TITLE_KEYS order (0=Play); menu has 2 leading rows.
         let menu = build_title_menu(&Localization::load("en-us", &[]), 1, selection + 2);
-        State::Title { menu, ticks, splash: "Now with skins!" }
+        State::Title {
+            menu,
+            ticks,
+            splash: "Now with skins!",
+        }
     }
 }
 
@@ -556,12 +555,12 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     }
                     if capturing {
                         // no confirm sound while capturing
-                    } else if input.exit {
-                        menu_events.push(MenuEvent::Closed);
-                    } else if matches!(
-                        result,
-                        Transition::SetBinding(..) | Transition::ResetBindings
-                    ) {
+                    } else if input.exit
+                        || matches!(
+                            result,
+                            Transition::SetBinding(..) | Transition::ResetBindings
+                        )
+                    {
                         menu_events.push(MenuEvent::Closed);
                     } else if previous != menu.selection || previous_kb != *keyboard {
                         menu_events.push(MenuEvent::Moved);
@@ -1089,9 +1088,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
 
         screen.clear(0);
         match displays.current_mut().expect("application screen") {
-            State::Title { menu, ticks, splash } => {
-                render_title_menu(&mut screen, &assets, &localization, menu, *ticks, splash)
-            }
+            State::Title {
+                menu,
+                ticks,
+                splash,
+            } => render_title_menu(&mut screen, &assets, &localization, menu, *ticks, splash),
             State::Options { menu } => {
                 // Rebuild if settings-driven labels may be stale after entry edits.
                 menu.render(&mut screen, assets.hud(), assets.font());
@@ -1158,7 +1159,14 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 );
             }
             State::ControlGuide { menu, controller } => {
-                render_controls_menu(&mut screen, &assets, &localization, menu, !*controller, None);
+                render_controls_menu(
+                    &mut screen,
+                    &assets,
+                    &localization,
+                    menu,
+                    !*controller,
+                    None,
+                );
             }
             State::Skins { menu, ticks } => {
                 // Preview the selection without requiring a preview transition (Java tick+render).
@@ -1703,9 +1711,7 @@ fn tick_new_world_menu(
     let mut changed = events.iter().any(|e| matches!(e, MenuEvent::Moved));
 
     // Sync name/seed/arrays/booleans and scoretime visibility (Java setVisible).
-    changed |= crate::screen::world_gen_display::apply_menu_to_settings(
-        menu, settings, name, seed,
-    );
+    changed |= crate::screen::world_gen_display::apply_menu_to_settings(menu, settings, name, seed);
     let _ = events_before;
     let _ = world_count;
 
@@ -1820,17 +1826,17 @@ fn tick_book_menu(
     }
     let page_count = book.pages().len();
     let mut turned = false;
-    if input.left_pressed || input.up_pressed {
-        if let Some(next) = crate::screen::book::turn_page(*page, -1, page_count) {
-            *page = next;
-            turned = true;
-        }
+    if (input.left_pressed || input.up_pressed)
+        && let Some(next) = crate::screen::book::turn_page(*page, -1, page_count)
+    {
+        *page = next;
+        turned = true;
     }
-    if input.right_pressed || input.down_pressed {
-        if let Some(next) = crate::screen::book::turn_page(*page, 1, page_count) {
-            *page = next;
-            turned = true;
-        }
+    if (input.right_pressed || input.down_pressed)
+        && let Some(next) = crate::screen::book::turn_page(*page, 1, page_count)
+    {
+        *page = next;
+        turned = true;
     }
     if turned {
         *menu = build_book_menu(*book, *page);
@@ -1841,10 +1847,7 @@ fn tick_book_menu(
     Transition::None
 }
 
-fn tick_achievements_menu(
-    menu: &mut crate::screen::menu::Menu,
-    input: &Input,
-) -> Transition {
+fn tick_achievements_menu(menu: &mut crate::screen::menu::Menu, input: &Input) -> Transition {
     if input.exit {
         return Transition::Title;
     }
@@ -1951,10 +1954,7 @@ fn tick_options_menu(
     (Transition::None, changed)
 }
 
-fn tick_languages_menu(
-    menu: &mut crate::screen::menu::Menu,
-    input: &Input,
-) -> Transition {
+fn tick_languages_menu(menu: &mut crate::screen::menu::Menu, input: &Input) -> Transition {
     use crate::screen::menu::MenuEvent;
     if input.exit {
         return Transition::Options;
@@ -2262,8 +2262,8 @@ mod tests {
     };
     use crate::{
         audio::SoundEffect,
-        io::Settings,
         io::Input,
+        io::Settings,
         resource_pack::discover,
         world::{GameMode, WorldSpec},
         worlds::WorldRecord,
@@ -2453,7 +2453,10 @@ mod tests {
         let (x, y, w, h) = menu.bounds;
         assert!(w > 0 && h > 0);
         assert!(
-            x >= 0 && y >= 0 && x + w <= crate::gfx::WIDTH as i32 && y + h <= crate::gfx::HEIGHT as i32,
+            x >= 0
+                && y >= 0
+                && x + w <= crate::gfx::WIDTH as i32
+                && y + h <= crate::gfx::HEIGHT as i32,
             "menu bounds {x},{y} {w}x{h} must fit {}x{}",
             crate::gfx::WIDTH,
             crate::gfx::HEIGHT

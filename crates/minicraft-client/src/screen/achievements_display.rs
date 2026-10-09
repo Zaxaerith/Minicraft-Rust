@@ -38,10 +38,7 @@ pub fn build_list_menu(
 /// Java description panel: `Builder(false, 2, BOTTOM).setSize(200, 32)
 /// .setPositioning(w/2, h/2+32, BOTTOM)`.
 pub fn build_description_menu(description_lines: Vec<String>) -> Menu {
-    let entries: Vec<Entry> = description_lines
-        .into_iter()
-        .map(|line| Entry::string(line))
-        .collect();
+    let entries: Vec<Entry> = description_lines.into_iter().map(Entry::string).collect();
     MenuBuilder::new(false, 2, RelPos::BOTTOM, entries)
         .set_size(200, 32)
         .set_positioning((WIDTH as i32 / 2, HEIGHT as i32 / 2 + 32), RelPos::BOTTOM)

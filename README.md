@@ -10,7 +10,7 @@ It is licensed under GPL-3.0, like the upstream project.
 are complete (2026-09-12).** The remaining optional seven-dimension items that
 still require human / oracle play are listed below.
 
-Verified on the current tree (2026-09-12):
+Historical acceptance checkpoint (2026-09-12):
 
 | Gate | Result |
 | --- | --- |
@@ -31,6 +31,12 @@ Still required before claiming full stage-15 / 1:1 completion:
 
 - Expanded Java↔Rust trajectory and golden-image matrix beyond current fixtures;
 - Human listening on real Windows audio devices for the full effect set.
+
+2026-10-09 hardening audit: atomic save recovery, resource path/ZIP/PNG budgets,
+bounded relay connections, optimized-build item consumption, and full-bag death
+transfers have regression coverage. See [audit and upstream feature matrix](AUDIT_PARITY_224.md)
+for evidence, remaining Java import/parity limitations, and Windows play checks.
+The 403 original 2.2.4 resource files still match byte for byte.
 
 ## What currently runs
 
@@ -72,9 +78,10 @@ The crate tree under `crates/` holds the staged Java-parity modules
 
 ## Repository and distribution scope
 
-GitHub Actions are not configured to compile, test, or package this project.
-Build locally with the commands below. Release archives must also be assembled
-locally; pushes and version tags do not start cloud build jobs.
+GitHub Actions run format, build, workspace tests, Clippy, optimized item-consumption
+regressions, and a headless self-check on Windows, Linux, and macOS. The new matrix
+has not yet run remotely; the local audit was verified on Windows x64 only.
+Release archives remain locally assembled; CI does not create packages, tags, or releases.
 
 This repository includes game source, Cargo manifests and lockfile, copied runtime
 assets, license, and the local packaging script. Local `tests/`,
@@ -109,8 +116,9 @@ cargo run --release -- --multiplayer-probe 127.0.0.1:4225 PLAYER_NAME
 Tests and lint:
 
 ```powershell
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --workspace --locked
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Deterministic Windows archive:

@@ -1,7 +1,7 @@
 //! Java LevelGen: surface/underground/sky/dungeon map generation.
-use super::{TerrainType, Theme, WorldSpec};
 use super::noise::JavaRandom;
 use super::tile::Tile;
+use super::{TerrainType, Theme, WorldSpec};
 
 const STAIR_RADIUS: i32 = 15;
 
@@ -584,8 +584,8 @@ fn count(map: &[Tile], target: Tile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{level, surface_with_spec};
     use super::{Theme, WorldSpec};
+    use super::{level, surface_with_spec};
     use crate::level::tile::Tile;
 
     #[test]
