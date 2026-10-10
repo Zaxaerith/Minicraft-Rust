@@ -1,0 +1,303 @@
+{
+  "tiles": [
+    {
+      "data": 0,
+      "name": "GRASS",
+      "id": 0
+    },
+    {
+      "data": 0,
+      "name": "DIRT",
+      "id": 1
+    },
+    {
+      "data": 0,
+      "name": "FLOWER",
+      "id": 2
+    },
+    {
+      "data": 0,
+      "name": "HOLE",
+      "id": 3
+    },
+    {
+      "data": 0,
+      "name": "STAIRS UP",
+      "id": 4
+    },
+    {
+      "data": 0,
+      "name": "STAIRS DOWN",
+      "id": 5
+    },
+    {
+      "data": 0,
+      "name": "WATER",
+      "id": 6
+    },
+    {
+      "data": 0,
+      "name": "ROCK",
+      "id": 7
+    },
+    {
+      "data": 0,
+      "name": "TREE",
+      "id": 8
+    },
+    {
+      "data": 0,
+      "name": "TREE SAPLING",
+      "id": 9
+    },
+    {
+      "data": 0,
+      "name": "SAND",
+      "id": 10
+    },
+    {
+      "data": 0,
+      "name": "CACTUS",
+      "id": 11
+    },
+    {
+      "data": 0,
+      "name": "CACTUS SAPLING",
+      "id": 12
+    },
+    {
+      "data": 0,
+      "name": "IRON ORE",
+      "id": 13
+    },
+    {
+      "data": 0,
+      "name": "GOLD ORE",
+      "id": 14
+    },
+    {
+      "data": 0,
+      "name": "GEM ORE",
+      "id": 15
+    },
+    {
+      "data": 0,
+      "name": "LAPIS",
+      "id": 16
+    },
+    {
+      "data": 0,
+      "name": "LAVA",
+      "id": 17
+    },
+    {
+      "data": 0,
+      "name": "LAVA BRICK",
+      "id": 18
+    },
+    {
+      "data": 0,
+      "name": "EXPLODE",
+      "id": 19
+    },
+    {
+      "data": 0,
+      "name": "FARMLAND",
+      "id": 20
+    },
+    {
+      "data": 0,
+      "name": "WHEAT",
+      "id": 21
+    },
+    {
+      "data": 0,
+      "name": "HARD ROCK",
+      "id": 22
+    },
+    {
+      "data": 0,
+      "name": "INFINITE FALL",
+      "id": 23
+    },
+    {
+      "data": 0,
+      "name": "CLOUD",
+      "id": 24
+    },
+    {
+      "data": 0,
+      "name": "CLOUD CACTUS",
+      "id": 25
+    },
+    {
+      "data": 0,
+      "name": "WOOD DOOR",
+      "id": 26
+    },
+    {
+      "data": 0,
+      "name": "STONE DOOR",
+      "id": 27
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN DOOR",
+      "id": 28
+    },
+    {
+      "data": 0,
+      "name": "WOOD PLANKS",
+      "id": 29
+    },
+    {
+      "data": 0,
+      "name": "STONE BRICKS",
+      "id": 30
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN",
+      "id": 31
+    },
+    {
+      "data": 0,
+      "name": "WOOD WALL",
+      "id": 32
+    },
+    {
+      "data": 0,
+      "name": "STONE WALL",
+      "id": 33
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN WALL",
+      "id": 34
+    },
+    {
+      "data": 0,
+      "name": "WOOL",
+      "id": 35
+    },
+    {
+      "data": 0,
+      "name": "PATH",
+      "id": 36
+    },
+    {
+      "data": 0,
+      "name": "RED WOOL",
+      "id": 37
+    },
+    {
+      "data": 0,
+      "name": "BLUE WOOL",
+      "id": 38
+    },
+    {
+      "data": 0,
+      "name": "GREEN WOOL",
+      "id": 39
+    },
+    {
+      "data": 0,
+      "name": "YELLOW WOOL",
+      "id": 40
+    },
+    {
+      "data": 0,
+      "name": "BLACK WOOL",
+      "id": 41
+    },
+    {
+      "data": 0,
+      "name": "POTATO",
+      "id": 42
+    },
+    {
+      "data": 0,
+      "name": "STONE",
+      "id": 43
+    },
+    {
+      "data": 0,
+      "name": "RAW OBSIDIAN",
+      "id": 44
+    },
+    {
+      "data": 0,
+      "name": "ORNATE STONE",
+      "id": 45
+    },
+    {
+      "data": 0,
+      "name": "ORNATE OBSIDIAN",
+      "id": 46
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN BOSS WALL",
+      "id": 47
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN BOSS FLOOR",
+      "id": 48
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN BOSS DOOR",
+      "id": 49
+    },
+    {
+      "data": 0,
+      "name": "TOMATO",
+      "id": 50
+    },
+    {
+      "data": 0,
+      "name": "CARROT",
+      "id": 51
+    },
+    {
+      "data": 0,
+      "name": "HEAVENLY BERRIES",
+      "id": 52
+    },
+    {
+      "data": 0,
+      "name": "HELLISH BERRIES",
+      "id": 53
+    },
+    {
+      "data": 0,
+      "name": "WOOD FENCE",
+      "id": 54
+    },
+    {
+      "data": 0,
+      "name": "STONE FENCE",
+      "id": 55
+    },
+    {
+      "data": 0,
+      "name": "OBSIDIAN FENCE",
+      "id": 56
+    },
+    {
+      "data": 0,
+      "name": "TORCH",
+      "id": 57
+    },
+    {
+      "data": 0,
+      "name": "SIGN",
+      "id": 58
+    }
+  ],
+  "torch": {
+    "data": 31,
+    "name": "TORCH"
+  }
+}

@@ -123,6 +123,7 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     world.difficulty = difficulty;
     world.mode = mode;
     world.score_ticks = score_ticks;
+    world.score_minutes = score_minutes;
     world.air_wizard_defeated = parse_bool(field(&game, 6, "Air Wizard state")?);
     // Java writeGame always emits ObsidianKnight.beaten as field 9; older
     // readers ignored it. Import when present.
@@ -209,6 +210,13 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
     import_entities(directory, &mut world, &world_ver)?;
     import_signs(directory, &mut world)?;
     import_unlocks(directory, &mut world)?;
+    let advancements = directory.join("advancements.json");
+    if advancements.exists() {
+        world.progress.import_java_advancements(
+            serde_json::from_str(&read_text_limited(&advancements, MAX_JAVA_FILE_BYTES)?)
+                .map_err(|e| format!("invalid Java advancements: {e}"))?,
+        )?;
+    }
 
     world.pause.close();
     world.pause.begin_tick();
@@ -257,8 +265,9 @@ fn import_player(directory: &Path, world: &mut World, world_ver: &Version) -> Re
     }
     world.player.x = parse(take!("player x"), "player x")?;
     world.player.y = parse(take!("player y"), "player y")?;
-    let _spawn_x = take!("spawn x");
-    let _spawn_y = take!("spawn y");
+    let spawn_x = parse(take!("spawn x"), "spawn x")?;
+    let spawn_y = parse(take!("spawn y"), "spawn y")?;
+    world.respawn_tile = Some((spawn_x, spawn_y));
     world.player.direction = Direction::Down;
     world.player.health = parse::<u8>(take!("player health"), "player health")?.min(MAX_HEALTH);
     if legacy_load::has_extra_health(world_ver) {
@@ -283,8 +292,26 @@ fn import_player(directory: &Path, world: &mut World, world_ver: &Version) -> Re
             world.current_level
         ));
     }
-    let potions = field(&player, cursor, "potion effects")?.to_owned();
+    let potions = take!("potion effects").to_owned();
     import_potions(&potions, &mut world.player.potion_effects)?;
+    if world_ver.at_least(&Version::parse("2.1.0")) {
+        if let Some(color) = player.get(cursor).filter(|color| !color.is_empty()) {
+            let color = parse::<i32>(color, "shirt color")?;
+            world.player.imported_shirt_color = Some(color);
+            if let Some((item, _)) = crate::item::clothing::ALL
+                .iter()
+                .find(|(_, c)| *c == color as u32)
+            {
+                world.player.clothing = *item;
+            }
+        }
+        if let Some(recipes) = player.get(cursor + 1).filter(|value| !value.is_empty()) {
+            world.progress.import_unlocked_recipes(
+                serde_json::from_str(recipes)
+                    .map_err(|e| format!("invalid Java unlocked recipes: {e}"))?,
+            )?;
+        }
+    }
     Ok(())
 }
 
@@ -330,11 +357,16 @@ fn import_inventory(
             }
             ImportedItem::Tool(mut tool) => {
                 tool.durability = tool.durability.min(tool.max_durability);
-                let tool_index = inventory
-                    .add_tool(tool)
-                    .ok_or_else(|| "Java inventory exceeds Rust inventory capacity".to_owned())?;
-                if index == 0 {
-                    active = Some(ActiveItem::Tool(tool_index));
+                if let Some(tool_index) = inventory.add_tool(tool) {
+                    if index == 0 {
+                        active = Some(ActiveItem::Tool(tool_index));
+                    }
+                } else {
+                    world.levels[world.current_level].entities.spawn_tool(
+                        tool,
+                        world.player.x,
+                        world.player.y,
+                    );
                 }
             }
         }
@@ -385,6 +417,25 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
                     .entities
                     .import_furniture(spawner_for(mob), x, y, 0, &[], &[]);
             }
+            continue;
+        }
+        if compact(name) == "deathchest" {
+            if info.len() < 4 {
+                return Err("truncated Java death chest".to_owned());
+            }
+            let remaining = parse::<u32>(info[info.len() - 2], "death chest remaining ticks")?;
+            let mut stacks = Vec::new();
+            let mut tools = Vec::new();
+            for entry in &info[2..info.len() - 2] {
+                match item_from_java(&sub_old_name(entry, world_ver))? {
+                    ImportedItem::Stack(item, count) => {
+                        stacks.push(crate::item::ItemStack::new(item, count))
+                    }
+                    ImportedItem::Tool(tool) => tools.push(tool),
+                }
+            }
+            let id = level.entities.spawn_death_chest(x, y, stacks, tools);
+            level.entities.set_death_chest_remaining(id, remaining);
             continue;
         }
         if let Some(mut kind) = furniture_from_java(name, info.get(2).copied()) {
@@ -597,8 +648,18 @@ fn tile_from_java(
         // Java randomly converts most surface lapis to gem ore on pre-2.0.3-dev6.
         key = "gemore".to_owned();
     }
+    if key == "torch" {
+        // Modern Java stores the underlying stable tile ID in the data field.
+        let base = u8::try_from(data)
+            .ok()
+            .and_then(Tile::from_id)
+            .filter(|tile| *tile != Tile::Torch)
+            .ok_or_else(|| format!("invalid Java torch base {data}"))?;
+        return Ok((Tile::Torch, base.id() as u16));
+    }
     if let Some(underlying) = key.strip_prefix("torch") {
-        let base = tile_by_key(underlying).unwrap_or(Tile::Grass);
+        let base = tile_by_key(underlying)
+            .ok_or_else(|| format!("unknown Java torch base {underlying:?}"))?;
         return Ok((Tile::Torch, base.id() as u16));
     }
     tile_by_key(&key)
@@ -633,13 +694,13 @@ fn tile_by_key(key: &str) -> Option<Tile> {
         "hardrock" => Tile::HardRock,
         "infinitefall" => Tile::InfiniteFall,
         "cloud" => Tile::Cloud,
-        "cloudore" => Tile::CloudOre,
+        "cloudore" | "cloudcactus" => Tile::CloudOre,
         "wooddoor" => Tile::WoodDoor,
         "stonedoor" => Tile::StoneDoor,
         "obsidiandoor" => Tile::ObsidianDoor,
         "woodfloor" | "woodplanks" | "planks" => Tile::WoodFloor,
         "stonefloor" | "stonebricks" => Tile::StoneFloor,
-        "obsidianfloor" | "obsidianbricks" => Tile::ObsidianFloor,
+        "obsidian" | "obsidianfloor" | "obsidianbricks" => Tile::ObsidianFloor,
         "woodwall" => Tile::WoodWall,
         "stonewall" => Tile::StoneWall,
         "obsidianwall" => Tile::ObsidianWall,
@@ -651,13 +712,13 @@ fn tile_by_key(key: &str) -> Option<Tile> {
         "yellowwool" => Tile::YellowWool,
         "blackwool" => Tile::BlackWool,
         "potato" => Tile::Potato,
-        "rawstone" => Tile::RawStone,
+        "stone" | "rawstone" => Tile::RawStone,
         "rawobsidian" => Tile::RawObsidian,
         "ornatestone" => Tile::OrnateStone,
         "ornateobsidian" => Tile::OrnateObsidian,
-        "bosswall" => Tile::BossWall,
-        "bossfloor" => Tile::BossFloor,
-        "bossdoor" => Tile::BossDoor,
+        "obsidianbosswall" | "bosswall" => Tile::BossWall,
+        "obsidianbossfloor" | "bossfloor" => Tile::BossFloor,
+        "obsidianbossdoor" | "bossdoor" => Tile::BossDoor,
         "tomato" => Tile::Tomato,
         "carrot" => Tile::Carrot,
         "heavenlyberries" => Tile::HeavenlyBerries,
@@ -1027,5 +1088,140 @@ mod tests {
         assert_eq!(mode, GameMode::Score);
         assert_eq!((ticks, minutes), (600, 20));
         assert!(parse_bool(field(&parsed, 6, "Air Wizard state").unwrap()));
+    }
+}
+
+#[cfg(test)]
+mod java224_fixture_tests {
+    use super::*;
+    use crate::saveload::save;
+    use crate::world::registry_tests::tiny_world;
+
+    #[test]
+    fn java224_all_registered_tiles_and_torch_base_import() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/java224/tiles.json")).unwrap();
+        let version = Version::parse("2.2.4");
+        for row in fixture["tiles"].as_array().unwrap() {
+            let data = row["data"].as_u64().unwrap() as u16;
+            let (tile, restored) =
+                tile_from_java(row["name"].as_str().unwrap(), data, &version, 0).unwrap();
+            assert_eq!(tile.id() as u64, row["id"].as_u64().unwrap(), "{row}");
+            assert_eq!(restored, data, "{row}");
+        }
+        let torch = &fixture["torch"];
+        assert_eq!(
+            tile_from_java(
+                torch["name"].as_str().unwrap(),
+                torch["data"].as_u64().unwrap() as u16,
+                &version,
+                0
+            )
+            .unwrap(),
+            (Tile::Torch, Tile::ObsidianFloor.id() as u16)
+        );
+        assert!(tile_from_java("Torch", 65535, &version, 0).is_err());
+        assert_eq!(
+            tile_from_java("Torch Wood Planks", 0, &version, 0).unwrap(),
+            (Tile::Torch, Tile::WoodFloor.id() as u16)
+        );
+    }
+
+    #[test]
+    fn java224_actual_writer_fields_and_progress_survive_native_round_trip() {
+        let mut world = tiny_world();
+        while world.levels.len() < 6 {
+            world.levels.push(crate::world::Level {
+                depth: 0,
+                tiles: vec![Tile::Grass; 256],
+                data: vec![0; 256],
+                max_mob_count: 0,
+                pending_spawns: vec![],
+                entities: EntityArena::default(),
+            });
+        }
+        world.signs = vec![Default::default(); 6];
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/java224");
+        import_player(&directory, &mut world, &Version::parse("2.2.4")).unwrap();
+        import_inventory(&directory, &mut world, &Version::parse("2.2.4")).unwrap();
+        import_entities(&directory, &mut world, &Version::parse("2.2.4")).unwrap();
+        let chest = &world.levels[3].entities.entities()[0];
+        assert_eq!(
+            chest.state,
+            crate::entity::furniture::chest::DEATH_CHEST_STATE
+        );
+        assert_eq!(chest.death_chest_lifetime, Some(123));
+        let storage = world.levels[3]
+            .entities
+            .death_chest_storage(chest.id)
+            .unwrap();
+        assert_eq!(storage.count(ItemId::Wood), 9);
+        assert_eq!(storage.tools()[0].durability, 17);
+        let progress: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/java224/advancements.json"
+        ))
+        .unwrap();
+        world
+            .progress
+            .import_java_advancements(progress.clone())
+            .unwrap();
+        assert_eq!(world.respawn_tile, Some((2, 3)));
+        assert_eq!(world.player.clothing, ItemId::BlueClothes);
+        assert_eq!(world.player.watering_content, 731);
+        assert_eq!(world.player.inventory.count(ItemId::WateringCan), 1);
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 9);
+        assert_eq!(world.player.inventory.tools()[0].durability, 17);
+        assert_eq!(
+            world.progress.current_tutorial().unwrap().id,
+            "minicraft.tutorial.getting_rocks"
+        );
+        assert_eq!(world.progress.tutorial_completed_count(), 1);
+        assert_eq!(world.progress.quest_completed_count(), 1);
+        assert_eq!(world.progress.java_advancements_json(), progress);
+        let original_player = save::player_fields(&world);
+        assert_eq!(
+            save::join_world_save_fields(&original_player),
+            std::fs::read_to_string(directory.join("Player.miniplussave")).unwrap()
+        );
+        assert_eq!(save::player_fields(&world), original_player);
+        // Rust stores stack slots and tool slots separately, so serialized order
+        // can differ. Compare exact instances/counts instead of a bag ordering.
+        let mut expected = read_save(&directory.join("Inventory.miniplussave")).unwrap();
+        expected.sort();
+        let mut actual: Vec<_> = save::inventory_fields(&world)
+            .into_iter()
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        actual.sort();
+        assert_eq!(actual, expected);
+        world.score_minutes = 40;
+        world.mode = GameMode::Score;
+        world.score_ticks = 123;
+        assert_eq!(save::game_fields(&world)[2], "3;123;40");
+        let mut restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        assert_eq!(save::player_fields(&restored), original_player);
+        assert_eq!(restored.progress.java_advancements_json(), progress);
+        assert_eq!(restored.score_minutes, 40);
+        let update = restored.progress.update(
+            &crate::progression::ProgressEvent::InventoryChanged,
+            &std::collections::HashMap::from([("coal".to_owned(), 5)]),
+        );
+        assert_eq!(
+            update.completed_tutorials,
+            ["minicraft.tutorial.getting_rocks"]
+        );
+        assert!(
+            update.rewards.is_empty(),
+            "loading completed quests must not pay rewards again"
+        );
+        let exported = restored.progress.java_advancements_json();
+        assert_eq!(exported["minicraft.tutorial.getting_rocks"]["done"], true);
+        assert_eq!(
+            exported["minicraft.tutorial.getting_rocks"]["criteria"]["has_rock"],
+            "2024-06-02T01:02:03"
+        );
+        assert!(exported["minicraft.tutorial.getting_rocks"]["criteria"]["has_coal"].is_string());
+        // The skipped intervening tutorials remain incomplete.
+        assert_eq!(restored.progress.tutorial_completed_count(), 2);
     }
 }

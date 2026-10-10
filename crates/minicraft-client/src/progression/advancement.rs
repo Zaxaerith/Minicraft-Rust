@@ -437,6 +437,7 @@ pub(crate) fn required_string(value: &Value, key: &str) -> Result<String, String
 /// Record criteria whose trigger matches the current event (Java pending set).
 pub(crate) fn record_owner_hits(
     hits: &mut HashSet<String>,
+    times: &mut HashMap<String, String>,
     owner: &str,
     criteria: &[Criterion],
     event: &ProgressEvent,
@@ -444,7 +445,10 @@ pub(crate) fn record_owner_hits(
 ) {
     for criterion in criteria {
         if criterion.matches(event, inventory) {
-            hits.insert(format!("{owner}:{}", criterion.name));
+            let key = format!("{owner}:{}", criterion.name);
+            if hits.insert(key.clone()) {
+                times.insert(key, super::progress::completion_timestamp());
+            }
         }
     }
 }

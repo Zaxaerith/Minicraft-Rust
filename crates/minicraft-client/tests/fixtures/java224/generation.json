@@ -1,0 +1,67 @@
+{
+  "maps": [
+    {
+      "depth": 1,
+      "seed": 42,
+      "fnv1aTileData": "c88f34e46e5dfb63"
+    },
+    {
+      "depth": 0,
+      "seed": 42,
+      "fnv1aTileData": "d641c8ebc99c5366"
+    },
+    {
+      "depth": -1,
+      "seed": 42,
+      "fnv1aTileData": "2405625f72fb6fa9"
+    },
+    {
+      "depth": -2,
+      "seed": 42,
+      "fnv1aTileData": "e23d2cd869017989"
+    },
+    {
+      "depth": -3,
+      "seed": 42,
+      "fnv1aTileData": "a62bba703f03c3d"
+    },
+    {
+      "depth": -4,
+      "seed": 42,
+      "fnv1aTileData": "f3cfccf079065bf2"
+    },
+    {
+      "depth": 1,
+      "seed": 256,
+      "fnv1aTileData": "ef2374fbd557672f"
+    },
+    {
+      "depth": 0,
+      "seed": 256,
+      "fnv1aTileData": "eff4594b2239dacf"
+    },
+    {
+      "depth": -1,
+      "seed": 256,
+      "fnv1aTileData": "12f09a19076b77b0"
+    },
+    {
+      "depth": -2,
+      "seed": 256,
+      "fnv1aTileData": "3992083a63c01649"
+    },
+    {
+      "depth": -3,
+      "seed": 256,
+      "fnv1aTileData": "bbde323eaf041986"
+    },
+    {
+      "depth": -4,
+      "seed": 256,
+      "fnv1aTileData": "fa1ff9834f71d8ae"
+    }
+  ],
+  "width": 128,
+  "version": "2.2.4",
+  "height": 128
+}

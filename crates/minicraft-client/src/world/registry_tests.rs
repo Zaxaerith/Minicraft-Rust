@@ -62,6 +62,7 @@ pub(crate) fn tiny_world() -> World {
             fishing_ticks: 0,
             watering_content: 0,
             clothing: ItemId::RegularClothes,
+            imported_shirt_color: None,
             inventory: Inventory::new(27),
             active_item: None,
         },
@@ -76,6 +77,7 @@ pub(crate) fn tiny_world() -> World {
         mode: super::GameMode::Survival,
         score: 0,
         score_ticks: 20 * 60 * 60,
+        score_minutes: 20,
         score_multiplier: 1,
         multiplier_ticks: 300,
         game_over: false,
@@ -2630,4 +2632,243 @@ fn extreme_saved_counters_survive_live_survival_and_calendar_ticks() {
     restored.player.hunger = u8::MAX;
     restored.player.hunger_charge_delay = u16::MAX;
     restored.tick_survival_stats();
+}
+
+#[test]
+fn java224_death_chest_lifetime_full_bag_and_expiry_conserve_instances() {
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/java224/reference.json")).unwrap();
+    for difficulty in 0..3 {
+        let mut world = tiny_world();
+        world.difficulty = difficulty;
+        let mut tool = ToolItem::new(ToolKind::Pickaxe, ToolTier::Iron);
+        tool.durability = 17;
+        world.player.inventory.add(ItemId::Wood, 7);
+        world.player.inventory.add_tool(tool).unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(0));
+        world.player.armor_kind = Some(ArmorKind::Iron);
+        world.die_player();
+        let entity = &world.levels[0].entities.entities()[0];
+        let id = entity.id;
+        assert!(
+            world.levels[0]
+                .entities
+                .pickup_furniture_near(world.player.x, world.player.y, 16, true)
+                .is_none()
+        );
+        assert_eq!(
+            world.levels[0].entities.entities()[0]
+                .death_chest_lifetime
+                .unwrap(),
+            reference["deathChestTicks"][difficulty].as_u64().unwrap() as u32
+        );
+        // Native saving preserves the captured difficulty/timer, even if settings change.
+        let mut world = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        world.player.inventory = Inventory::new(1);
+        world.player.inventory.add(ItemId::Wood, 998);
+        world.retrieve_death_chests();
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 999);
+        let storage = world.levels[0].entities.death_chest_storage(id).unwrap();
+        assert_eq!(storage.count(ItemId::Wood), 6);
+        assert_eq!(storage.tools(), &[tool]);
+        assert_eq!(storage.count(ItemId::IronArmor), 1);
+        world.player.inventory.take_all();
+        world.player.inventory.set_capacity(27);
+        world.retrieve_death_chests();
+        assert!(world.levels[0].entities.entities().is_empty());
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 6);
+        assert_eq!(world.player.inventory.tools(), &[tool]);
+        assert_eq!(world.player.inventory.count(ItemId::IronArmor), 1);
+        world.player.active_item = Some(ActiveItem::Tool(0));
+        world.die_player();
+        let id = world.levels[0].entities.entities()[0].id;
+        world.levels[0].entities.set_death_chest_remaining(id, 1);
+        // No player target during expiry, so collision pickup cannot hide a spill.
+        world.tick_level_entities(None, false, false);
+        let mut world = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        assert_eq!(world.levels[0].entities.entities().len(), 3);
+        assert!(
+            world.levels[0]
+                .entities
+                .entities()
+                .iter()
+                .any(|entity| matches!(entity.kind, EntityKind::Tool(saved) if saved == tool))
+        );
+        for entity in &mut world.levels[0].entities.entities {
+            entity.age = 31;
+            entity.x = world.player.x;
+            entity.y = world.player.y;
+        }
+        world.levels[0].entities.collect_near(
+            world.player.x,
+            world.player.y,
+            &mut world.player.inventory,
+        );
+        assert!(world.levels[0].entities.entities().is_empty());
+        assert_eq!(world.player.inventory.tools(), &[tool]);
+        assert_eq!(world.player.inventory.count(ItemId::Wood), 6);
+        assert_eq!(world.player.inventory.count(ItemId::IronArmor), 1);
+    }
+}
+
+#[test]
+fn java224_imported_recipe_locks_apply_to_real_crafting_actions() {
+    let mut world = tiny_world();
+    world
+        .progress
+        .import_unlocked_recipes(serde_json::json!({}))
+        .unwrap();
+    world.refresh_crafting_order();
+    assert_eq!(world.crafting_recipe_count(), 0);
+    world.player.inventory.add(ItemId::Wood, 9);
+    world.craft_selected_recipe();
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 9);
+    world.update_progress(crate::progression::ProgressEvent::InventoryChanged);
+    assert!(world.crafting_recipe_count() > 0);
+    let recipes = super::ordered_recipe_views(
+        None,
+        &world.player.inventory,
+        false,
+        &world.crafting_order,
+        &world.progress,
+    );
+    world.inventory_selection = recipes
+        .iter()
+        .position(|recipe| recipe.product_name() == "Plank")
+        .unwrap();
+    world.craft_selected_recipe();
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 8);
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/java224/reference.json")).unwrap();
+    assert_eq!(
+        u64::from(world.player.inventory.count(ItemId::Plank)),
+        reference["plankAfterCraft"].as_u64().unwrap()
+    );
+    assert_eq!(
+        u64::from(world.player.inventory.count(ItemId::Wood)),
+        reference["woodAfterCraft"].as_u64().unwrap()
+    );
+}
+
+#[test]
+fn java224_cross_layer_and_respawn_use_depth_in_both_saved_layouts() {
+    for depths in [[-3, -2, -1, 0, 1, -4], [1, 0, -1, -2, -3, -4]] {
+        let mut world = tiny_world();
+        world.levels = depths
+            .into_iter()
+            .map(|depth| Level {
+                depth,
+                tiles: vec![Tile::Grass; 256],
+                data: vec![0; 256],
+                max_mob_count: 0,
+                pending_spawns: vec![],
+                entities: EntityArena::default(),
+            })
+            .collect();
+        world.signs = vec![Default::default(); 6];
+        world.current_level = world
+            .levels
+            .iter()
+            .position(|level| level.depth == 0)
+            .unwrap();
+        world.apply_level_change(-1);
+        assert_eq!(world.levels[world.current_level].depth, 1);
+        world.apply_level_change(1);
+        assert_eq!(world.levels[world.current_level].depth, 0);
+        world.apply_level_change(1);
+        assert_eq!(world.levels[world.current_level].depth, -1);
+        world.respawn_tile = Some((2, 3));
+        let mut world = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        world.respawn();
+        assert_eq!(world.levels[world.current_level].depth, 0);
+        assert_eq!((world.player.x, world.player.y), (40, 56));
+        assert_eq!(crate::saveload::save::player_fields(&world)[11], "3");
+    }
+}
+
+#[test]
+fn java224_legacy_native_fields_and_unknown_progress_are_preserved() {
+    let mut world = tiny_world();
+    world.player.inventory.add(ItemId::Wood, 11);
+    let mut legacy: serde_json::Value =
+        serde_json::from_str(&world.to_save_string().unwrap()).unwrap();
+    legacy["world"]
+        .as_object_mut()
+        .unwrap()
+        .remove("score_minutes");
+    legacy["world"]["player"]
+        .as_object_mut()
+        .unwrap()
+        .remove("imported_shirt_color");
+    for field in [
+        "java_advancements",
+        "imported_tutorial_cursor",
+        "tutorial_cursor",
+        "unlocking_hits",
+        "recipe_elements",
+        "recipe_completed",
+        "unlocked_recipes",
+        "criterion_times",
+        "unlocking_times",
+        "imported_recipe_unlocks",
+    ] {
+        legacy["world"]["progress"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+    }
+    let mut restored = World::from_save_string(&legacy.to_string()).unwrap();
+    assert_eq!(restored.player.inventory.count(ItemId::Wood), 11);
+    assert_eq!(restored.score_minutes, 20);
+    let unknown = serde_json::json!({"Version": "2.2.4", "CurrentOngoingTutorial": "custom.tutorial", "custom.progress": {"criteria": {"custom": "2024-01-01T00:00:00"}, "done": true, "additional": [1,2]}});
+    restored
+        .progress
+        .import_java_advancements(unknown.clone())
+        .unwrap();
+    assert_eq!(restored.progress.java_advancements_json(), unknown);
+    restored.tutorials_enabled = false;
+    restored.quests_enabled = false;
+    restored
+        .progress
+        .import_unlocked_recipes(serde_json::json!({}))
+        .unwrap();
+    restored.update_progress(crate::progression::ProgressEvent::InventoryChanged);
+    assert!(
+        restored.crafting_recipe_count() > 0,
+        "recipe progress runs with tutorials and quests disabled"
+    );
+}
+
+#[test]
+fn java224_actual_tool_and_rejected_craft_reference() {
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/java224/reference.json")).unwrap();
+    let mut tool = ToolItem::new(ToolKind::Pickaxe, ToolTier::Iron);
+    tool.durability = 1;
+    assert_eq!(
+        tool.pay_durability(),
+        reference["lastToolUse"].as_bool().unwrap()
+    );
+    assert_eq!(
+        u64::from(tool.durability),
+        reference["afterLastUse"].as_u64().unwrap()
+    );
+    assert_eq!(
+        tool.pay_durability(),
+        reference["depletedToolUse"].as_bool().unwrap()
+    );
+    let mut bag = Inventory::new(27);
+    bag.add(ItemId::Wood, 9);
+    let recipe = crate::item::recipe::HAND_RECIPES
+        .iter()
+        .find(|recipe| recipe.output.item == ItemId::WoodDoor)
+        .unwrap();
+    assert_eq!(
+        recipe.craft(&mut bag),
+        reference["craftInsufficient"].as_bool().unwrap()
+    );
+    assert_eq!(
+        u64::from(bag.count(ItemId::Wood)),
+        reference["woodAfterRejectedCraft"].as_u64().unwrap()
+    );
 }

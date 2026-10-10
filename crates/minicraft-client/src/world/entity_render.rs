@@ -62,6 +62,18 @@ pub(super) fn render_entity(
                 0,
             );
         }
+        EntityKind::Tool(tool) => {
+            let image = assets.tool(*tool);
+            let height = entity
+                .item_motion
+                .as_ref()
+                .map_or(0, |motion| motion.height as i32);
+            screen.blit(
+                image,
+                entity.x - 4 - camera_x,
+                entity.y - 4 - camera_y - height,
+            );
+        }
         EntityKind::Mob(mob) => {
             let under = tile_under(entity.x, entity.y);
             let swimming = matches!(under, Tile::Water | Tile::Lava);

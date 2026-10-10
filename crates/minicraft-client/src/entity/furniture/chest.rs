@@ -27,3 +27,12 @@ pub const fn is_container(kind: FurnitureKind) -> bool {
 pub fn death_chest_expired(age: u32, used_slots: usize) -> bool {
     age >= DEATH_CHEST_LIFETIME || used_slots == 0
 }
+
+/// Java DeathChest constructor: difficulty is captured when the chest is created.
+pub const fn death_chest_lifetime(difficulty: usize) -> u32 {
+    match difficulty {
+        0 => 450 * 60,
+        2 => 150 * 60,
+        _ => DEATH_CHEST_LIFETIME,
+    }
+}

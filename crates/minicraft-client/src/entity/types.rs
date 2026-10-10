@@ -1,5 +1,5 @@
 //! Java Entity / Mob shared data shapes.
-use crate::item::{Inventory, ItemStack};
+use crate::item::{Inventory, ItemStack, ToolItem};
 use serde::{Deserialize, Serialize};
 
 use super::furniture::FurnitureKind;
@@ -44,6 +44,7 @@ pub struct Mob {
 pub enum EntityKind {
     Mob(Mob),
     Item(ItemStack),
+    Tool(ToolItem),
     Furniture(FurnitureKind),
     Projectile(Projectile),
     Particle(ParticleKind),
@@ -59,6 +60,9 @@ pub struct Entity {
     pub x: i32,
     pub y: i32,
     pub age: u32,
+    /// Absolute age at expiry; absent in old saves means the normal lifetime.
+    #[serde(default)]
+    pub(crate) death_chest_lifetime: Option<u32>,
     pub kind: EntityKind,
     pub state: u16,
     pub health: u16,

@@ -320,6 +320,7 @@ impl World {
             &self.player.inventory,
             self.mode == GameMode::Creative,
             &self.crafting_order,
+            &self.progress,
         );
         self.inventory_selection = recipes
             .iter()
@@ -334,6 +335,7 @@ impl World {
             &self.player.inventory,
             self.mode == GameMode::Creative,
             &self.crafting_order,
+            &self.progress,
         );
         let selected = recipes.get(self.inventory_selection);
         let item_count = |item| u32::from(self.player.inventory.count(item));

@@ -36,7 +36,19 @@ impl World {
         if next >= len {
             next = 0;
         }
-        self.current_level = next as usize;
+        let target_depth = i16::from(self.levels[self.current_level].depth) - i16::from(rust_delta);
+        let target_depth = match target_depth {
+            depth if depth > 1 => -4,
+            depth if depth < -4 => 1,
+            depth => depth as i8,
+        };
+        // Java imports retain Java's array layout; legacy Rust saves use the
+        // Rust layout. Depth identifies the same level in both representations.
+        self.current_level = self
+            .levels
+            .iter()
+            .position(|level| level.depth == target_depth)
+            .unwrap_or(next as usize);
         self.player.x = (self.player.x >> 4) * 16 + 8;
         self.player.y = (self.player.y >> 4) * 16 + 8;
         let depth = self.levels[self.current_level].depth;
@@ -67,12 +79,18 @@ impl World {
         if let Some(armor) = self.player.armor_kind.take() {
             chest_stacks.push(crate::item::ItemStack::new(armor.item(), 1));
         }
-        self.levels[self.current_level].entities.spawn_death_chest(
+        let chest_id = self.levels[self.current_level].entities.spawn_death_chest(
             drop_x,
             drop_y,
             chest_stacks,
             tools,
         );
+        self.levels[self.current_level]
+            .entities
+            .set_death_chest_remaining(
+                chest_id,
+                crate::entity::furniture::chest::death_chest_lifetime(self.difficulty),
+            );
         self.sound(super::SoundEffect::Death);
         self.player_removed = true;
         self.player_dead_time = 0;

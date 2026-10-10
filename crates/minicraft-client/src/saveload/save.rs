@@ -24,11 +24,7 @@ pub fn game_fields(world: &World) -> Vec<String> {
     vec![
         EXPORT_VERSION.to_owned(),
         world.seed.to_string(),
-        mode_field(
-            world.mode,
-            world.score_ticks,
-            default_score_minutes(world.mode),
-        ),
+        mode_field(world.mode, world.score_ticks, world.score_minutes),
         // Java Updater.tickCount.
         world.clock.get().day_tick.to_string(),
         // Java Updater.gameTime.
@@ -40,12 +36,6 @@ pub fn game_fields(world: &World) -> Vec<String> {
         world.obsidian_knight_defeated.to_string(),
         String::new(),
     ]
-}
-
-fn default_score_minutes(mode: GameMode) -> usize {
-    // World does not retain PlayOptions.score_minutes; Score mode default.
-    let _ = mode;
-    20
 }
 
 fn mode_field(mode: GameMode, score_ticks: i32, score_minutes: usize) -> String {
@@ -62,9 +52,16 @@ pub fn player_fields(world: &World) -> Vec<String> {
     vec![
         player.x.to_string(),
         player.y.to_string(),
-        // Rust has no separate spawn point; Java still expects the slots.
-        player.x.to_string(),
-        player.y.to_string(),
+        world
+            .respawn_tile
+            .unwrap_or((player.x >> 4, player.y >> 4))
+            .0
+            .to_string(),
+        world
+            .respawn_tile
+            .unwrap_or((player.x >> 4, player.y >> 4))
+            .1
+            .to_string(),
         player.health.to_string(),
         player.max_health.saturating_sub(10).to_string(),
         player.hunger.to_string(),
@@ -75,11 +72,15 @@ pub fn player_fields(world: &World) -> Vec<String> {
             .map(|armor| armor.display_name().to_owned())
             .unwrap_or_else(|| "NULL".to_owned()),
         world.score.to_string(),
-        world.current_level.to_string(),
+        java_level_index(world, world.current_level).to_string(),
         potion_effects_field(&player.potion_effects),
-        // Shirt/clothing slot — Java stores an int color; export 0.
-        "0".to_owned(),
-        "{}".to_owned(),
+        player
+            .imported_shirt_color
+            .unwrap_or_else(|| {
+                crate::item::clothing::player_color(player.clothing).unwrap_or(0) as i32
+            })
+            .to_string(),
+        world.progress.unlocked_recipes_json().to_string(),
         String::new(),
     ]
 }
@@ -121,7 +122,11 @@ pub fn inventory_fields(world: &World) -> Vec<String> {
         if Some(index) == active_stack {
             continue;
         }
-        fields.push(encode_item(stack.item, stack.count));
+        fields.push(encode_item(
+            stack.item,
+            stack.count,
+            world.player.watering_content,
+        ));
     }
     for (index, tool) in world.player.inventory.tools().iter().enumerate() {
         if world.player.active_item == Some(ActiveItem::Tool(index)) {
@@ -141,7 +146,7 @@ fn encode_active_item(world: &World, active: ActiveItem) -> Option<String> {
             .slots()
             .iter()
             .find(|stack| stack.item == item)
-            .map(|stack| encode_item(item, stack.count)),
+            .map(|stack| encode_item(item, stack.count, world.player.watering_content)),
         ActiveItem::Tool(index) => world
             .player
             .inventory
@@ -151,9 +156,9 @@ fn encode_active_item(world: &World, active: ActiveItem) -> Option<String> {
     }
 }
 
-fn encode_item(item: ItemId, count: u16) -> String {
+fn encode_item(item: ItemId, count: u16, watering_content: u16) -> String {
     if item == ItemId::WateringCan {
-        format!("{}_1", item.display_name())
+        format!("{}_{}", item.display_name(), watering_content)
     } else {
         format!("{}_{}", item.display_name(), count)
     }
@@ -193,6 +198,17 @@ fn mob_class_name(species: spawn::NaturalMob) -> &'static str {
     }
 }
 
+/// Java World.lvlIdx maps the dungeon specially, and other depths to depth+3.
+fn java_level_index(world: &World, index: usize) -> usize {
+    world.levels.get(index).map_or(index, |level| {
+        if level.depth == -4 {
+            5
+        } else {
+            (i16::from(level.depth) + 3).max(0) as usize
+        }
+    })
+}
+
 /// Java `SignDisplay` signs.json body.
 pub fn signs_json(world: &World) -> Value {
     let mut signs = Vec::new();
@@ -202,7 +218,7 @@ pub fn signs_json(world: &World) -> Value {
             let x = index % width;
             let y = index / width;
             signs.push(json!({
-                "level": level,
+                "level": java_level_index(world, level),
                 "x": x,
                 "y": y,
                 "lines": text.split(' ').collect::<Vec<_>>(),
@@ -218,7 +234,11 @@ pub fn signs_json(world: &World) -> Value {
 /// Java `Save.writeToFile(..., isWorldSave=true)` — comma-joined with trailing commas.
 pub fn join_world_save_fields(fields: &[String]) -> String {
     let mut out = String::new();
-    for field in fields {
+    let end = fields
+        .iter()
+        .rposition(|field| !field.is_empty())
+        .map_or(0, |i| i + 1);
+    for field in &fields[..end] {
         out.push_str(field);
         out.push(',');
     }
@@ -299,7 +319,7 @@ mod tests {
         assert_eq!(value["Version"], "2.2.4");
         let signs = value["signs"].as_array().unwrap();
         assert_eq!(signs.len(), 1);
-        assert_eq!(signs[0]["level"], 1);
+        assert_eq!(signs[0]["level"], 3);
         assert_eq!(signs[0]["x"], 0);
         assert_eq!(signs[0]["y"], 1);
         assert_eq!(signs[0]["lines"][0], "HELLO");

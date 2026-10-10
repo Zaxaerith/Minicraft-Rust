@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 40
     env:
       CARGO_TERM_COLOR: always
+      MINICRAFT_PARITY_RENDER_OUTPUT: ${{ github.workspace }}/target/parity/render-frame/rust
     steps:
       - uses: actions/checkout@v7
         with:

@@ -88,13 +88,15 @@ impl EntityArena {
         let mut outcome = TickOutcome::default();
         let mut queued_projectiles = Vec::new();
         let mut queued_mobs = Vec::new();
+        let mut spilled_stacks = Vec::new();
+        let mut spilled_tools = Vec::new();
         let mut projectile_hits = Vec::new();
 
         for index in 0..self.entities.len() {
             let entity = &mut self.entities[index];
             entity.age = entity.age.saturating_add(1);
             match &mut entity.kind {
-                EntityKind::Item(_) => {
+                EntityKind::Item(_) | EntityKind::Tool(_) => {
                     tick_item(entity);
                 }
                 EntityKind::Particle(kind) => {
@@ -146,13 +148,32 @@ impl EntityArena {
                 EntityKind::Furniture(FurnitureKind::Chest | FurnitureKind::DungeonChest)
                     if entity.state == chest::DEATH_CHEST_STATE =>
                 {
-                    // Java DeathChest: 300s on normal; host handles touch-retrieve.
+                    // Old Rust saves retain the normal lifetime; new chests capture difficulty.
                     let used = entity
                         .storage
                         .as_ref()
                         .map(|storage| storage.used_slots())
                         .unwrap_or(0);
-                    if chest::death_chest_expired(entity.age, used) {
+                    if entity.age
+                        >= entity
+                            .death_chest_lifetime
+                            .unwrap_or(chest::DEATH_CHEST_LIFETIME)
+                        || used == 0
+                    {
+                        if let Some(storage) = entity.storage.as_mut() {
+                            spilled_stacks.extend(
+                                storage
+                                    .take_all()
+                                    .into_iter()
+                                    .map(|stack| (stack, entity.x, entity.y)),
+                            );
+                            spilled_tools.extend(
+                                storage
+                                    .take_tools()
+                                    .into_iter()
+                                    .map(|tool| (tool, entity.x, entity.y)),
+                            );
+                        }
                         entity.removed = true;
                         continue;
                     }
@@ -258,6 +279,12 @@ impl EntityArena {
         }
         for (species, x, y) in queued_mobs {
             self.spawn_mob(species, x, y);
+        }
+        for (stack, x, y) in spilled_stacks {
+            self.spawn_item(stack, x, y);
+        }
+        for (tool, x, y) in spilled_tools {
+            self.spawn_tool(tool, x, y);
         }
         self.tick_furniture_push(tiles, data, width, height);
         self.entities.retain(|entity| !entity.removed);

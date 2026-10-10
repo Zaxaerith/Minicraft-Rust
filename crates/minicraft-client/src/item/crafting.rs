@@ -102,13 +102,19 @@ pub fn ordered_recipe_views(
     inventory: &Inventory,
     creative: bool,
     order: &[usize],
+    progress: &crate::progression::ProgressState,
 ) -> Vec<RecipeView> {
     let recipes = recipe_views(station);
-    if order.len() == recipes.len() && order.iter().all(|&index| index < recipes.len()) {
-        order.iter().map(|&index| recipes[index]).collect()
-    } else {
-        sorted_recipe_views(station, inventory, creative)
-    }
+    let ordered =
+        if order.len() == recipes.len() && order.iter().all(|&index| index < recipes.len()) {
+            order.iter().map(|&index| recipes[index]).collect()
+        } else {
+            sorted_recipe_views(station, inventory, creative)
+        };
+    ordered
+        .into_iter()
+        .filter(|recipe| progress.recipe_is_unlocked(recipe))
+        .collect()
 }
 
 /// Same query used for Have/Cost display and craft gating.

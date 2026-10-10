@@ -9,9 +9,8 @@ use std::collections::HashMap;
 
 use crate::io::Input;
 use crate::item::{
-    ANVIL_RECIPES, ANVIL_TOOL_RECIPES, ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES, ItemStack,
-    LOOM_RECIPES, OVEN_RECIPES, RecipeOutput, ToolKind, ToolTier, WORKBENCH_STATION_RECIPES,
-    WORKBENCH_TOOL_RECIPES, ordered_recipe_views, recipe_can_craft, recipe_views,
+    ItemStack, RecipeOutput, ToolKind, ToolTier, ordered_recipe_views, recipe_can_craft,
+    recipe_views,
 };
 use crate::progression::{Book, ProgressEvent};
 
@@ -133,21 +132,14 @@ impl World {
     }
 
     pub(super) fn crafting_recipe_count(&self) -> usize {
-        match self.crafting_station {
-            None => HAND_RECIPES.len(),
-            Some(FurnitureKind::Workbench) => {
-                WORKBENCH_STATION_RECIPES.len() + WORKBENCH_TOOL_RECIPES.len()
-            }
-            Some(FurnitureKind::Oven) => OVEN_RECIPES.len(),
-            Some(FurnitureKind::Furnace) => FURNACE_RECIPES.len(),
-            Some(FurnitureKind::Anvil) => ANVIL_RECIPES.len() + ANVIL_TOOL_RECIPES.len(),
-            Some(FurnitureKind::Enchanter) => ENCHANTER_RECIPES.len(),
-            Some(FurnitureKind::Loom) => LOOM_RECIPES.len(),
-            _ => 0,
-        }
+        recipe_views(self.crafting_station)
+            .iter()
+            .filter(|recipe| self.progress.recipe_is_unlocked(recipe))
+            .count()
     }
 
     pub(super) fn refresh_crafting_order(&mut self) {
+        self.update_progress(ProgressEvent::InventoryChanged);
         let recipes = recipe_views(self.crafting_station);
         let creative = self.mode == GameMode::Creative;
         let mut order: Vec<usize> = (0..recipes.len()).collect();
@@ -165,6 +157,7 @@ impl World {
             &self.player.inventory,
             self.mode == GameMode::Creative,
             &self.crafting_order,
+            &self.progress,
         );
         let Some(recipe) = recipes.get(self.inventory_selection).copied() else {
             return;
@@ -329,6 +322,7 @@ impl World {
                     self.player.inventory.add(previous, 1);
                 }
                 self.player.clothing = item;
+                self.player.imported_shirt_color = None;
                 self.unlock_achievement("minicraft.achievement.clothes");
             }
             return true;
@@ -448,9 +442,7 @@ impl World {
     }
 
     pub(super) fn update_progress(&mut self, event: ProgressEvent) {
-        if !self.tutorials_enabled && !self.quests_enabled {
-            return;
-        }
+        // Java recipe advancements run even when tutorials/quests are disabled.
         let inventory = self.inventory_progress();
         let update = self.progress.update_filtered(
             &event,

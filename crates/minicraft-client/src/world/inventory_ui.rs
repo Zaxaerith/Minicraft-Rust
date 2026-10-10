@@ -100,6 +100,7 @@ pub(crate) fn render_inventory(
     screen: &mut Screen,
     assets: &Assets,
     player: &Player,
+    progress: &crate::progression::ProgressState,
     item_selection: usize,
     craft_selection: usize,
     pane: usize,
@@ -117,6 +118,7 @@ pub(crate) fn render_inventory(
             craft_selection,
             mode == GameMode::Creative,
             crafting_order,
+            progress,
         );
         return;
     }
@@ -288,6 +290,7 @@ pub fn render_inventory_parity(screen: &mut Screen, assets: &Assets, world: &Wor
         screen,
         assets,
         &world.player,
+        &world.progress,
         world.inventory_item_selection,
         world.inventory_selection,
         world.inventory_pane,
@@ -298,6 +301,8 @@ pub fn render_inventory_parity(screen: &mut Screen, assets: &Assets, world: &Wor
     );
 }
 
+// Keep the existing rendering parameters together with saved recipe visibility.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_crafting_menu(
     screen: &mut Screen,
     assets: &Assets,
@@ -306,8 +311,15 @@ pub(crate) fn render_crafting_menu(
     selection: usize,
     creative: bool,
     crafting_order: &[usize],
+    progress: &crate::progression::ProgressState,
 ) {
-    let recipes = ordered_recipe_views(station, &player.inventory, creative, crafting_order);
+    let recipes = ordered_recipe_views(
+        station,
+        &player.inventory,
+        creative,
+        crafting_order,
+        progress,
+    );
     let title = station.map_or("Crafting", FurnitureKind::display_name);
     let content_width = recipes
         .iter()

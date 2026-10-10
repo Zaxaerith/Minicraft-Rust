@@ -1,5 +1,13 @@
 //! Headless adapters that expose live compatibility code to differential tools.
 
+/// Fixed Java 2.2.4 LevelGen noise scenario. Dimensions and seed match Oracle.java.
+pub fn java224_noise_bits(feature_size: usize) -> Result<Vec<u64>, String> {
+    if !matches!(feature_size, 16 | 32) {
+        return Err("Java reference feature size must be 16 or 32".to_owned());
+    }
+    Ok(crate::level::generation::java224_noise_bits(feature_size))
+}
+
 mod display_stack;
 pub use display_stack::display_stack_snapshots;
 mod focus_update;

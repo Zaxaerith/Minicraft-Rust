@@ -262,36 +262,27 @@ impl World {
             // Java playerHurtTime = 30; white flash while hurtTime > 20.
             let hurt = self.player.hurt_time > 20;
             let tint = if hurt { 0x00FF_FFFFu32 } else { 0 };
-            if player_swimming {
-                // Don't render the bottom half while swimming.
-                screen.blit_region_override(
-                    assets.skin(),
+            let shirt = self
+                .player
+                .imported_shirt_color
+                .map(|color| color as u32)
+                .or_else(|| crate::item::clothing::player_color(self.player.clothing));
+            screen.render_sprite(
+                assets.skin(),
+                player_x,
+                player_y,
+                crate::gfx::sprite::SpriteRender {
                     source_x,
-                    skin_row,
-                    16,
-                    8,
-                    player_x,
-                    player_y,
-                    flip,
-                    false,
-                    tint,
-                    hurt,
-                );
-            } else {
-                screen.blit_region_override(
-                    assets.skin(),
-                    source_x,
-                    skin_row,
-                    16,
-                    16,
-                    player_x,
-                    player_y,
-                    flip,
-                    false,
-                    tint,
-                    hurt,
-                );
-            }
+                    source_y: skin_row,
+                    width: 16,
+                    height: if player_swimming { 8 } else { 16 },
+                    mirror_x: flip,
+                    white_tint: shirt,
+                    color: tint,
+                    full_bright: hurt,
+                    ..Default::default()
+                },
+            );
             if self.player.attack_time > 0 {
                 render_attack_slash(
                     screen,
@@ -548,6 +539,7 @@ impl World {
                     screen,
                     assets,
                     &self.player,
+                    &self.progress,
                     self.inventory_item_selection,
                     self.inventory_selection,
                     self.inventory_pane,

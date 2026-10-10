@@ -26,14 +26,14 @@ impl World {
             self.difficulty.min(2) as u8,
             depth,
         );
-        if player.is_some() && !player_passive {
+        if player.is_some() {
             self.retrieve_death_chests();
         }
         outcome
     }
 
     /// Java DeathChest.touchedBy: walk into the chest to take everything.
-    fn retrieve_death_chests(&mut self) {
+    pub(super) fn retrieve_death_chests(&mut self) {
         let px = self.player.x;
         let py = self.player.y;
         let mut chest_id = None;
@@ -43,11 +43,13 @@ impl World {
                 super::entity::EntityKind::Furniture(
                     FurnitureKind::Chest | FurnitureKind::DungeonChest
                 )
-            ) || entity.state != 1
+            ) || entity.state != crate::entity::furniture::chest::DEATH_CHEST_STATE
             {
                 continue;
             }
-            if (entity.x - px).abs() < 10 && (entity.y - py).abs() < 10 {
+            if (i64::from(entity.x) - i64::from(px)).abs() < 10
+                && (i64::from(entity.y) - i64::from(py)).abs() < 10
+            {
                 chest_id = Some(entity.id);
                 break;
             }
@@ -64,12 +66,35 @@ impl World {
         let stacks = storage.slots().to_vec();
         let tools = storage.tools().to_vec();
         for stack in stacks {
-            if self.player.inventory.add(stack.item, stack.count) == 0 {
+            let remaining = self.player.inventory.add(stack.item, stack.count);
+            let transferred = stack.count - remaining;
+            if transferred > 0 {
+                self.levels[self.current_level]
+                    .entities
+                    .entities_mut_for_storage(id)
+                    .expect("chest exists")
+                    .remove(stack.item, transferred);
                 self.sound(super::SoundEffect::Pickup);
+            }
+            if remaining > 0 {
+                return;
             }
         }
         for tool in tools {
-            let _ = self.player.inventory.add_tool(tool);
+            if self.player.inventory.add_tool(tool).is_none() {
+                return;
+            }
+            // Remove this exact tool, preserving durability even for equal kinds.
+            let storage = self.levels[self.current_level]
+                .entities
+                .entities_mut_for_storage(id)
+                .expect("chest exists");
+            let index = storage
+                .tools
+                .iter()
+                .position(|candidate| *candidate == tool)
+                .expect("copied tool exists");
+            storage.tools.remove(index);
         }
         self.levels[self.current_level]
             .entities

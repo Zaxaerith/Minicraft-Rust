@@ -1,0 +1,15 @@
+{
+  "lastToolUse": true,
+  "plankAfterCraft": 2,
+  "depletedToolUse": false,
+  "afterLastUse": 0,
+  "deathChestTicks": [
+    27000,
+    18000,
+    9000
+  ],
+  "woodAfterRejectedCraft": 9,
+  "craftPlank": true,
+  "woodAfterCraft": 8,
+  "craftInsufficient": false
+}

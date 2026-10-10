@@ -165,6 +165,19 @@ impl EntityArena {
         id
     }
 
+    pub(crate) fn spawn_tool(&mut self, tool: ToolItem, x: i32, y: i32) -> u64 {
+        // Share ItemEntity motion/lifetime while preserving the tool instance.
+        let id = self.spawn_item(ItemStack::new(ItemId::Wood, 1), x, y);
+        self.entities.last_mut().expect("inserted tool").kind = EntityKind::Tool(tool);
+        id
+    }
+
+    pub(crate) fn set_death_chest_remaining(&mut self, id: u64, ticks: u32) {
+        if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id) {
+            entity.death_chest_lifetime = Some(entity.age.saturating_add(ticks));
+        }
+    }
+
     pub fn spawn_item(&mut self, stack: ItemStack, x: i32, y: i32) -> u64 {
         let id = self.insert(x, y, EntityKind::Item(stack));
         let entity = self.entities.last_mut().expect("inserted item");
@@ -340,7 +353,8 @@ impl EntityArena {
             let EntityKind::Furniture(kind) = entity.kind else {
                 return false;
             };
-            if kind == FurnitureKind::KnightStatue
+            if entity.state == chest::DEATH_CHEST_STATE
+                || kind == FurnitureKind::KnightStatue
                 || (kind == FurnitureKind::Tnt && entity.state > 0)
             {
                 return false;
@@ -455,6 +469,7 @@ impl EntityArena {
             x,
             y,
             age: 0,
+            death_chest_lifetime: None,
             kind,
             state: 0,
             health: 0,
@@ -671,6 +686,12 @@ impl EntityArena {
                 continue;
             }
             if squared_distance(entity.x, entity.y, player_x, player_y) > 12 * 12 {
+                continue;
+            }
+            if let EntityKind::Tool(tool) = entity.kind {
+                if inventory.add_tool(tool).is_some() {
+                    entity.removed = true;
+                }
                 continue;
             }
             let EntityKind::Item(stack) = &mut entity.kind else {

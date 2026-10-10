@@ -77,6 +77,10 @@ use random::JavaRandom;
 const TILE_SIZE: i32 = 16;
 pub(crate) const DAY_LENGTH: u32 = crate::core::updater::DAY_LENGTH;
 pub(crate) const MAX_STAT: u8 = 10;
+pub(crate) fn default_score_minutes() -> usize {
+    20
+}
+
 fn default_render_gui() -> bool {
     true
 }
@@ -201,6 +205,8 @@ pub(crate) struct Player {
     pub(crate) fishing_ticks: u16,
     pub(crate) watering_content: u16,
     pub(crate) clothing: ItemId,
+    #[serde(default)]
+    pub(crate) imported_shirt_color: Option<i32>,
     pub(crate) inventory: Inventory,
     pub(crate) active_item: Option<ActiveItem>,
 }
@@ -241,6 +247,8 @@ pub struct World {
     pub(crate) mode: GameMode,
     pub(crate) score: u32,
     pub(crate) score_ticks: i32,
+    #[serde(default = "default_score_minutes")]
+    pub(crate) score_minutes: usize,
     score_multiplier: u8,
     multiplier_ticks: u16,
     game_over: bool,
@@ -251,7 +259,7 @@ pub struct World {
     #[serde(default)]
     bed_level: Option<usize>,
     #[serde(default)]
-    respawn_tile: Option<(i32, i32)>,
+    pub(crate) respawn_tile: Option<(i32, i32)>,
     #[serde(skip)]
     sleep_speed: u8,
     #[serde(default)]
@@ -497,6 +505,7 @@ impl World {
         let inventory = Inventory::new(27);
         let sign_levels = levels.len();
         let mut progress = ProgressState::load().expect("bundled progression data must be valid");
+        progress.begin_new_world();
         if options.custom_skin {
             progress.unlock_achievement("minicraft.achievement.skin");
         }
@@ -534,6 +543,7 @@ impl World {
                 fishing_ticks: 0,
                 watering_content: 0,
                 clothing: ItemId::RegularClothes,
+                imported_shirt_color: None,
                 inventory,
                 active_item: None,
             },
@@ -552,6 +562,10 @@ impl World {
                 _ => 20,
             } * 60
                 * 60) as i32,
+            score_minutes: match options.score_minutes {
+                10 | 20 | 40 | 60 | 120 => options.score_minutes,
+                _ => 20,
+            },
             score_multiplier: 1,
             multiplier_ticks: 300,
             game_over: false,
@@ -1420,7 +1434,11 @@ impl World {
     /// Java Player.respawn(Level): restore stats/position only. Score penalty
     /// and item drops already ran in die_player when health hit zero.
     fn respawn(&mut self) {
-        self.current_level = 1;
+        self.current_level = self
+            .levels
+            .iter()
+            .position(|level| level.depth == 0)
+            .unwrap_or(self.current_level);
         let (x, y) = self.respawn_position();
         self.player.x = x * TILE_SIZE + 8;
         self.player.y = y * TILE_SIZE + 8;

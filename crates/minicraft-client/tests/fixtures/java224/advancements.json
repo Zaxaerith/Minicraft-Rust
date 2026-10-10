@@ -1,0 +1,24 @@
+{
+  "CurrentOngoingTutorial": "minicraft.tutorial.getting_rocks",
+  "minicraft.tutorial.getting_rocks": {
+    "criteria": {"has_rock": "2024-06-02T01:02:03"},
+    "done": false
+  },
+  "Version": "2.2.4",
+  "minicraft.tutorial.start_getting_wood": {
+    "criteria": {"has_wood": "2024-06-01T12:34:56.123"},
+    "done": true
+  },
+  "minicraft.advancements.recipes.plank": {
+    "criteria": {"has_wood": "2024-06-01T12:34:56.123"},
+    "done": true
+  },
+  "minicraft.quest.farming": {
+    "unlockingCriteria": {"has_seeds": "2024-06-01T12:34:56"},
+    "unlocked": true
+  },
+  "minicraft.quest.farming.crafting_hoe": {
+    "criteria": {"has_hoe": "2024-06-01T12:34:56.123"},
+    "done": true
+  }
+}
