@@ -461,3 +461,139 @@ impl World {
         screen.save_png(path)
     }
 }
+
+impl World {
+    pub(crate) fn java230_flora_smoke(root: &std::path::Path) -> Result<(), String> {
+        std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
+        let mut results = Vec::new();
+        for size in [128, 256, 512] {
+            let started = std::time::Instant::now();
+            let world = Self::new_with_generation(
+                42,
+                WorldSpec::new(size, 0, 0),
+                PlayOptions {
+                    difficulty: 1,
+                    mode: GameMode::Survival,
+                    score_minutes: 20,
+                    tutorials: false,
+                    quests: false,
+                    show_quests: false,
+                    custom_skin: false,
+                },
+                GenerationVersion::Java230Flora,
+            );
+            let elapsed = started.elapsed().as_millis();
+            let mut counts = [0_u32; 19];
+            for level in &world.levels {
+                if level.tiles.len() != size * size || level.data.len() != size * size {
+                    return Err("incomplete level buffers".into());
+                }
+                for (&tile, &data) in level.tiles.iter().zip(&level.data) {
+                    if tile == Tile::Flower230 {
+                        if level.depth != 0 || data >= 19 {
+                            return Err("invalid natural flower".into());
+                        }
+                        counts[data as usize] += 1;
+                    }
+                }
+            }
+            let record = crate::worlds::WorldRecord {
+                name: format!("flora-{size}"),
+                seed: 42,
+                spec: WorldSpec::new(size, 0, 0),
+                mode: GameMode::Survival,
+                score_minutes: 20,
+                generation_version: GenerationVersion::Java230Flora,
+                directory: root.join(format!("flora-{size}")),
+            };
+            std::fs::create_dir_all(&record.directory).map_err(|e| e.to_string())?;
+            let text = world.to_save_string()?;
+            let serialized_bytes = text.len();
+            let tile_buffer_bytes: usize = world
+                .levels
+                .iter()
+                .map(|l| {
+                    l.tiles.capacity() * std::mem::size_of::<Tile>()
+                        + l.data.capacity() * std::mem::size_of::<u16>()
+                })
+                .sum();
+            crate::worlds::save_state(&record, &world)?;
+            drop(world);
+            let mut restored = crate::worlds::load_state(&record)?.ok_or("missing smoke state")?;
+            if serde_json::from_str::<serde_json::Value>(&restored.to_save_string()?)
+                .map_err(|e| e.to_string())?
+                != serde_json::from_str::<serde_json::Value>(&text).map_err(|e| e.to_string())?
+            {
+                return Err("world roundtrip differs".into());
+            }
+            let level = &restored.levels[restored.current_level];
+            // Camera follows the densest naturally generated patch; no tiles,
+            // data, entities or inventory are fabricated for this preview.
+            if size == 128 {
+                let patch = level
+                    .tiles
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| **t == Tile::Flower230)
+                    .max_by_key(|(index, _)| {
+                        let x = index % size;
+                        let y = index / size;
+                        (y.saturating_sub(5)..=(y + 5).min(size - 1))
+                            .map(|yy| {
+                                (x.saturating_sub(8)..=(x + 8).min(size - 1))
+                                    .filter(|&xx| level.tiles[xx + yy * size] == Tile::Flower230)
+                                    .count()
+                            })
+                            .sum::<usize>()
+                    })
+                    .map(|(i, _)| i)
+                    .ok_or("no natural flowers")?;
+                restored.player.x = (patch % size) as i32 * TILE_SIZE + 8;
+                restored.player.y = (patch / size) as i32 * TILE_SIZE + 8;
+                restored.render_gui = false;
+                restored.clock.set_day_tick(18_000);
+                let assets = Assets::load(&[])?;
+                let localization = Localization::load("en-us", &[]);
+                let mut screen = Screen::new();
+                restored.render(&mut screen, &assets, &localization);
+                screen.save_png(&root.join("natural-flora.png"))?;
+                let species = restored.levels[restored.current_level].data[patch];
+                let item = crate::level::tile::flower::FlowerVariant::from_data(species)
+                    .ok_or("invalid harvested species")?
+                    .item();
+                restored.attack_target_tile((patch % size) as i32, (patch / size) as i32, patch);
+                crate::worlds::save_state(&record, &restored)?;
+                drop(restored);
+                restored = crate::worlds::load_state(&record)?.ok_or("missing harvested state")?;
+                if restored.levels[restored.current_level].tiles[patch] != Tile::Grass
+                    || restored.levels[restored.current_level]
+                        .entities
+                        .entities()
+                        .iter()
+                        .filter_map(|e| match e.kind {
+                            entity::EntityKind::Item(stack) if stack.item == item => {
+                                Some(stack.count)
+                            }
+                            _ => None,
+                        })
+                        .sum::<u16>()
+                        != 1
+                {
+                    return Err("harvest did not survive disk save/quit/reload".into());
+                }
+            }
+            results.push(serde_json::json!({"size":size,"seed":42,"generation_ms":elapsed,
+                "tile_buffer_bytes":tile_buffer_bytes,"serialized_bytes":serialized_bytes,
+                "flower_counts":counts,"version":restored.generation_version(),"disk_roundtrip":true}));
+            println!(
+                "PASS real World {size}: generated in {elapsed} ms, disk roundtrip, flowers={}",
+                counts.iter().sum::<u32>()
+            );
+        }
+        std::fs::write(
+            root.join("generation-smoke.json"),
+            serde_json::to_string_pretty(&results).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())
+    }
+}

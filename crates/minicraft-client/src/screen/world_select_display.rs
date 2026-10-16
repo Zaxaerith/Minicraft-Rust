@@ -79,6 +79,7 @@ mod tests {
         names
             .iter()
             .map(|name| WorldRecord {
+                generation_version: crate::level::GenerationVersion::Legacy224,
                 name: (*name).to_owned(),
                 seed: 1,
                 spec: WorldSpec::default(),

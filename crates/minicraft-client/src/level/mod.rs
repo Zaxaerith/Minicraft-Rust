@@ -8,4 +8,4 @@ pub mod spec;
 pub mod tile;
 
 pub use generation::{GeneratedLevel, level as generate_level, surface_with_spec};
-pub use spec::{GameMode, TerrainType, Theme, WorldSpec};
+pub use spec::{GameMode, GenerationVersion, TerrainType, Theme, WorldSpec};

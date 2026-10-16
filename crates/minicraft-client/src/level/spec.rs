@@ -1,6 +1,16 @@
 //! World creation parameters and game modes shared by saves and generation.
 use serde::{Deserialize, Serialize};
 
+/// Persisted generation contract. Missing markers always mean the historical
+/// 2.2.4/Phase-1 rules; only explicitly new worlds opt into 2.3 surface flora.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum GenerationVersion {
+    #[default]
+    Legacy224,
+    /// Java 2.3-dev surface flower RNG/data; other layers retain the 2.2.4 path.
+    Java230Flora,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
     Normal,

@@ -95,6 +95,7 @@ mod tests {
         let mut world = crate::world::registry_tests::tiny_world();
         world.tick(&crate::io::Input::default());
         let record = crate::worlds::WorldRecord {
+            generation_version: crate::level::GenerationVersion::Legacy224,
             name: "intermediate".into(),
             seed: 0,
             spec: crate::world::WorldSpec::new(128, 0, 0),
@@ -126,6 +127,7 @@ mod tests {
         let world = tiny_world();
         let original_clock = world.shared_clock();
         let record = crate::worlds::WorldRecord {
+            generation_version: crate::level::GenerationVersion::Legacy224,
             name: "lifecycle fixture".into(),
             seed: 0,
             spec: WorldSpec::new(128, 0, 0),

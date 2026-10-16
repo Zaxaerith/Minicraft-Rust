@@ -20,6 +20,12 @@ fn run() -> Result<(), String> {
     if arguments.next().is_some() {
         return Err("unexpected extra parity arguments".to_owned());
     }
+    if backend == "java230-generation" {
+        return compare_java230_generation(Path::new(&trace_path));
+    }
+    if backend == "java230-flora-smoke" {
+        return minicraft_client::parity::java230_flora_smoke(Path::new(&trace_path));
+    }
     if backend == "java230-preview" {
         minicraft_client::parity::java230_render_preview(Path::new(&trace_path))?;
         println!("Rust live renderer preview: {trace_path}");
@@ -165,4 +171,63 @@ fn load_trace(path: &Path) -> Result<ParityTrace, String> {
         .map_err(|error| format!("cannot read parity trace {}: {error}", path.display()))?;
     serde_json::from_str(&text)
         .map_err(|error| format!("cannot parse parity trace {}: {error}", path.display()))
+}
+
+/// Exhaustive raw surface comparison, including all non-flower neighbors.
+fn compare_java230_generation(directory: &Path) -> Result<(), String> {
+    use minicraft_client::level::{
+        GenerationVersion, WorldSpec, generation::surface_with_version, tile::Tile,
+    };
+    for (size, seed, theme) in [
+        (128, 42, 0),
+        (128, 256, 0),
+        (128, 42, 1),
+        (128, 42, 2),
+        (128, 42, 3),
+        (128, 42, 4),
+        (256, 42, 0),
+        (512, 42, 0),
+    ] {
+        let name = format!("flora-{size}-{seed}-{theme}.tsv");
+        let text = fs::read_to_string(directory.join(name)).map_err(|e| e.to_string())?;
+        let map = surface_with_version(
+            size,
+            size,
+            seed,
+            WorldSpec::new(size, theme, 0),
+            GenerationVersion::Java230Flora,
+        );
+        if text.lines().count() != size * size {
+            return Err("invalid reference dimensions".into());
+        }
+        for (index, row) in text.lines().enumerate() {
+            let (tile, data) = row.split_once('\t').ok_or("invalid flora row")?;
+            let normalize = |name: &str| {
+                name.chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .flat_map(char::to_lowercase)
+                    .collect::<String>()
+            };
+            let rust = if map.tiles[index] == Tile::Flower230 {
+                "flower".to_owned()
+            } else {
+                normalize(&format!("{:?}", map.tiles[index]))
+            };
+            if normalize(tile) != rust
+                || data.parse::<u16>().map_err(|e| e.to_string())? != map.data[index]
+            {
+                return Err(format!(
+                    "first DIFF size={size} seed={seed} theme={theme} ({},{}): Java={tile}/{data}, Rust={rust}/{}",
+                    index % size,
+                    index / size,
+                    map.data[index]
+                ));
+            }
+        }
+        println!(
+            "PASS Java230 surface size={size} seed={seed} theme={theme}: {} exact tile/data cells",
+            size * size
+        );
+    }
+    Ok(())
 }

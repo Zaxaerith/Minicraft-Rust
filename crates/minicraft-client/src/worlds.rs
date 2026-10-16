@@ -12,6 +12,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct WorldRecord {
+    pub generation_version: crate::level::GenerationVersion,
     pub name: String,
     pub seed: i64,
     pub spec: WorldSpec,
@@ -45,6 +46,7 @@ pub fn load(game_dir: &Path) -> Result<Vec<WorldRecord>, String> {
                 .unwrap_or("JAVA WORLD")
                 .to_owned();
             records.push(WorldRecord {
+                generation_version: crate::level::GenerationVersion::Legacy224,
                 name,
                 seed: java.seed,
                 spec: WorldSpec::new(java.size, 0, 0),
@@ -73,6 +75,7 @@ pub fn create_named(
     fs::create_dir_all(&directory)
         .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
     let record = WorldRecord {
+        generation_version: crate::level::GenerationVersion::Java230Flora,
         name: name.to_owned(),
         seed,
         spec,
@@ -90,6 +93,7 @@ pub fn create_named(
         "terrain_type": record.spec.terrain.index(),
         "mode": record.mode.index(),
         "score_minutes": record.score_minutes,
+        "generation_version": record.generation_version,
         "state": "seed-only",
     });
     let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
@@ -265,6 +269,10 @@ pub fn load_state(record: &WorldRecord) -> Result<Option<World>, String> {
 fn parse_at(text: &str, directory: PathBuf) -> Option<WorldRecord> {
     let value: Value = serde_json::from_str(text).ok()?;
     Some(WorldRecord {
+        generation_version: match value.get("generation_version") {
+            None => crate::level::GenerationVersion::Legacy224,
+            Some(value) => serde_json::from_value(value.clone()).ok()?,
+        },
         name: value["name"].as_str()?.to_owned(),
         seed: value["seed"].as_i64()?,
         spec: WorldSpec::new(
@@ -381,6 +389,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let record = WorldRecord {
+            generation_version: crate::level::GenerationVersion::Legacy224,
             name: "BACKUP".to_owned(),
             seed: 7,
             spec: crate::world::WorldSpec::default(),
@@ -438,6 +447,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let record = WorldRecord {
+            generation_version: crate::level::GenerationVersion::Legacy224,
             name: "FMT".to_owned(),
             seed: 11,
             spec: crate::world::WorldSpec::default(),
@@ -510,5 +520,109 @@ mod tests {
         delete_record(&root, &renamed).unwrap();
         assert!(load(&root).unwrap().is_empty());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod generation_compatibility_tests {
+    use super::*;
+    use crate::level::GenerationVersion;
+
+    #[test]
+    fn generation_markers_survive_disk_copy_rename_and_recover_without_regeneration() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/parity/java230")
+            .join(format!(
+                "version-save-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        let record = create_named(
+            &root,
+            "NEW",
+            42,
+            WorldSpec::default(),
+            GameMode::Survival,
+            20,
+        )
+        .unwrap();
+        assert_eq!(record.generation_version, GenerationVersion::Java230Flora);
+        let mut world = crate::world::registry_tests::tiny_world();
+        // Mark this tiny native-state fixture as new-version; actual generated
+        // worlds are covered by the separate multi-size smoke runner.
+        let mut value: Value = serde_json::from_str(&world.to_save_string().unwrap()).unwrap();
+        value["world"]["generation_version"] = json!("Java230Flora");
+        world = World::from_save_string(&value.to_string()).unwrap();
+        save_state(&record, &world).unwrap();
+        let initial = world.to_save_string().unwrap();
+        // A corrupt generation marker cannot fall through to seed generation.
+        value["world"]["generation_version"] = json!("corrupt");
+        fs::write(record.directory.join("state.json"), value.to_string()).unwrap();
+        assert!(load_state(&record).is_err());
+        fs::write(record.directory.join("state.json.bak"), &initial).unwrap();
+        let recovered = load_state(&record).unwrap().unwrap();
+        assert_eq!(
+            recovered.generation_version(),
+            GenerationVersion::Java230Flora
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&recovered.to_save_string().unwrap()).unwrap(),
+            serde_json::from_str::<Value>(&initial).unwrap()
+        );
+        copy_record(&root, &record, "COPY").unwrap();
+        let copied = load(&root)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.name == "COPY")
+            .unwrap();
+        assert_eq!(copied.generation_version, GenerationVersion::Java230Flora);
+        rename_record(&root, &copied, "RENAMED").unwrap();
+        let renamed = load(&root)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.name == "RENAMED")
+            .unwrap();
+        assert_eq!(renamed.generation_version, GenerationVersion::Java230Flora);
+        assert_eq!(
+            load_state(&renamed).unwrap().unwrap().generation_version(),
+            GenerationVersion::Java230Flora
+        );
+        // Seed-only pre-Phase2 records explicitly keep the historical default.
+        let path = record.directory.join("world.json");
+        let mut metadata: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        metadata
+            .as_object_mut()
+            .unwrap()
+            .remove("generation_version");
+        let legacy = parse(&metadata.to_string()).unwrap();
+        assert_eq!(legacy.generation_version, GenerationVersion::Legacy224);
+        for invalid in [json!("corrupt"), Value::Null, json!({})] {
+            metadata["generation_version"] = invalid;
+            assert!(parse(&metadata.to_string()).is_none());
+        }
+        // Corrupt metadata can use its valid backup, never newest-rule default.
+        fs::write(
+            record.directory.join("world.json.bak"),
+            fs::read(&path).unwrap(),
+        )
+        .unwrap();
+        fs::write(&path, metadata.to_string()).unwrap();
+        let records = load(&root).unwrap();
+        assert_eq!(
+            records
+                .iter()
+                .find(|r| r.name == "NEW")
+                .unwrap()
+                .generation_version,
+            GenerationVersion::Java230Flora
+        );
+        delete_record(&root, &record).unwrap();
+        delete_record(&root, &renamed).unwrap();
+        fs::remove_dir(root.join("saves")).unwrap();
+        fs::remove_dir(root).unwrap();
     }
 }

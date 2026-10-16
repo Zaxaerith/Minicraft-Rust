@@ -100,7 +100,7 @@ const HUNGER_MOVE_STEPS: [u8; 3] = [8, 3, 1];
 const STARVATION_HEALTH_FLOORS: [u8; 3] = [5, 3, 0];
 
 #[allow(unused_imports)]
-pub use crate::level::{GameMode, TerrainType, Theme, WorldSpec};
+pub use crate::level::{GameMode, GenerationVersion, TerrainType, Theme, WorldSpec};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PlayOptions {
@@ -233,8 +233,16 @@ pub enum WorldAction {
     QuitWithoutSaving,
 }
 
+fn default_flora_random() -> crate::level::noise::JavaRandom {
+    crate::level::noise::JavaRandom::new(0)
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct World {
+    #[serde(default)]
+    pub(crate) generation_version: GenerationVersion,
+    #[serde(default = "default_flora_random")]
+    pub(crate) flora_random: crate::level::noise::JavaRandom,
     pub(crate) width: usize,
     pub(crate) height: usize,
     pub(crate) levels: Vec<Level>,
@@ -440,12 +448,32 @@ impl World {
     }
 
     pub fn new_with_play_options(seed: i64, spec: WorldSpec, options: PlayOptions) -> Self {
+        Self::new_with_generation(seed, spec, options, GenerationVersion::Legacy224)
+    }
+
+    pub fn generation_version(&self) -> GenerationVersion {
+        self.generation_version
+    }
+
+    pub fn new_with_generation(
+        seed: i64,
+        spec: WorldSpec,
+        options: PlayOptions,
+        generation_version: GenerationVersion,
+    ) -> Self {
         let difficulty = options.difficulty.min(2);
         let size = spec.size;
         let mut levels: Vec<Level> = [1, 0, -1, -2, -3, -4]
             .into_iter()
             .map(|depth| {
-                let generated = generation::level(size, size, depth, seed, spec);
+                let generated = generation::level_with_version(
+                    size,
+                    size,
+                    depth,
+                    seed,
+                    spec,
+                    generation_version,
+                );
                 Level {
                     depth,
                     tiles: generated.tiles,
@@ -459,7 +487,7 @@ impl World {
         for level in &mut levels {
             structure::decorate(level, size, size, seed);
             for (tile, data) in level.tiles.iter().zip(&mut level.data) {
-                if *tile != Tile::Flower {
+                if !matches!(tile, Tile::Flower | Tile::Flower230) {
                     *data = 0;
                 }
             }
@@ -518,6 +546,10 @@ impl World {
             progress.unlock_achievement("minicraft.achievement.skin");
         }
         Self {
+            generation_version,
+            // Independent, persisted stream: watering never shifts terrain,
+            // entity AI, combat/drop RNG or uses system time like Java Random().
+            flora_random: crate::level::noise::JavaRandom::new(seed ^ 0x464C_4F52_4132_3330),
             width: size,
             height: size,
             levels,
@@ -2003,3 +2035,6 @@ fn find_spawn(tiles: &[Tile], width: usize, height: usize) -> (i32, i32) {
     }
     (center_x, center_y)
 }
+
+#[cfg(test)]
+mod flora_tests;

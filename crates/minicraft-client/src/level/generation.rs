@@ -1,7 +1,7 @@
 //! Java LevelGen: surface/underground/sky/dungeon map generation.
 use super::noise::JavaRandom;
 use super::tile::Tile;
-use super::{TerrainType, Theme, WorldSpec};
+use super::{GenerationVersion, TerrainType, Theme, WorldSpec};
 
 const STAIR_RADIUS: i32 = 15;
 
@@ -110,9 +110,19 @@ pub fn surface_with_spec(
     seed: i64,
     spec: WorldSpec,
 ) -> GeneratedLevel {
+    surface_with_version(width, height, seed, spec, GenerationVersion::Legacy224)
+}
+
+pub fn surface_with_version(
+    width: usize,
+    height: usize,
+    seed: i64,
+    spec: WorldSpec,
+    version: GenerationVersion,
+) -> GeneratedLevel {
     let mut random = JavaRandom::new(seed);
     loop {
-        let map = create_surface(width, height, spec, &mut random);
+        let map = create_surface(width, height, spec, &mut random, version);
         let rock = count(&map.tiles, Tile::Rock);
         let sand = count(&map.tiles, Tile::Sand);
         let grass = count(&map.tiles, Tile::Grass);
@@ -131,6 +141,22 @@ pub fn level(width: usize, height: usize, depth: i8, seed: i64, spec: WorldSpec)
         -3..=-1 => underground(width, height, -depth as usize, seed),
         -4 => dungeon(width, height, seed),
         _ => panic!("invalid Minicraft+ depth {depth}"),
+    }
+}
+
+/// Keep the 2.2.4 public entry point immutable for historical seeds/oracles.
+pub fn level_with_version(
+    width: usize,
+    height: usize,
+    depth: i8,
+    seed: i64,
+    spec: WorldSpec,
+    version: GenerationVersion,
+) -> GeneratedLevel {
+    if depth == 0 {
+        surface_with_version(width, height, seed, spec, version)
+    } else {
+        level(width, height, depth, seed, spec)
     }
 }
 
@@ -387,6 +413,7 @@ fn create_surface(
     height: usize,
     spec: WorldSpec,
     random: &mut JavaRandom,
+    version: GenerationVersion,
 ) -> GeneratedLevel {
     let moisture_1 = Noise::new(width, height, 16, random);
     let moisture_2 = Noise::new(width, height, 16, random);
@@ -501,13 +528,24 @@ fn create_surface(
     for _ in 0..width * height / 400 {
         let x = random.next_int(width as i32);
         let y = random.next_int(height as i32);
-        let flower_variant = random.next_int(4) as u16;
+        // The extra draw in Java 2.3 is intentional: cactus/stair placement
+        // downstream follows the upstream sequence, not an added Rust RNG call.
+        let flower_variant = match version {
+            GenerationVersion::Legacy224 => random.next_int(4) as u16,
+            GenerationVersion::Java230Flora => (random.next_int(4) * random.next_int(4)) as u16,
+        };
+        let flower = match version {
+            GenerationVersion::Legacy224 => Tile::Flower,
+            GenerationVersion::Java230Flora => Tile::Flower230,
+        };
         for _ in 0..30 {
             let xx = x + random.next_int(5) - random.next_int(5);
             let yy = y + random.next_int(5) - random.next_int(5);
-            if replace_if(&mut map, width, height, xx, yy, Tile::Grass, Tile::Flower) {
-                let rotation = random.next_int(4) as u16;
-                data[xx as usize + yy as usize * width] = flower_variant + rotation * 16;
+            if replace_if(&mut map, width, height, xx, yy, Tile::Grass, flower) {
+                data[xx as usize + yy as usize * width] = match version {
+                    GenerationVersion::Legacy224 => flower_variant + random.next_int(4) as u16 * 16,
+                    GenerationVersion::Java230Flora => flower_variant + random.next_int(3) as u16,
+                };
             }
         }
     }
@@ -751,6 +789,114 @@ mod tests {
                 row["fnv1aTileData"].as_str().unwrap(),
                 "seed={seed} depth={depth}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod flora_tests {
+    use super::*;
+
+    #[test]
+    fn java230_flora_matches_unmodified_java_maps_and_species_coordinates() {
+        let rows: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/java230/generated-flora.json"
+        ))
+        .unwrap();
+        for row in rows.as_array().unwrap() {
+            let size = row["size"].as_u64().unwrap() as usize;
+            let seed = row["seed"].as_i64().unwrap();
+            let spec = WorldSpec::new(size, row["theme"].as_u64().unwrap() as usize, 0);
+            let map = surface_with_version(size, size, seed, spec, GenerationVersion::Java230Flora);
+            let mut hash = 0xcbf29ce484222325_u64;
+            let mut counts = [0_u64; 19];
+            let mut flowers = Vec::new();
+            for (index, (&tile, &data)) in map.tiles.iter().zip(&map.data).enumerate() {
+                let name = if tile == Tile::Flower230 {
+                    "flower".to_owned()
+                } else {
+                    format!("{tile:?}").to_lowercase()
+                };
+                for byte in format!("{name}:{data};").bytes() {
+                    hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+                }
+                if tile == Tile::Flower230 {
+                    assert!(
+                        data < 12,
+                        "initial Java generation cannot produce species 12..18"
+                    );
+                    counts[data as usize] += 1;
+                    flowers.push(serde_json::json!([index % size, index / size, data]));
+                }
+                assert_ne!(
+                    tile,
+                    Tile::Flower,
+                    "new worlds must not reinterpret legacy rotation bits"
+                );
+            }
+            assert_eq!(
+                format!("{hash:x}"),
+                row["fnv1aNamesData"].as_str().unwrap(),
+                "size={size} seed={seed} theme={:?}",
+                spec.theme
+            );
+            assert_eq!(serde_json::json!(counts), row["counts"]);
+            if size == 128 && spec.theme == Theme::Normal {
+                assert_eq!(serde_json::json!(flowers), row["flowers"]);
+                assert_eq!(
+                    map,
+                    surface_with_version(size, size, seed, spec, GenerationVersion::Java230Flora)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn versioned_flora_preserves_legacy_generation_and_non_surface_layers() {
+        let spec = WorldSpec::default();
+        // The first candidate's underlying terrain is unchanged. The extra
+        // flower draws change stairs and therefore validation/retry RNG, which
+        // can select a different full terrain candidate in the final map.
+        let legacy_first = create_surface(
+            128,
+            128,
+            spec,
+            &mut JavaRandom::new(42),
+            GenerationVersion::Legacy224,
+        );
+        let new_first = create_surface(
+            128,
+            128,
+            spec,
+            &mut JavaRandom::new(42),
+            GenerationVersion::Java230Flora,
+        );
+        let terrain = |tile| match tile {
+            Tile::Flower | Tile::Flower230 => Tile::Grass,
+            Tile::Cactus => Tile::Sand,
+            Tile::StairsDown => Tile::Rock,
+            tile => tile,
+        };
+        assert_eq!(
+            legacy_first
+                .tiles
+                .into_iter()
+                .map(terrain)
+                .collect::<Vec<_>>(),
+            new_first.tiles.into_iter().map(terrain).collect::<Vec<_>>()
+        );
+        for depth in [1, 0, -1, -2, -3, -4] {
+            let legacy = level(128, 128, depth, 42, spec);
+            assert_eq!(
+                legacy,
+                level_with_version(128, 128, depth, 42, spec, GenerationVersion::Legacy224)
+            );
+            if depth != 0 {
+                assert_eq!(
+                    legacy,
+                    level_with_version(128, 128, depth, 42, spec, GenerationVersion::Java230Flora)
+                );
+            }
         }
     }
 }

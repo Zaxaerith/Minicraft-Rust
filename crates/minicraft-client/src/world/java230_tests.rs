@@ -148,6 +148,7 @@ fn java230_native_disk_save_quit_reload_and_unknown_items_fail_explicitly() {
         .join("../../target/parity/java230/native-save-test");
     std::fs::create_dir_all(&root).unwrap();
     let record = crate::worlds::WorldRecord {
+        generation_version: crate::level::GenerationVersion::Legacy224,
         name: "java230-local-test".to_owned(),
         seed: world.seed,
         spec: super::WorldSpec::new(128, 0, 0),

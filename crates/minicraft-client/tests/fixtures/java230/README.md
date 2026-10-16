@@ -12,3 +12,11 @@ Java results. Compare semantic values; JSON object member order is immaterial.
 Java tile IDs are intentionally distinct from append-only compatible Rust IDs.
 `operations.json` also records the upstream Violet-shovel wrong-drop bug; Rust
 preserves the harvested variant rather than reproducing that data-loss bug.
+
+
+Phase 2 adds `generated-flora.json` (actual raw LevelGen surface counts, hashes,
+and normal-128 flower coordinates) and `watering-flora.json` (actual item-use
+reachability for all19 species; Java's time-seeded interactions are not a seeded
+cross-language trace). The 1/60 denominator is source evidence, not measured
+frequency. Full replay TSV files remain ignored under target. Existing Phase1
+fixtures, item/tile IDs and all 2.2.4 goldens are unchanged.

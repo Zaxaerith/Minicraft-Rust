@@ -737,10 +737,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                         config.settings.score_minutes,
                     )?;
                     world_records = load_world_records(&config.game_dir)?;
-                    let mut world = World::new_with_play_options(
+                    let mut world = World::new_with_generation(
                         seed,
                         spec,
                         play_options(&config.settings, mode, config.settings.score_minutes),
+                        record.generation_version,
                     );
                     world.set_notification_context(
                         localization.clone(),
@@ -769,10 +770,11 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                 Transition::LoadWorld(selection) => {
                     let record = world_records[selection].clone();
                     let mut world = load_state(&record)?.unwrap_or_else(|| {
-                        World::new_with_play_options(
+                        World::new_with_generation(
                             record.seed,
                             record.spec,
                             play_options(&config.settings, record.mode, record.score_minutes),
+                            record.generation_version,
                         )
                     });
                     // Java World.initWorld resets asTick when entering a world.
@@ -2669,6 +2671,7 @@ mod tests {
     #[test]
     fn world_select_shift_actions_open_java_style_confirmation_popups() {
         let worlds = vec![WorldRecord {
+            generation_version: crate::level::GenerationVersion::Legacy224,
             name: "ORIGINAL".to_owned(),
             seed: 1,
             spec: WorldSpec::default(),

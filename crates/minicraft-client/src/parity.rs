@@ -14,6 +14,12 @@ pub fn java230_render_preview(path: &std::path::Path) -> Result<(), String> {
     crate::world::World::java230_render_preview(path)
 }
 
+/// Generate real finite worlds, round-trip their state, and render a naturally
+/// occurring patch. No plant placement or terrain replacement is used.
+pub fn java230_flora_smoke(root: &std::path::Path) -> Result<(), String> {
+    crate::world::World::java230_flora_smoke(root)
+}
+
 mod display_stack;
 pub use display_stack::display_stack_snapshots;
 mod focus_update;

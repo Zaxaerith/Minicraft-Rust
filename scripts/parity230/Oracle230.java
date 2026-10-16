@@ -136,6 +136,82 @@ public final class Oracle230 {
         operations.put("violetShovelHarvest",shovelLevel.getTile(2,2).interact(shovelLevel,2,2,player,shovel,Direction.NONE))
             .put("violetShovelDrops",drops(shovelLevel));
         write(out,"operations.json",operations);
+        generatedFlora(out);
+        wateringFlora(out, player);
         System.out.println("Pinned 2.3 source oracle: 16 colors, 16 wool placements/shears, 16 bed placements/save/load, 19 flower placements/harvests, actual recipe tables.");
     }
+    static void generatedFlora(Path out) throws Exception {
+        JSONArray maps = new JSONArray();
+        String[] themes = {"normal", "forest", "desert", "plain", "hell"};
+        int[][] scenarios = {{128,42,0}, {128,256,0}, {128,42,1}, {128,42,2}, {128,42,3}, {128,42,4}, {256,42,0}, {512,42,0}};
+        Settings.set("Type", "minicraft.settings.type.island");
+        for (int[] scenario : scenarios) {
+            int size=scenario[0], seed=scenario[1], theme=scenario[2];
+            Settings.set("Theme", "minicraft.settings.theme." + themes[theme]);
+            ChunkManager map=LevelGen.createAndValidateMap(size,size,0,seed);
+            int[] counts=new int[19];
+            JSONArray flowers=new JSONArray();
+            StringBuilder rows=new StringBuilder();
+            long hash=0xcbf29ce484222325L;
+            for (int y=0;y<size;y++) for (int x=0;x<size;x++) {
+                Tile tile=map.getTile(x,y);int data=map.getData(x,y);
+                rows.append(tile.name).append('\t').append(data).append('\n');
+                String canonical=tile.name.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT)+":"+data+";";
+                for (byte value : canonical.getBytes(StandardCharsets.UTF_8)) hash=(hash^(value&255))*0x100000001b3L;
+                if (tile==Tiles.get("Flower")) {
+                    counts[data]++;
+                    if (size==128 && theme==0) flowers.put(new JSONArray().put(x).put(y).put(data));
+                }
+            }
+            Files.write(out.resolve("flora-"+size+"-"+seed+"-"+theme+".tsv"),rows.toString().getBytes(StandardCharsets.UTF_8));
+            maps.put(new JSONObject().put("size",size).put("seed",seed).put("theme",theme)
+                .put("counts",new JSONArray(counts)).put("flowers",flowers).put("fnv1aNamesData",Long.toHexString(hash))
+                .put("validationTrace",surfaceCandidates(size,seed,map)));
+        }
+        Settings.set("Theme","minicraft.settings.theme.normal");
+        write(out,"generated-flora.json",maps);
+    }
+    // Replay the unmodified private candidate builder after resetting its actual
+    // Random. Stop at the exact map returned by the real validation entry point;
+    // no Rust expectations or duplicate validation criteria choose the endpoint.
+    static JSONObject surfaceCandidates(int size, long seed, ChunkManager accepted) throws Exception {
+        Field field=LevelGen.class.getDeclaredField("random");field.setAccessible(true);
+        ((Random)field.get(null)).setSeed(seed);
+        java.lang.reflect.Method create=LevelGen.class.getDeclaredMethod("createTopMap",int.class,int.class);
+        create.setAccessible(true);
+        int firstStairs=0;
+        for(int attempt=1;attempt<=10000;attempt++) {
+            ChunkManager candidate=(ChunkManager)create.invoke(null,size,size);
+            boolean same=true;int stairs=0;
+            for(int y=0;y<size;y++) for(int x=0;x<size;x++) {
+                if(candidate.getTile(x,y)==Tiles.get("Stairs Down")) stairs++;
+                if(candidate.getTile(x,y)!=accepted.getTile(x,y) || candidate.getData(x,y)!=accepted.getData(x,y)) same=false;
+            }
+            if(attempt==1) firstStairs=stairs;
+            if(same) return new JSONObject().put("candidates",attempt).put("firstCandidateStairs",firstStairs).put("acceptedStairs",stairs);
+        }
+        throw new AssertionError("accepted surface candidate not reproduced");
+    }
+    static void wateringFlora(Path out, Player player) throws Exception {
+        Level level=new Level(16,16,42L,0,null,false);
+        level.setTile(8,8,Tiles.get("Grass"));
+        boolean[] seen=new boolean[19];int remaining=19;
+        // WateringCan constructs new Random per call, so this proves reachable
+        // outcomes, not a deterministic cross-language trajectory. Bound work.
+        for(int trial=0;trial<50000 && remaining>0;trial++) {
+            WateringCanItem can=(WateringCanItem)Items.get("Watering Can");can.content=1;
+            can.interactOn(level.getTile(8,8),level,8,8,player,Direction.NONE);
+            if(level.getTile(8,8)==Tiles.get("Flower")) {
+                int data=level.getData(8,8);
+                if(!seen[data]) { seen[data]=true;remaining--; }
+                level.setTile(8,8,Tiles.get("Grass"));
+            }
+        }
+        if(remaining!=0) throw new AssertionError("Watering oracle did not observe every flower within bounded work");
+        JSONArray variants=new JSONArray();
+        for(int i=0;i<seen.length;i++) variants.put(i);
+        write(out,"watering-flora.json",new JSONObject().put("observedVariants",variants)
+            .put("capacity",((WateringCanItem)Items.get("Watering Can")).CAPACITY).put("chanceDenominator",60).put("rng", "new Random per interaction; reachability only"));
+    }
+
 }
