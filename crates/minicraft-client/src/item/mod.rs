@@ -517,14 +517,24 @@ mod tests {
     #[test]
     fn station_table_lengths_match_java_recipes_static_blocks() {
         // Java Recipes: craftRecipes, workbenchRecipes (items+tools+tail),
-        // furnaceRecipes, ovenRecipes, loomRecipes, anvilRecipes,
-        // enchantRecipes. DyeVat is not yet a Rust FurnitureKind.
+        // furnaceRecipes, ovenRecipes, anvilRecipes and enchantRecipes retain
+        // the base tables. Loom and Dye Vat use the executed Java 2.3 fixture.
         assert_eq!(HAND_RECIPES.len(), 6);
         assert_eq!(WORKBENCH_STATION_RECIPES.len(), 31);
         assert_eq!(WORKBENCH_TOOL_RECIPES.len(), 12);
         assert_eq!(FURNACE_RECIPES.len(), 4);
         assert_eq!(OVEN_RECIPES.len(), 5);
-        assert_eq!(LOOM_RECIPES.len(), 17);
+        let java230: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/java230/recipes.json"))
+                .unwrap();
+        assert_eq!(
+            LOOM_RECIPES.len(),
+            java230["loom"].as_array().unwrap().len()
+        );
+        assert_eq!(
+            recipe::DYE_VAT_RECIPES.len(),
+            java230["dyeVat"].as_array().unwrap().len()
+        );
         assert_eq!(ANVIL_RECIPES.len(), 7);
         assert_eq!(ANVIL_TOOL_RECIPES.len(), 22);
         assert_eq!(ENCHANTER_RECIPES.len(), 14);
