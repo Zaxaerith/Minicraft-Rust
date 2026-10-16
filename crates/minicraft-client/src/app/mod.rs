@@ -112,7 +112,24 @@ pub fn self_check(arguments: &[String]) -> Result<(), String> {
 
 /// CLI dispatch for the compatibility client binary.
 pub fn run_cli(arguments: &[String]) -> Result<(), String> {
-    if arguments.iter().any(|value| value == "--audio-probe") {
+    if arguments.iter().any(|value| value == "--import-java") {
+        let argument = |flag: &str| {
+            arguments
+                .iter()
+                .position(|s| s == flag)
+                .and_then(|i| arguments.get(i + 1))
+                .filter(|s| !s.starts_with("--"))
+        };
+        let source =
+            argument("--import-java").ok_or("--import-java requires a source world directory")?;
+        let destination = argument("--import-to")
+            .ok_or("--import-to requires a new Rust world directory (parent must exist)")?;
+        crate::saveload::migration::import_to(
+            std::path::Path::new(source),
+            std::path::Path::new(destination),
+            argument("--java-unlocks").map(std::path::Path::new),
+        )
+    } else if arguments.iter().any(|value| value == "--audio-probe") {
         crate::audio::device_probe()
     } else if arguments.iter().any(|value| value == "--self-check") {
         self_check(arguments)

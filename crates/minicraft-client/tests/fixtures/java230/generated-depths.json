@@ -1,0 +1,146 @@
+[
+  {
+    "depth": -3,
+    "size": 128,
+    "seed": 42,
+    "hash": "4b736a742066318b"
+  },
+  {
+    "depth": -2,
+    "size": 128,
+    "seed": 42,
+    "hash": "1a6bfdc477aa9115"
+  },
+  {
+    "depth": -1,
+    "size": 128,
+    "seed": 42,
+    "hash": "80cfa8f6c8d510e4"
+  },
+  {
+    "depth": 0,
+    "size": 128,
+    "seed": 42,
+    "hash": "63a6986f41dc13b4"
+  },
+  {
+    "depth": 1,
+    "size": 128,
+    "seed": 42,
+    "hash": "4a0818686b859233"
+  },
+  {
+    "depth": -4,
+    "size": 128,
+    "seed": 42,
+    "hash": "9412df2147907ec7"
+  },
+  {
+    "depth": -3,
+    "size": 128,
+    "seed": 256,
+    "hash": "bbc848086ecb1120"
+  },
+  {
+    "depth": -2,
+    "size": 128,
+    "seed": 256,
+    "hash": "7afcf8514927c4a8"
+  },
+  {
+    "depth": -1,
+    "size": 128,
+    "seed": 256,
+    "hash": "664f69c84bea8a37"
+  },
+  {
+    "depth": 0,
+    "size": 128,
+    "seed": 256,
+    "hash": "1e5fe77edab8e2f"
+  },
+  {
+    "depth": 1,
+    "size": 128,
+    "seed": 256,
+    "hash": "f850502f76d51161"
+  },
+  {
+    "depth": -4,
+    "size": 128,
+    "seed": 256,
+    "hash": "c712d1b54104ce24"
+  },
+  {
+    "depth": -3,
+    "size": 256,
+    "seed": 42,
+    "hash": "250b3332d50c3315"
+  },
+  {
+    "depth": -2,
+    "size": 256,
+    "seed": 42,
+    "hash": "c9fe2324bedf7665"
+  },
+  {
+    "depth": -1,
+    "size": 256,
+    "seed": 42,
+    "hash": "acccc088e9a401a3"
+  },
+  {
+    "depth": 0,
+    "size": 256,
+    "seed": 42,
+    "hash": "b517e3170e644b66"
+  },
+  {
+    "depth": 1,
+    "size": 256,
+    "seed": 42,
+    "hash": "387d532efe2ff65b"
+  },
+  {
+    "depth": -4,
+    "size": 256,
+    "seed": 42,
+    "hash": "d0c99dfdaaa72969"
+  },
+  {
+    "depth": -3,
+    "size": 512,
+    "seed": 42,
+    "hash": "4beaf3a7493dc233"
+  },
+  {
+    "depth": -2,
+    "size": 512,
+    "seed": 42,
+    "hash": "4809fba1f779d459"
+  },
+  {
+    "depth": -1,
+    "size": 512,
+    "seed": 42,
+    "hash": "d667009ef87cdfd6"
+  },
+  {
+    "depth": 0,
+    "size": 512,
+    "seed": 42,
+    "hash": "c6c14e972121ffa"
+  },
+  {
+    "depth": 1,
+    "size": 512,
+    "seed": 42,
+    "hash": "20052b436fce3e69"
+  },
+  {
+    "depth": -4,
+    "size": 512,
+    "seed": 42,
+    "hash": "cdc27b674725a779"
+  }
+]

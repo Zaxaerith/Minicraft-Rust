@@ -26,6 +26,7 @@ New-Item -ItemType Directory -Force -Path $classes,$output | Out-Null
 $argsFile = Join-Path $outputRoot 'sources.args'
 $sourceArgs = @($sources | ForEach-Object { '"' + $_.FullName.Replace('\','/') + '"' })
 $sourceArgs += '"' + "$PSScriptRoot/Oracle230.java".Replace('\','/') + '"'
+$sourceArgs += '"' + "$PSScriptRoot/Migration230.java".Replace('\','/') + '"'
 [IO.File]::WriteAllLines($argsFile, $sourceArgs, [Text.UTF8Encoding]::new($false))
 & javac -encoding UTF-8 -cp $jar -d $classes "@$argsFile"
 if ($LASTEXITCODE -ne 0) { throw 'Pinned Java compilation failed' }

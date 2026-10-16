@@ -20,3 +20,28 @@ reachability for all19 species; Java's time-seeded interactions are not a seeded
 cross-language trace). The 1/60 denominator is source evidence, not measured
 frequency. Full replay TSV files remain ignored under target. Existing Phase1
 fixtures, item/tile IDs and all 2.2.4 goldens are unchanged.
+
+
+Phase3 `Migration230.java` invokes the official public `new Save(worldname)`:
+`migration-base.zip` stores six actual raw LevelGen maps (per-layer seeds42..47)
+with a controlled arrival patch; `migration-colors.zip` adds real held/inventory,
+flower/wool/Torch/Sign/stair, Bed/DyeVat/chest/death-chest and passive-mob state;
+`migration-instances.zip` contains genuinely different WateringCan states plus
+an unsupported level3 Zombie, and must be refused. The ZIPs are small **test
+packaging** of unchanged actual Save files, not a supported user archive format.
+The generator does not run a complete GUI session or claim full Level constructor
+structure parity. Exact compressed bytes may differ due advancement timestamps;
+replay comparisons concern saved semantics and recorded controlled fields.
+
+`migration-registry.json` records the actual Items/Tiles registration and Java
+array-to-depth mapping. `migration-operations.json` executes official
+Load.loadInventory and records that the saved held item moves into inventory,
+without restoring held selection. `migration-unlocks.json` comes from official
+Save.writeUnlocks after the actual achievement API. `generated-depths.json`
+contains all six raw LevelGen name/data hashes for128 seeds42/256 and256/512
+seed42; complete row-major TSVs remain under target.
+
+The strict transactional import profile accepts exactly dev2, rejects unsupported
+instances/entities/aliases rather than deleting them, and publishes into a new
+native directory. The source directory is snapshotted read-only. See the root
+Phase3 audit for current restrictions, replay and command-line instructions.

@@ -900,3 +900,44 @@ mod flora_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod dev2_depth_tests {
+    use super::*;
+    #[test]
+    fn java230_dev2_raw_all_depths_match_actual_java_at_all_sizes() {
+        let rows: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/java230/generated-depths.json"
+        ))
+        .unwrap();
+        for row in rows.as_array().unwrap() {
+            let size = row["size"].as_u64().unwrap() as usize;
+            let seed = row["seed"].as_i64().unwrap();
+            let depth = row["depth"].as_i64().unwrap() as i8;
+            let map = level_with_version(
+                size,
+                size,
+                depth,
+                seed,
+                WorldSpec::new(size, 0, 0),
+                GenerationVersion::Java230Flora,
+            );
+            let mut hash = 0xcbf29ce484222325_u64;
+            for (tile, data) in map.tiles.iter().zip(&map.data) {
+                let name = if *tile == Tile::Flower230 {
+                    "flower".into()
+                } else {
+                    format!("{tile:?}").to_lowercase()
+                };
+                for b in format!("{name}:{data};").bytes() {
+                    hash = (hash ^ u64::from(b)).wrapping_mul(0x100000001b3);
+                }
+            }
+            assert_eq!(
+                format!("{hash:x}"),
+                row["hash"].as_str().unwrap(),
+                "dev2 raw level size={size}, seed={seed},depth={depth}"
+            );
+        }
+    }
+}

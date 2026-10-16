@@ -239,6 +239,11 @@ fn default_flora_random() -> crate::level::noise::JavaRandom {
 
 #[derive(Serialize, Deserialize)]
 pub struct World {
+    /// Original Java layer seeds, ordered by the imported level array.
+    #[serde(default)]
+    pub(crate) java_level_seeds: Vec<i64>,
+    #[serde(default)]
+    pub(crate) java_global_unlocks: Option<serde_json::Value>,
     #[serde(default)]
     pub(crate) generation_version: GenerationVersion,
     #[serde(default = "default_flora_random")]
@@ -536,6 +541,42 @@ impl World {
         }
         let current_level = 1;
         let (spawn_x, spawn_y) = find_spawn(&levels[current_level].tiles, size, size);
+        Self::with_levels(
+            seed,
+            size,
+            options,
+            generation_version,
+            levels,
+            current_level,
+            (spawn_x, spawn_y),
+        )
+    }
+
+    /// A validated Java import supplies every map/player field. Do not generate
+    /// throwaway maps (or consume unbounded generation retries) before replacing them.
+    pub(crate) fn empty_for_java_import(seed: i64, size: usize, options: PlayOptions) -> Self {
+        Self::with_levels(
+            seed,
+            size,
+            options,
+            GenerationVersion::Legacy224,
+            Vec::new(),
+            0,
+            (0, 0),
+        )
+    }
+
+    fn with_levels(
+        seed: i64,
+        size: usize,
+        options: PlayOptions,
+        generation_version: GenerationVersion,
+        levels: Vec<Level>,
+        current_level: usize,
+        spawn: (i32, i32),
+    ) -> Self {
+        let difficulty = options.difficulty.min(2);
+        let (spawn_x, spawn_y) = spawn;
         // Java Player uses a 27-slot inventory in every mode. Creative mode exposes
         // the unlimited item catalogue as a separate pane rather than preloading it.
         let inventory = Inventory::new(27);
@@ -546,6 +587,8 @@ impl World {
             progress.unlock_achievement("minicraft.achievement.skin");
         }
         Self {
+            java_level_seeds: Vec::new(),
+            java_global_unlocks: None,
             generation_version,
             // Independent, persisted stream: watering never shifts terrain,
             // entity AI, combat/drop RNG or uses system time like Java Random().
@@ -2038,3 +2081,6 @@ fn find_spawn(tiles: &[Tile], width: usize, height: usize) -> (i32, i32) {
 
 #[cfg(test)]
 mod flora_tests;
+
+#[cfg(test)]
+mod migration_tests;

@@ -9,6 +9,7 @@
 
 pub mod legacy_load;
 pub mod load;
+pub mod migration;
 pub mod save;
 pub mod storage;
 pub mod version;

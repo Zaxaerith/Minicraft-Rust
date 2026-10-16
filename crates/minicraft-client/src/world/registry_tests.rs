@@ -22,6 +22,8 @@ use crate::{
 
 pub(crate) fn tiny_world() -> World {
     World {
+        java_level_seeds: Vec::new(),
+        java_global_unlocks: None,
         generation_version: crate::level::GenerationVersion::Legacy224,
         flora_random: JavaRandom::new(0),
         width: 16,

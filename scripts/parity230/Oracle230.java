@@ -138,6 +138,7 @@ public final class Oracle230 {
         write(out,"operations.json",operations);
         generatedFlora(out);
         wateringFlora(out, player);
+        Migration230.run(out);
         System.out.println("Pinned 2.3 source oracle: 16 colors, 16 wool placements/shears, 16 bed placements/save/load, 19 flower placements/harvests, actual recipe tables.");
     }
     static void generatedFlora(Path out) throws Exception {

@@ -1,0 +1,532 @@
+{
+  "tiles": [
+    {
+      "name": "GRASS",
+      "id": 0
+    },
+    {
+      "name": "DIRT",
+      "id": 1
+    },
+    {
+      "name": "FLOWER",
+      "id": 2
+    },
+    {
+      "name": "HOLE",
+      "id": 3
+    },
+    {
+      "name": "STAIRS UP",
+      "id": 4
+    },
+    {
+      "name": "STAIRS DOWN",
+      "id": 5
+    },
+    {
+      "name": "WATER",
+      "id": 6
+    },
+    {
+      "name": "ROCK",
+      "id": 7
+    },
+    {
+      "name": "TREE",
+      "id": 8
+    },
+    {
+      "name": "TREE SAPLING",
+      "id": 9
+    },
+    {
+      "name": "SAND",
+      "id": 10
+    },
+    {
+      "name": "CACTUS",
+      "id": 11
+    },
+    {
+      "name": "CACTUS SAPLING",
+      "id": 12
+    },
+    {
+      "name": "IRON ORE",
+      "id": 13
+    },
+    {
+      "name": "GOLD ORE",
+      "id": 14
+    },
+    {
+      "name": "GEM ORE",
+      "id": 15
+    },
+    {
+      "name": "LAPIS",
+      "id": 16
+    },
+    {
+      "name": "LAVA",
+      "id": 17
+    },
+    {
+      "name": "LAVA BRICK",
+      "id": 18
+    },
+    {
+      "name": "EXPLODE",
+      "id": 19
+    },
+    {
+      "name": "FARMLAND",
+      "id": 20
+    },
+    {
+      "name": "WHEAT",
+      "id": 21
+    },
+    {
+      "name": "HARD ROCK",
+      "id": 22
+    },
+    {
+      "name": "INFINITE FALL",
+      "id": 23
+    },
+    {
+      "name": "CLOUD",
+      "id": 24
+    },
+    {
+      "name": "CLOUD CACTUS",
+      "id": 25
+    },
+    {
+      "name": "WOOD DOOR",
+      "id": 26
+    },
+    {
+      "name": "STONE DOOR",
+      "id": 27
+    },
+    {
+      "name": "OBSIDIAN DOOR",
+      "id": 28
+    },
+    {
+      "name": "WOOD PLANKS",
+      "id": 29
+    },
+    {
+      "name": "STONE BRICKS",
+      "id": 30
+    },
+    {
+      "name": "OBSIDIAN",
+      "id": 31
+    },
+    {
+      "name": "WOOD WALL",
+      "id": 32
+    },
+    {
+      "name": "STONE WALL",
+      "id": 33
+    },
+    {
+      "name": "OBSIDIAN WALL",
+      "id": 34
+    },
+    {
+      "name": "WHITE WOOL",
+      "id": 35
+    },
+    {
+      "name": "PATH",
+      "id": 36
+    },
+    {
+      "name": "RED WOOL",
+      "id": 37
+    },
+    {
+      "name": "BLUE WOOL",
+      "id": 38
+    },
+    {
+      "name": "GREEN WOOL",
+      "id": 39
+    },
+    {
+      "name": "YELLOW WOOL",
+      "id": 40
+    },
+    {
+      "name": "BLACK WOOL",
+      "id": 41
+    },
+    {
+      "name": "POTATO",
+      "id": 42
+    },
+    {
+      "name": "STONE",
+      "id": 43
+    },
+    {
+      "name": "RAW OBSIDIAN",
+      "id": 44
+    },
+    {
+      "name": "ORNATE STONE",
+      "id": 45
+    },
+    {
+      "name": "ORNATE OBSIDIAN",
+      "id": 46
+    },
+    {
+      "name": "OBSIDIAN BOSS WALL",
+      "id": 47
+    },
+    {
+      "name": "OBSIDIAN BOSS FLOOR",
+      "id": 48
+    },
+    {
+      "name": "OBSIDIAN BOSS DOOR",
+      "id": 49
+    },
+    {
+      "name": "TOMATO",
+      "id": 50
+    },
+    {
+      "name": "CARROT",
+      "id": 51
+    },
+    {
+      "name": "HEAVENLY BERRIES",
+      "id": 52
+    },
+    {
+      "name": "HELLISH BERRIES",
+      "id": 53
+    },
+    {
+      "name": "WOOD FENCE",
+      "id": 54
+    },
+    {
+      "name": "STONE FENCE",
+      "id": 55
+    },
+    {
+      "name": "OBSIDIAN FENCE",
+      "id": 56
+    },
+    {
+      "name": "TORCH",
+      "id": 57
+    },
+    {
+      "name": "SIGN",
+      "id": 58
+    },
+    {
+      "name": "ORNATE WOOD",
+      "id": 59
+    },
+    {
+      "name": "BROWN WOOL",
+      "id": 60
+    },
+    {
+      "name": "PURPLE WOOL",
+      "id": 61
+    },
+    {
+      "name": "CYAN WOOL",
+      "id": 62
+    },
+    {
+      "name": "LIGHT GRAY WOOL",
+      "id": 63
+    },
+    {
+      "name": "GRAY WOOL",
+      "id": 64
+    },
+    {
+      "name": "PINK WOOL",
+      "id": 65
+    },
+    {
+      "name": "LIME WOOL",
+      "id": 66
+    },
+    {
+      "name": "LIGHT BLUE WOOL",
+      "id": 67
+    },
+    {
+      "name": "MAGENTA WOOL",
+      "id": 68
+    },
+    {
+      "name": "ORANGE WOOL",
+      "id": 69
+    }
+  ],
+  "depths": [
+    -3,
+    -2,
+    -1,
+    0,
+    1,
+    -4
+  ],
+  "version": "2.3.0-dev2",
+  "items": [
+    "Power Glove",
+    "Cow Spawner",
+    "Pig Spawner",
+    "Sheep Spawner",
+    "Slime Spawner",
+    "Zombie Spawner",
+    "Creeper Spawner",
+    "Skeleton Spawner",
+    "Snake Spawner",
+    "Knight Spawner",
+    "Chest",
+    "Dungeon Chest",
+    "Workbench",
+    "Oven",
+    "Furnace",
+    "Anvil",
+    "Enchanter",
+    "Loom",
+    "Dye Vat",
+    "Lantern",
+    "Iron Lantern",
+    "Gold Lantern",
+    "Black Bed",
+    "Red Bed",
+    "Green Bed",
+    "Brown Bed",
+    "Blue Bed",
+    "Purple Bed",
+    "Cyan Bed",
+    "Light Gray Bed",
+    "Gray Bed",
+    "Pink Bed",
+    "Lime Bed",
+    "Yellow Bed",
+    "Light Blue Bed",
+    "Magenta Bed",
+    "Orange Bed",
+    "White Bed",
+    "Tnt",
+    "Composter",
+    "Empty Bucket",
+    "Water Bucket",
+    "Lava Bucket",
+    "Book",
+    "Antidious",
+    "Acorn",
+    "Dirt",
+    "Natural Rock",
+    "Plank",
+    "Ornate Wood",
+    "Plank Wall",
+    "Wood Door",
+    "Wood Fence",
+    "Stone",
+    "Stone Brick",
+    "Ornate Stone",
+    "Stone Wall",
+    "Stone Door",
+    "Stone Fence",
+    "Raw Obsidian",
+    "Obsidian Brick",
+    "Ornate Obsidian",
+    "Obsidian Wall",
+    "Obsidian Door",
+    "Obsidian Fence",
+    "Sand",
+    "Cactus",
+    "Cloud",
+    "Wheat Seeds",
+    "Potato",
+    "Carrot",
+    "Tomato Seeds",
+    "Heavenly Berries",
+    "Hellish Berries",
+    "Grass Seeds",
+    "Torch",
+    "Sign",
+    "Rose",
+    "Oxeye Daisy",
+    "Sunflower",
+    "Allium",
+    "Blue Orchid",
+    "Cornflower",
+    "Dandelion",
+    "Hydrangea",
+    "Iris",
+    "Orange Tulip",
+    "Pink Tulip",
+    "Red Tulip",
+    "White Tulip",
+    "Peony",
+    "Periwinkle",
+    "Pink Lily",
+    "White Lily",
+    "Poppy",
+    "Violet",
+    "Farmland",
+    "Hole",
+    "Lava",
+    "Path",
+    "Water",
+    "Wood Shovel",
+    "Rock Shovel",
+    "Iron Shovel",
+    "Gold Shovel",
+    "Gem Shovel",
+    "Wood Hoe",
+    "Rock Hoe",
+    "Iron Hoe",
+    "Gold Hoe",
+    "Gem Hoe",
+    "Wood Sword",
+    "Rock Sword",
+    "Iron Sword",
+    "Gold Sword",
+    "Gem Sword",
+    "Wood Pickaxe",
+    "Rock Pickaxe",
+    "Iron Pickaxe",
+    "Gold Pickaxe",
+    "Gem Pickaxe",
+    "Wood Axe",
+    "Rock Axe",
+    "Iron Axe",
+    "Gold Axe",
+    "Gem Axe",
+    "Wood Bow",
+    "Rock Bow",
+    "Iron Bow",
+    "Gold Bow",
+    "Gem Bow",
+    "Wood Claymore",
+    "Rock Claymore",
+    "Iron Claymore",
+    "Gold Claymore",
+    "Gem Claymore",
+    "Shears",
+    "Baked Potato",
+    "Apple",
+    "Raw Pork",
+    "Raw Fish",
+    "Raw Beef",
+    "Bread",
+    "Cooked Fish",
+    "Cooked Pork",
+    "Steak",
+    "Gold Apple",
+    "Wood",
+    "Leather",
+    "Wheat",
+    "Key",
+    "Arrow",
+    "String",
+    "Coal",
+    "Iron Ore",
+    "Lapis",
+    "Gold Ore",
+    "Iron",
+    "Gold",
+    "Gunpowder",
+    "Slime",
+    "Glass",
+    "Cloth",
+    "Gem",
+    "Scale",
+    "Shard",
+    "Cloud Ore",
+    "Glass Bottle",
+    "Tomato",
+    "Bone",
+    "Fertilizer",
+    "Red Clothes",
+    "Blue Clothes",
+    "Green Clothes",
+    "Yellow Clothes",
+    "Black Clothes",
+    "Orange Clothes",
+    "Purple Clothes",
+    "Cyan Clothes",
+    "Reg Clothes",
+    "Leather Armor",
+    "Snake Armor",
+    "Iron Armor",
+    "Gold Armor",
+    "Gem Armor",
+    "Awkward Potion",
+    "Speed Potion",
+    "Light Potion",
+    "Swim Potion",
+    "Energy Potion",
+    "Regen Potion",
+    "Health Potion",
+    "Time Potion",
+    "Lava Potion",
+    "Shield Potion",
+    "Haste Potion",
+    "Escape Potion",
+    "Wood Fishing Rod",
+    "Iron Fishing Rod",
+    "Gold Fishing Rod",
+    "Gem Fishing Rod",
+    "Totem of Air",
+    "Obsidian Poppet",
+    "Obsidian Heart",
+    "Watering Can",
+    "Black Dye",
+    "Red Dye",
+    "Green Dye",
+    "Brown Dye",
+    "Blue Dye",
+    "Purple Dye",
+    "Cyan Dye",
+    "Light Gray Dye",
+    "Gray Dye",
+    "Pink Dye",
+    "Lime Dye",
+    "Yellow Dye",
+    "Light Blue Dye",
+    "Magenta Dye",
+    "Orange Dye",
+    "White Dye",
+    "Black Wool",
+    "Red Wool",
+    "Green Wool",
+    "Brown Wool",
+    "Blue Wool",
+    "Purple Wool",
+    "Cyan Wool",
+    "Light Gray Wool",
+    "Gray Wool",
+    "Pink Wool",
+    "Lime Wool",
+    "Yellow Wool",
+    "Light Blue Wool",
+    "Magenta Wool",
+    "Orange Wool",
+    "White Wool"
+  ]
+}

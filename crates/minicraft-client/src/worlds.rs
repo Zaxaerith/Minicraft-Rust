@@ -6,7 +6,9 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::{
-    saveload::storage::{atomic_write, read_candidates, read_candidates_limited, restore_primary},
+    saveload::storage::{
+        atomic_write, read_candidates, read_candidates_limited, read_text_limited, restore_primary,
+    },
     world::{GameMode, World, WorldSpec, import_java_save, probe_java_save},
 };
 
@@ -237,7 +239,19 @@ pub fn load_state(record: &WorldRecord) -> Result<Option<World>, String> {
     let path = record.directory.join("state.json");
     let candidates = read_candidates(&path)?;
     if candidates.is_empty() {
+        let metadata = read_candidates_limited(&record.directory.join("world.json"), 1024 * 1024)?;
+        if metadata.iter().any(|(_, text)| {
+            serde_json::from_str::<Value>(text)
+                .ok()
+                .is_some_and(|v| v["state"] == "imported-java")
+        }) {
+            return Err("imported world state and backup are missing; refusing to regenerate saved Java terrain".into());
+        }
         if record.directory.join("Game.miniplussave").exists() {
+            let game = read_text_limited(&record.directory.join("Game.miniplussave"), 1024 * 1024)?;
+            if game.starts_with("2.3.") {
+                return Err("Java2.3 is read-only here; use --import-java SOURCE --import-to NEW_RUST_DIRECTORY".into());
+            }
             let world = import_java_save(&record.directory)?;
             save_state(record, &world)?;
             return Ok(Some(world));

@@ -24,6 +24,8 @@ use super::version::{Version, milestones};
 #[allow(dead_code)]
 const JAVA_VERSION: &str = "2.2.4";
 const LEVEL_COUNT: usize = 6;
+
+mod java230;
 const MAX_JAVA_FILE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_HEALTH: u8 = crate::world::MAX_HEALTH;
 const MAX_STAT: u8 = crate::world::MAX_STAT;
@@ -67,11 +69,14 @@ pub fn probe_java_save(directory: &Path) -> Result<Option<JavaSaveInfo>, String>
 pub fn import_java_save(directory: &Path) -> Result<World, String> {
     let game = read_save(&directory.join("Game.miniplussave"))?;
     let world_ver = require_version(&game)?;
-    // This stage ports gameplay into native worlds, not Java 2.3 world layout
-    // migration. In particular Torch base IDs and Flower data changed upstream;
-    // accepting them as 2.2.4 would silently reinterpret stored terrain/state.
-    if world_ver.at_least(&Version::parse("2.3.0-dev1")) {
-        return Err("Java 2.3 world import is not supported yet; colored items are supported in native Rust worlds. The Java world was not modified.".to_owned());
+    let dev2 = world_ver.to_string() == "2.3.0-dev2";
+    if world_ver.at_least(&Version::parse("2.3.0-dev1")) && !dev2 {
+        return Err(format!(
+            "unsupported Java world version {world_ver}; the only verified 2.3 layout is 2.3.0-dev2"
+        ));
+    }
+    if dev2 {
+        java230::validate(directory)?;
     }
 
     let seed = parse_seed(&game, &world_ver)?;
@@ -98,19 +103,20 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
         (true, true)
     };
 
-    let mut world = World::new_with_play_options(
-        seed,
-        WorldSpec::new(width, 0, 0),
-        PlayOptions {
-            difficulty,
-            mode,
-            score_minutes,
-            tutorials,
-            quests,
-            show_quests: true,
-            custom_skin: false,
-        },
-    );
+    let options = PlayOptions {
+        difficulty,
+        mode,
+        score_minutes,
+        tutorials,
+        quests,
+        show_quests: true,
+        custom_skin: false,
+    };
+    let mut world = if dev2 {
+        World::empty_for_java_import(seed, width, options)
+    } else {
+        World::new_with_play_options(seed, WorldSpec::new(width, 0, 0), options)
+    };
     world.width = width;
     world.height = height;
     world.seed = seed;
@@ -214,15 +220,39 @@ pub fn import_java_save(directory: &Path) -> Result<World, String> {
 
     import_player(directory, &mut world, &world_ver)?;
     import_inventory(directory, &mut world, &world_ver)?;
-    import_entities(directory, &mut world, &world_ver)?;
-    import_signs(directory, &mut world)?;
+    // Official dev2 Load.loadInventory moves the serialized held item into the
+    // bag; the file has no marker distinguishing it from an ordinary first slot.
+    if dev2 {
+        world.player.active_item = None;
+    }
+    if dev2 {
+        java230::import_entities(directory, &mut world)?;
+        world.generation_version = crate::level::GenerationVersion::Java230Flora;
+        world.java_level_seeds = (0..LEVEL_COUNT)
+            .map(|i| {
+                read_save(&directory.join(format!("Level{i}.miniplussave")))
+                    .and_then(|v| parse(&v[2], "level seed"))
+            })
+            .collect::<Result<_, _>>()?;
+    } else {
+        import_entities(directory, &mut world, &world_ver)?;
+    }
+    if dev2 {
+        java230::import_signs(directory, &mut world)?;
+    } else {
+        import_signs(directory, &mut world)?;
+    }
     import_unlocks(directory, &mut world)?;
     let advancements = directory.join("advancements.json");
     if advancements.exists() {
-        world.progress.import_java_advancements(
+        let progress =
             serde_json::from_str(&read_text_limited(&advancements, MAX_JAVA_FILE_BYTES)?)
-                .map_err(|e| format!("invalid Java advancements: {e}"))?,
-        )?;
+                .map_err(|e| format!("invalid Java advancements: {e}"))?;
+        if dev2 {
+            world.progress.import_java230_advancements(progress)?;
+        } else {
+            world.progress.import_java_advancements(progress)?;
+        }
     }
 
     world.pause.close();
@@ -527,6 +557,16 @@ fn import_unlocks(directory: &Path, world: &mut World) -> Result<(), String> {
     }
     let value: Value = serde_json::from_str(&read_text_limited(&path, MAX_JAVA_FILE_BYTES)?)
         .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
+    if !world.java_level_seeds.is_empty() {
+        if !value.is_object()
+            || !value
+                .get("unlockedAchievements")
+                .is_some_and(|v| v.as_array().is_some_and(|a| a.iter().all(Value::is_string)))
+        {
+            return Err("invalid dev2 global Unlocks".into());
+        }
+        world.java_global_unlocks = Some(value.clone());
+    }
     if let Some(achievements) = value.get("unlockedAchievements").and_then(Value::as_array) {
         for id in achievements.iter().filter_map(Value::as_str) {
             world.progress.unlock_achievement(id);
@@ -633,6 +673,9 @@ fn tile_from_java(
     world_ver: &Version,
     depth: i8,
 ) -> Result<(Tile, u16), String> {
+    if world_ver.to_string() == "2.3.0-dev2" {
+        return java230::tile(name, data);
+    }
     if let Ok(id) = name.trim().parse::<u16>() {
         return Tile::from_legacy_id(id).ok_or_else(|| format!("unknown legacy tile id {id}"));
     }
@@ -1250,7 +1293,7 @@ mod java230_world_import_tests {
             Ok(_) => panic!("new Java layout must not be interpreted as 2.2.4"),
             Err(error) => error,
         };
-        assert!(error.contains("Java 2.3 world import is not supported"));
+        assert!(error.contains("cannot read"));
         assert_eq!(std::fs::read_to_string(&game).unwrap(), original);
         assert!(!directory.join("state.json").exists());
         std::fs::remove_file(game).unwrap();

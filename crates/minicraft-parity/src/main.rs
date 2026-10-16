@@ -17,8 +17,27 @@ fn run() -> Result<(), String> {
     let trace_path = arguments
         .next()
         .ok_or_else(|| "usage: minicraft-parity rust <trace.json>".to_owned())?;
+    if backend == "java230-import" {
+        let target = arguments.next().ok_or(
+            "usage: minicraft-parity java230-import SOURCE NEW_DESTINATION [Unlocks.json]",
+        )?;
+        let unlocks = arguments.next();
+        if arguments.next().is_some() {
+            return Err("unexpected import arguments".into());
+        }
+        minicraft_client::saveload::migration::import_to(
+            Path::new(&trace_path),
+            Path::new(&target),
+            unlocks.as_deref().map(Path::new),
+        )?;
+        println!("Imported Java dev2 world into {target}; source files were not modified");
+        return Ok(());
+    }
     if arguments.next().is_some() {
         return Err("unexpected extra parity arguments".to_owned());
+    }
+    if backend == "java230-depths" {
+        return compare_java230_depths(Path::new(&trace_path));
     }
     if backend == "java230-generation" {
         return compare_java230_generation(Path::new(&trace_path));
@@ -228,6 +247,68 @@ fn compare_java230_generation(directory: &Path) -> Result<(), String> {
             "PASS Java230 surface size={size} seed={seed} theme={theme}: {} exact tile/data cells",
             size * size
         );
+    }
+    Ok(())
+}
+
+fn compare_java230_depths(directory: &Path) -> Result<(), String> {
+    use minicraft_client::level::{
+        GenerationVersion, WorldSpec, generation::level_with_version, tile::Tile,
+    };
+    for (size, seed) in [(128, 42), (128, 256), (256, 42), (512, 42)] {
+        for depth in [-3, -2, -1, 0, 1, -4] {
+            let reference =
+                fs::read_to_string(directory.join(format!("depth-{size}-{seed}-{depth}.tsv")))
+                    .map_err(|e| e.to_string())?;
+            if reference.lines().count() != size * size {
+                return Err("invalid full-depth reference length".into());
+            }
+            let map = level_with_version(
+                size,
+                size,
+                depth,
+                seed,
+                WorldSpec::new(size, 0, 0),
+                GenerationVersion::Java230Flora,
+            );
+            for (index, row) in reference.lines().enumerate() {
+                let (name, data) = row.split_once('\t').ok_or("invalid depth row")?;
+                let java = match name
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .flat_map(char::to_lowercase)
+                    .collect::<String>()
+                    .as_str()
+                {
+                    "obsidian" => "obsidianfloor".into(),
+                    "cloudcactus" => "cloudore".into(),
+                    "lapis" => "lapisore".into(),
+                    "woodplanks" => "woodfloor".into(),
+                    "stonebricks" => "stonefloor".into(),
+                    name => name.to_owned(),
+                };
+                let tile = map.tiles[index];
+                let rust = if tile == Tile::Flower230 {
+                    "flower".into()
+                } else {
+                    format!("{tile:?}").to_lowercase()
+                };
+                if java != rust
+                    || data.parse::<u16>().map_err(|e| e.to_string())? != map.data[index]
+                {
+                    return Err(format!(
+                        "first DIFF dev2 size={size}, seed={seed}, depth={depth} ({},{}): Java={name}/{data},Rust={rust}/{}",
+                        index % size,
+                        index / size,
+                        map.data[index]
+                    ));
+                }
+            }
+            println!(
+                "PASS dev2 raw size={size},seed={seed},depth={depth}: {} exact cells",
+                size * size
+            );
+        }
     }
     Ok(())
 }

@@ -314,6 +314,32 @@ impl ProgressState {
         Ok(())
     }
 
+    /// Java dev2 owners map to the namespaced native expansion definitions.
+    /// Keep the original Java object for provenance/timestamps and native saves.
+    pub fn import_java230_advancements(&mut self, value: Value) -> Result<(), String> {
+        let original = value
+            .as_object()
+            .ok_or("Java advancements must be an object")?
+            .clone();
+        let expansion: Value = serde_json::from_str(include_str!(
+            "../../../../assets/expansion230/recipe_unlocks.json"
+        ))
+        .map_err(|e| e.to_string())?;
+        let mut mapped = original.clone();
+        for id in expansion
+            .as_object()
+            .ok_or("invalid expansion recipes")?
+            .keys()
+        {
+            if let Some(saved) = mapped.remove(id) {
+                mapped.insert(format!("java230:{id}"), saved);
+            }
+        }
+        self.import_java_advancements(Value::Object(mapped))?;
+        self.java_advancements = original;
+        Ok(())
+    }
+
     /// Lossless export of imported Java progression; native completion sets are
     /// also retained in native saves even when Java has no matching definition.
     pub fn java_advancements_json(&self) -> Value {
