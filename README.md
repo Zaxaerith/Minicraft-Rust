@@ -38,6 +38,12 @@ transfers have regression coverage. See [audit and upstream feature matrix](AUDI
 for evidence, remaining Java import/parity limitations, and Windows play checks.
 The 403 original 2.2.4 resource files still match byte for byte.
 
+2026-10-16 feature branch: Java 2.3.0-dev colored dyes, wool, beds, Dye Vat,
+and placeable flowers are integrated on top of the verified 2.2.4 fixes.
+See [phase-one implementation and compatibility record](AUDIT_JAVA230_PHASE1.md)
+for actual Java comparisons, native-save guarantees, remaining natural flower
+sources, and Windows play checks. This does not port Infdev or full Java 2.3 worlds.
+
 ## What currently runs
 
 2026-09-18 local fixes: the controls guide now uses Java's line wrapping and
