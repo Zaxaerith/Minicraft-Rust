@@ -35,10 +35,11 @@ pub enum FurnitureKind {
     SkeletonSpawner,
     SnakeSpawner,
     KnightSpawner,
+    DyeVat,
 }
 
 impl FurnitureKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::Workbench,
         Self::Oven,
         Self::Furnace,
@@ -63,10 +64,12 @@ impl FurnitureKind {
         Self::SkeletonSpawner,
         Self::SnakeSpawner,
         Self::KnightSpawner,
+        Self::DyeVat,
     ];
 
     pub const fn asset_name(self) -> &'static str {
         match self {
+            Self::DyeVat => "dyevat",
             Self::Workbench => "workbench",
             Self::Oven => "oven",
             Self::Furnace => "furnace",
@@ -96,6 +99,7 @@ impl FurnitureKind {
 
     pub const fn display_name(self) -> &'static str {
         match self {
+            Self::DyeVat => "Dye Vat",
             Self::Workbench => "Workbench",
             Self::Oven => "Oven",
             Self::Furnace => "Furnace",
@@ -132,6 +136,7 @@ impl FurnitureKind {
                 | Self::Anvil
                 | Self::Enchanter
                 | Self::Loom
+                | Self::DyeVat
         )
     }
 
@@ -162,6 +167,7 @@ impl FurnitureKind {
     /// Java Entity xr/yr collision half-extents (Furniture constructors).
     pub const fn collision_radius(self) -> (i32, i32) {
         match self {
+            Self::DyeVat => (0, 0),
             Self::Workbench | Self::Oven | Self::Furnace | Self::Anvil => (3, 2),
             Self::Enchanter | Self::Loom => (7, 2),
             Self::Tnt

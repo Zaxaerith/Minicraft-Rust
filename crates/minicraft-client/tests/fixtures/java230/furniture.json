@@ -1,0 +1,11 @@
+{
+  "dyeVatName": "Dye Vat",
+  "dyeVatSave": "DyeVat[56:56:3]",
+  "dyeVatRestored": "DyeVat",
+  "dyeVatSprite": "dyevat",
+  "dyeVatYr": 0,
+  "dyeVatXr": 0,
+  "dyeVatItemSprite": "dyevat",
+  "defaultBedColor": 1,
+  "version": "2.3.0-dev2"
+}

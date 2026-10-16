@@ -165,10 +165,23 @@ pub enum Tile {
     ObsidianFence = 56,
     Torch = 57,
     Sign = 58,
+    // Append 2.3.0 tiles; old maps and overlay underlays keep IDs 0..=58.
+    BrownWool = 59,
+    PurpleWool = 60,
+    CyanWool = 61,
+    LightGrayWool = 62,
+    GrayWool = 63,
+    PinkWool = 64,
+    LimeWool = 65,
+    LightBlueWool = 66,
+    MagentaWool = 67,
+    OrangeWool = 68,
+    // Old Flower encodes two shapes plus mirror bits; this uses Java 2.3 ordinals.
+    Flower230 = 69,
 }
 
 impl Tile {
-    pub const ALL: [Self; 59] = [
+    pub const ALL: [Self; 70] = [
         Self::Grass,
         Self::Dirt,
         Self::Flower,
@@ -228,6 +241,17 @@ impl Tile {
         Self::ObsidianFence,
         Self::Torch,
         Self::Sign,
+        Self::BrownWool,
+        Self::PurpleWool,
+        Self::CyanWool,
+        Self::LightGrayWool,
+        Self::GrayWool,
+        Self::PinkWool,
+        Self::LimeWool,
+        Self::LightBlueWool,
+        Self::MagentaWool,
+        Self::OrangeWool,
+        Self::Flower230,
     ];
 
     pub fn id(self) -> u8 {
@@ -300,7 +324,7 @@ impl Tile {
     }
 
     pub fn asset_name(self) -> &'static str {
-        const ASSETS: [&str; 59] = [
+        const ASSETS: [&str; 70] = [
             "grass",
             "dirt",
             "flower_shape0",
@@ -360,6 +384,17 @@ impl Tile {
             "obsidian_fence",
             "torch",
             "sign",
+            "brown_wool",
+            "purple_wool",
+            "cyan_wool",
+            "light_gray_wool",
+            "gray_wool",
+            "pink_wool",
+            "lime_wool",
+            "light_blue_wool",
+            "magenta_wool",
+            "orange_wool",
+            "oxeye_daisy",
         ];
         ASSETS[self.id() as usize]
     }
@@ -394,7 +429,7 @@ impl Tile {
         match self {
             Self::Grass => grass::MAY_SPAWN,
             Self::Dirt => dirt::MAY_SPAWN,
-            Self::Flower => flower::MAY_SPAWN,
+            Self::Flower | Self::Flower230 => flower::MAY_SPAWN,
             Self::Sand => sand::MAY_SPAWN,
             Self::TreeSapling | Self::CactusSapling => sapling::MAY_SPAWN,
             Self::Path => path::MAY_SPAWN,
@@ -459,7 +494,7 @@ pub fn connects(tile: Tile, neighbor: Tile) -> bool {
     match tile {
         Tile::Dirt => dirt::connects(neighbor),
         Tile::Grass => grass::connects(neighbor),
-        Tile::Flower => flower::connects(neighbor),
+        Tile::Flower | Tile::Flower230 => flower::connects(neighbor),
         Tile::Tree => tree::connects(neighbor),
         Tile::TreeSapling => sapling::tree_connects(neighbor),
         Tile::CactusSapling => sapling::cactus_connects(neighbor),
@@ -485,7 +520,7 @@ pub fn underlay_layers(tile: Tile, data: u16, depth: i8) -> [Option<Tile>; 2] {
     match tile {
         Tile::Dirt => dirt::underlay(),
         Tile::Grass => grass::underlay(),
-        Tile::Flower => flower::underlay(),
+        Tile::Flower | Tile::Flower230 => flower::underlay(),
         Tile::Tree => tree::underlay(),
         Tile::TreeSapling => sapling::tree_underlay(),
         Tile::CactusSapling => sapling::cactus_underlay(),
@@ -565,7 +600,11 @@ mod tests {
 
     #[test]
     fn registry_ids_match_java_tiles_init() {
-        assert_eq!(Tile::ALL.len(), 59);
+        assert_eq!(Tile::ALL.len(), 70);
+        assert_eq!(Tile::ALL[58], Tile::Sign);
+        assert_eq!(Tile::ALL[59], Tile::BrownWool);
+        assert_eq!(Tile::Flower.id(), 2);
+        assert_eq!(Tile::WhiteWool.id(), 35);
         assert_eq!(Tile::Grass.id(), 0);
         assert_eq!(Tile::Lava.id(), 17);
         assert_eq!(Tile::Sign.id(), 58);

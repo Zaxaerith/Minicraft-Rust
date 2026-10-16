@@ -8,6 +8,12 @@ pub fn java224_noise_bits(feature_size: usize) -> Result<Vec<u64>, String> {
     Ok(crate::level::generation::java224_noise_bits(feature_size))
 }
 
+/// One offscreen smoke frame through the live level/entity renderer. This is
+/// a Rust preview, not a Java golden frame or interactive-window acceptance.
+pub fn java230_render_preview(path: &std::path::Path) -> Result<(), String> {
+    crate::world::World::java230_render_preview(path)
+}
+
 mod display_stack;
 pub use display_stack::display_stack_snapshots;
 mod focus_update;

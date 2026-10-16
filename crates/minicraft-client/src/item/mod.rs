@@ -222,6 +222,68 @@ item_registry! {
     KnightSpawner => ("knight_spawner", "Knight Spawner"),
     Book => ("book", "Book"),
     AntidiousBook => ("antidious_book", "Antidious"),
+
+    // 2.3.0 additions are appended: serialized legacy identities stay unchanged.
+    BlackDye => ("black_dye", "Black Dye"),
+    RedDye => ("red_dye", "Red Dye"),
+    GreenDye => ("green_dye", "Green Dye"),
+    BrownDye => ("brown_dye", "Brown Dye"),
+    BlueDye => ("blue_dye", "Blue Dye"),
+    PurpleDye => ("purple_dye", "Purple Dye"),
+    CyanDye => ("cyan_dye", "Cyan Dye"),
+    LightGrayDye => ("light_gray_dye", "Light Gray Dye"),
+    GrayDye => ("gray_dye", "Gray Dye"),
+    PinkDye => ("pink_dye", "Pink Dye"),
+    LimeDye => ("lime_dye", "Lime Dye"),
+    YellowDye => ("yellow_dye", "Yellow Dye"),
+    LightBlueDye => ("light_blue_dye", "Light Blue Dye"),
+    MagentaDye => ("magenta_dye", "Magenta Dye"),
+    OrangeDye => ("orange_dye", "Orange Dye"),
+    WhiteDye => ("white_dye", "White Dye"),
+    BrownWool => ("brown_wool", "Brown Wool"),
+    PurpleWool => ("purple_wool", "Purple Wool"),
+    CyanWool => ("cyan_wool", "Cyan Wool"),
+    LightGrayWool => ("light_gray_wool", "Light Gray Wool"),
+    GrayWool => ("gray_wool", "Gray Wool"),
+    PinkWool => ("pink_wool", "Pink Wool"),
+    LimeWool => ("lime_wool", "Lime Wool"),
+    LightBlueWool => ("light_blue_wool", "Light Blue Wool"),
+    MagentaWool => ("magenta_wool", "Magenta Wool"),
+    OrangeWool => ("orange_wool", "Orange Wool"),
+    BlackBed => ("black_bed", "Black Bed"),
+    RedBed => ("red_bed", "Red Bed"),
+    GreenBed => ("green_bed", "Green Bed"),
+    BrownBed => ("brown_bed", "Brown Bed"),
+    BlueBed => ("blue_bed", "Blue Bed"),
+    PurpleBed => ("purple_bed", "Purple Bed"),
+    CyanBed => ("cyan_bed", "Cyan Bed"),
+    LightGrayBed => ("light_gray_bed", "Light Gray Bed"),
+    GrayBed => ("gray_bed", "Gray Bed"),
+    PinkBed => ("pink_bed", "Pink Bed"),
+    LimeBed => ("lime_bed", "Lime Bed"),
+    YellowBed => ("yellow_bed", "Yellow Bed"),
+    LightBlueBed => ("light_blue_bed", "Light Blue Bed"),
+    MagentaBed => ("magenta_bed", "Magenta Bed"),
+    OrangeBed => ("orange_bed", "Orange Bed"),
+    WhiteBed => ("white_bed", "White Bed"),
+    DyeVat => ("dyevat", "Dye Vat"),
+    Sunflower => ("sunflower", "Sunflower"),
+    Allium => ("allium", "Allium"),
+    BlueOrchid => ("blue_orchid", "Blue Orchid"),
+    Cornflower => ("cornflower", "Cornflower"),
+    Dandelion => ("dandelion", "Dandelion"),
+    Hydrangea => ("hydrangea", "Hydrangea"),
+    Iris => ("iris", "Iris"),
+    OrangeTulip => ("orange_tulip", "Orange Tulip"),
+    PinkTulip => ("pink_tulip", "Pink Tulip"),
+    RedTulip => ("red_tulip", "Red Tulip"),
+    WhiteTulip => ("white_tulip", "White Tulip"),
+    Peony => ("peony", "Peony"),
+    Periwinkle => ("periwinkle", "Periwinkle"),
+    PinkLily => ("pink_lily", "Pink Lily"),
+    WhiteLily => ("white_lily", "White Lily"),
+    Poppy => ("poppy", "Poppy"),
+    Violet => ("violet", "Violet"),
 }
 
 impl ItemId {
@@ -311,7 +373,14 @@ mod tests {
     #[test]
     fn workbench_list_interleaves_items_tools_and_tail() {
         let views = recipe_views(Some(crate::entity::furniture::FurnitureKind::Workbench));
-        assert_eq!(views.len(), 43);
+        assert_eq!(views.len(), 44);
+        assert!(matches!(
+            views[43].output,
+            RecipeOutput::Stack(ItemStack {
+                item: ItemId::DyeVat,
+                count: 1
+            })
+        ));
         assert!(matches!(views[0].output, RecipeOutput::Stack(_)));
         assert!(matches!(views[28].output, RecipeOutput::Tool(_)));
         assert!(matches!(views[40].output, RecipeOutput::Stack(_)));
@@ -326,10 +395,21 @@ mod tests {
     }
 
     #[test]
-    fn item_registry_matches_java_2_2_4_scale_and_has_no_duplicate_displays() {
+    fn item_registry_preserves_legacy_entries_and_has_no_duplicate_displays() {
         // Java non-tool identities plus the recipe-only Arcane Fertilizer and the
         // Power Glove placeholder retained by the port inventory tables.
-        assert_eq!(ItemId::ALL.len(), 142);
+        assert_eq!(ItemId::ALL.len(), 202);
+        assert_eq!(ItemId::ALL[0], ItemId::PowerGlove);
+        assert_eq!(ItemId::ALL[141], ItemId::AntidiousBook);
+        assert_eq!(ItemId::ALL[142], ItemId::BlackDye);
+        let legacy = include_str!("../../tests/fixtures/java224/item-registry.tsv");
+        assert_eq!(legacy.lines().count(), 142);
+        for (item, line) in ItemId::ALL.iter().take(142).zip(legacy.lines()) {
+            let fields: Vec<_> = line.split('\t').collect();
+            assert_eq!(format!("{item:?}"), fields[0]);
+            assert_eq!(item.asset_name(), fields[1]);
+            assert_eq!(item.display_name(), fields[2]);
+        }
         let mut displays = std::collections::HashSet::new();
         for item in ItemId::ALL {
             assert!(!item.display_name().is_empty());
@@ -448,8 +528,8 @@ mod tests {
         assert_eq!(ANVIL_RECIPES.len(), 7);
         assert_eq!(ANVIL_TOOL_RECIPES.len(), 22);
         assert_eq!(ENCHANTER_RECIPES.len(), 14);
-        // Workbench CraftingDisplay: 28 items + 12 tools + 3 tail.
+        // Legacy 28 items + 12 tools + 3 tail stay ordered; Dye Vat is appended.
         let views = recipe_views(Some(crate::entity::furniture::FurnitureKind::Workbench));
-        assert_eq!(views.len(), 28 + 12 + 3);
+        assert_eq!(views.len(), 28 + 12 + 3 + 1);
     }
 }

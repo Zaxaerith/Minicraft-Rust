@@ -5,6 +5,9 @@ use super::ItemId;
 /// Accepts either the display name ("Wood Sword" is tool-only) or asset stem.
 pub fn get(name: &str) -> Option<ItemId> {
     let needle = name.trim().to_ascii_lowercase();
+    if needle == "white wool" || needle == "white_wool" {
+        return Some(ItemId::Wool);
+    }
     ItemId::ALL.iter().copied().find(|item| {
         item.display_name().to_ascii_lowercase() == needle
             || item.asset_name().to_ascii_lowercase() == needle

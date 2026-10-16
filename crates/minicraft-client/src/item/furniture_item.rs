@@ -1,6 +1,7 @@
 //! Java `FurnitureItem` — item ↔ furniture kind mapping and placement rules.
 use super::ItemId;
-use crate::entity::furniture::FurnitureKind;
+use crate::entity::furniture::{FurnitureKind, bed};
+use crate::item::dye::DyeColor;
 
 /// Java `FurnitureItem.getAllInstances` item identities.
 pub const ALL: &[ItemId] = &[
@@ -27,11 +28,32 @@ pub const ALL: &[ItemId] = &[
     ItemId::Bed,
     ItemId::Tnt,
     ItemId::Composter,
+    ItemId::DyeVat,
+    ItemId::BlackBed,
+    ItemId::RedBed,
+    ItemId::GreenBed,
+    ItemId::BrownBed,
+    ItemId::BlueBed,
+    ItemId::PurpleBed,
+    ItemId::CyanBed,
+    ItemId::LightGrayBed,
+    ItemId::GrayBed,
+    ItemId::PinkBed,
+    ItemId::LimeBed,
+    ItemId::YellowBed,
+    ItemId::LightBlueBed,
+    ItemId::MagentaBed,
+    ItemId::OrangeBed,
+    ItemId::WhiteBed,
 ];
 
 /// Java `FurnitureItem` constructor: wraps a furniture entity for placement.
 pub fn furniture_for_item(item: ItemId) -> Option<FurnitureKind> {
+    if DyeColor::from_bed_item(item).is_some() {
+        return Some(FurnitureKind::Bed);
+    }
     Some(match item {
+        ItemId::DyeVat => FurnitureKind::DyeVat,
         ItemId::Workbench => FurnitureKind::Workbench,
         ItemId::Oven => FurnitureKind::Oven,
         ItemId::Furnace => FurnitureKind::Furnace,
@@ -63,6 +85,7 @@ pub fn furniture_for_item(item: ItemId) -> Option<FurnitureKind> {
 /// KnightStatue has no placeable item form.
 pub fn item_for_furniture(kind: FurnitureKind) -> Option<ItemId> {
     Some(match kind {
+        FurnitureKind::DyeVat => ItemId::DyeVat,
         FurnitureKind::Workbench => ItemId::Workbench,
         FurnitureKind::Oven => ItemId::Oven,
         FurnitureKind::Furnace => ItemId::Furnace,
@@ -90,6 +113,19 @@ pub fn item_for_furniture(kind: FurnitureKind) -> Option<ItemId> {
     })
 }
 
+/// Color belongs to the furniture instance, not the shared Bed kind.
+pub fn state_for_item(item: ItemId) -> u16 {
+    DyeColor::from_bed_item(item).map_or(0, bed::state_for_color)
+}
+
+/// Native Bed state zero preserves the existing plain Bed item identity.
+pub fn item_for_furniture_state(kind: FurnitureKind, state: u16) -> Option<ItemId> {
+    if kind == FurnitureKind::Bed && state != 0 {
+        return Some(bed::color_from_state(state).bed_item());
+    }
+    item_for_furniture(kind)
+}
+
 /// Java `FurnitureItem.canAttack` is false.
 pub const fn can_attack(_item: ItemId) -> bool {
     false
@@ -108,7 +144,10 @@ mod tests {
     fn furniture_item_round_trips() {
         for &item in ALL {
             let kind = furniture_for_item(item).expect("furniture item maps");
-            assert_eq!(item_for_furniture(kind), Some(item));
+            assert_eq!(
+                item_for_furniture_state(kind, state_for_item(item)),
+                Some(item)
+            );
         }
     }
 

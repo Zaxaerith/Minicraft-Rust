@@ -12,7 +12,7 @@ use crate::{
     entity::furniture::FurnitureKind,
     entity::mob::NaturalMob,
     gfx::{Image, Screen},
-    item::{ItemId, ToolItem, ToolKind, ToolTier},
+    item::{ItemId, ToolItem, ToolKind, ToolTier, dye::DyeColor},
     level::tile::Tile,
     resource::pack::ResourcePack,
 };
@@ -160,6 +160,9 @@ impl Assets {
                 kind.asset_name(),
                 entity(kind.asset_name())?,
             );
+        }
+        for name in COLORED_BED_KEYS {
+            assets.sheets.set(SpriteType::Entity, name, entity(name)?);
         }
         assets.load_tile_metadata(
             "wood_wall",
@@ -340,6 +343,17 @@ impl Assets {
                     );
                 }
             }
+            for name in COLORED_BED_KEYS {
+                override_image(
+                    pack,
+                    &format!("assets/textures/entity/{name}.png"),
+                    assets
+                        .sheets
+                        .sheet_mut(SpriteType::Entity, name)
+                        .expect("loaded colored bed"),
+                    &mut assets.warnings,
+                );
+            }
             for kind in FurnitureKind::ALL {
                 override_image(
                     pack,
@@ -502,6 +516,17 @@ impl Assets {
     /// Java Furniture.sprite: LinkedSprite(Entity, key) with full-sheet default size.
     pub fn furniture_linked(&self, kind: FurnitureKind) -> LinkedSprite {
         LinkedSprite::new(SpriteType::Entity, kind.asset_name())
+    }
+
+    /// Colored beds keep the ordinary linked-sprite path and resource-pack precedence.
+    pub fn colored_bed(&self, color: DyeColor) -> &Image {
+        self.sheets
+            .sheet(SpriteType::Entity, COLORED_BED_KEYS[color as usize])
+            .expect("loaded colored bed")
+    }
+
+    pub fn colored_bed_linked(&self, color: DyeColor) -> LinkedSprite {
+        LinkedSprite::new(SpriteType::Entity, COLORED_BED_KEYS[color as usize])
     }
 
     /// Java Mob.compileMobSpriteAnimations for the current walk frame.
@@ -709,6 +734,27 @@ fn png(bytes: &[u8]) -> Result<Image, String> {
 fn tile_variants(tile: Tile) -> Vec<&'static str> {
     match tile {
         Tile::Flower => vec!["flower_shape0", "flower_shape1"],
+        Tile::Flower230 => vec![
+            "oxeye_daisy",
+            "rose",
+            "sunflower",
+            "allium",
+            "blue_orchid",
+            "cornflower",
+            "dandelion",
+            "hydrangea",
+            "iris",
+            "orange_tulip",
+            "pink_tulip",
+            "red_tulip",
+            "white_tulip",
+            "peony",
+            "periwinkle",
+            "pink_lily",
+            "white_lily",
+            "poppy",
+            "violet",
+        ],
         Tile::Farmland => vec!["farmland", "farmland_moist"],
         Tile::Wheat => vec![
             "wheat_stage0",
@@ -762,6 +808,7 @@ fn tile_variants(tile: Tile) -> Vec<&'static str> {
 fn tile_variant_index(tile: Tile, data: u16, count: usize) -> usize {
     match tile {
         Tile::Flower => ((data >> 4) as usize) % count,
+        Tile::Flower230 => (data as usize).min(count - 1),
         Tile::Farmland => usize::from(data & 7 > 0).min(count - 1),
         Tile::Wheat
         | Tile::Potato
@@ -794,7 +841,155 @@ fn connection_names(tile: Tile) -> Option<(&'static str, Option<&'static str>, b
     })
 }
 
+const COLORED_BED_KEYS: [&str; 16] = [
+    "black_bed",
+    "red_bed",
+    "green_bed",
+    "brown_bed",
+    "blue_bed",
+    "purple_bed",
+    "cyan_bed",
+    "light_gray_bed",
+    "gray_bed",
+    "pink_bed",
+    "lime_bed",
+    "yellow_bed",
+    "light_blue_bed",
+    "magenta_bed",
+    "orange_bed",
+    "white_bed",
+];
+
+// New sheets are embedded separately; all 2.2.4 resource bytes and keys remain intact.
+fn expansion230_bytes(kind: SpriteType, name: &str) -> Option<&'static [u8]> {
+    macro_rules! bytes {
+        ($kind:literal, $name:literal) => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../assets/expansion230/textures/",
+                $kind,
+                "/",
+                $name,
+                ".png"
+            ))
+        };
+    }
+    let bytes: &[u8] = match (kind, name) {
+        (SpriteType::Item, "black_dye") => bytes!("item", "black_dye"),
+        (SpriteType::Item, "red_dye") => bytes!("item", "red_dye"),
+        (SpriteType::Item, "green_dye") => bytes!("item", "green_dye"),
+        (SpriteType::Item, "brown_dye") => bytes!("item", "brown_dye"),
+        (SpriteType::Item, "blue_dye") => bytes!("item", "blue_dye"),
+        (SpriteType::Item, "purple_dye") => bytes!("item", "purple_dye"),
+        (SpriteType::Item, "cyan_dye") => bytes!("item", "cyan_dye"),
+        (SpriteType::Item, "light_gray_dye") => bytes!("item", "light_gray_dye"),
+        (SpriteType::Item, "gray_dye") => bytes!("item", "gray_dye"),
+        (SpriteType::Item, "pink_dye") => bytes!("item", "pink_dye"),
+        (SpriteType::Item, "lime_dye") => bytes!("item", "lime_dye"),
+        (SpriteType::Item, "yellow_dye") => bytes!("item", "yellow_dye"),
+        (SpriteType::Item, "light_blue_dye") => bytes!("item", "light_blue_dye"),
+        (SpriteType::Item, "magenta_dye") => bytes!("item", "magenta_dye"),
+        (SpriteType::Item, "orange_dye") => bytes!("item", "orange_dye"),
+        (SpriteType::Item, "white_dye") => bytes!("item", "white_dye"),
+        (SpriteType::Item, "brown_wool") => bytes!("item", "brown_wool"),
+        (SpriteType::Item, "purple_wool") => bytes!("item", "purple_wool"),
+        (SpriteType::Item, "cyan_wool") => bytes!("item", "cyan_wool"),
+        (SpriteType::Item, "light_gray_wool") => bytes!("item", "light_gray_wool"),
+        (SpriteType::Item, "gray_wool") => bytes!("item", "gray_wool"),
+        (SpriteType::Item, "pink_wool") => bytes!("item", "pink_wool"),
+        (SpriteType::Item, "lime_wool") => bytes!("item", "lime_wool"),
+        (SpriteType::Item, "light_blue_wool") => bytes!("item", "light_blue_wool"),
+        (SpriteType::Item, "magenta_wool") => bytes!("item", "magenta_wool"),
+        (SpriteType::Item, "orange_wool") => bytes!("item", "orange_wool"),
+        (SpriteType::Item, "black_bed") => bytes!("item", "black_bed"),
+        (SpriteType::Item, "red_bed") => bytes!("item", "red_bed"),
+        (SpriteType::Item, "green_bed") => bytes!("item", "green_bed"),
+        (SpriteType::Item, "brown_bed") => bytes!("item", "brown_bed"),
+        (SpriteType::Item, "blue_bed") => bytes!("item", "blue_bed"),
+        (SpriteType::Item, "purple_bed") => bytes!("item", "purple_bed"),
+        (SpriteType::Item, "cyan_bed") => bytes!("item", "cyan_bed"),
+        (SpriteType::Item, "light_gray_bed") => bytes!("item", "light_gray_bed"),
+        (SpriteType::Item, "gray_bed") => bytes!("item", "gray_bed"),
+        (SpriteType::Item, "pink_bed") => bytes!("item", "pink_bed"),
+        (SpriteType::Item, "lime_bed") => bytes!("item", "lime_bed"),
+        (SpriteType::Item, "yellow_bed") => bytes!("item", "yellow_bed"),
+        (SpriteType::Item, "light_blue_bed") => bytes!("item", "light_blue_bed"),
+        (SpriteType::Item, "magenta_bed") => bytes!("item", "magenta_bed"),
+        (SpriteType::Item, "orange_bed") => bytes!("item", "orange_bed"),
+        (SpriteType::Item, "white_bed") => bytes!("item", "white_bed"),
+        (SpriteType::Item, "dyevat") => bytes!("item", "dyevat"),
+        (SpriteType::Item, "sunflower") => bytes!("item", "sunflower"),
+        (SpriteType::Item, "allium") => bytes!("item", "allium"),
+        (SpriteType::Item, "blue_orchid") => bytes!("item", "blue_orchid"),
+        (SpriteType::Item, "cornflower") => bytes!("item", "cornflower"),
+        (SpriteType::Item, "dandelion") => bytes!("item", "dandelion"),
+        (SpriteType::Item, "hydrangea") => bytes!("item", "hydrangea"),
+        (SpriteType::Item, "iris") => bytes!("item", "iris"),
+        (SpriteType::Item, "orange_tulip") => bytes!("item", "orange_tulip"),
+        (SpriteType::Item, "pink_tulip") => bytes!("item", "pink_tulip"),
+        (SpriteType::Item, "red_tulip") => bytes!("item", "red_tulip"),
+        (SpriteType::Item, "white_tulip") => bytes!("item", "white_tulip"),
+        (SpriteType::Item, "peony") => bytes!("item", "peony"),
+        (SpriteType::Item, "periwinkle") => bytes!("item", "periwinkle"),
+        (SpriteType::Item, "pink_lily") => bytes!("item", "pink_lily"),
+        (SpriteType::Item, "white_lily") => bytes!("item", "white_lily"),
+        (SpriteType::Item, "poppy") => bytes!("item", "poppy"),
+        (SpriteType::Item, "violet") => bytes!("item", "violet"),
+        (SpriteType::Entity, "black_bed") => bytes!("entity", "black_bed"),
+        (SpriteType::Entity, "red_bed") => bytes!("entity", "red_bed"),
+        (SpriteType::Entity, "green_bed") => bytes!("entity", "green_bed"),
+        (SpriteType::Entity, "brown_bed") => bytes!("entity", "brown_bed"),
+        (SpriteType::Entity, "blue_bed") => bytes!("entity", "blue_bed"),
+        (SpriteType::Entity, "purple_bed") => bytes!("entity", "purple_bed"),
+        (SpriteType::Entity, "cyan_bed") => bytes!("entity", "cyan_bed"),
+        (SpriteType::Entity, "light_gray_bed") => bytes!("entity", "light_gray_bed"),
+        (SpriteType::Entity, "gray_bed") => bytes!("entity", "gray_bed"),
+        (SpriteType::Entity, "pink_bed") => bytes!("entity", "pink_bed"),
+        (SpriteType::Entity, "lime_bed") => bytes!("entity", "lime_bed"),
+        (SpriteType::Entity, "yellow_bed") => bytes!("entity", "yellow_bed"),
+        (SpriteType::Entity, "light_blue_bed") => bytes!("entity", "light_blue_bed"),
+        (SpriteType::Entity, "magenta_bed") => bytes!("entity", "magenta_bed"),
+        (SpriteType::Entity, "orange_bed") => bytes!("entity", "orange_bed"),
+        (SpriteType::Entity, "white_bed") => bytes!("entity", "white_bed"),
+        (SpriteType::Entity, "dyevat") => bytes!("entity", "dyevat"),
+        (SpriteType::Tile, "brown_wool") => bytes!("tile", "brown_wool"),
+        (SpriteType::Tile, "purple_wool") => bytes!("tile", "purple_wool"),
+        (SpriteType::Tile, "cyan_wool") => bytes!("tile", "cyan_wool"),
+        (SpriteType::Tile, "light_gray_wool") => bytes!("tile", "light_gray_wool"),
+        (SpriteType::Tile, "gray_wool") => bytes!("tile", "gray_wool"),
+        (SpriteType::Tile, "pink_wool") => bytes!("tile", "pink_wool"),
+        (SpriteType::Tile, "lime_wool") => bytes!("tile", "lime_wool"),
+        (SpriteType::Tile, "light_blue_wool") => bytes!("tile", "light_blue_wool"),
+        (SpriteType::Tile, "magenta_wool") => bytes!("tile", "magenta_wool"),
+        (SpriteType::Tile, "orange_wool") => bytes!("tile", "orange_wool"),
+        (SpriteType::Tile, "oxeye_daisy") => bytes!("tile", "oxeye_daisy"),
+        (SpriteType::Tile, "rose") => bytes!("tile", "rose"),
+        (SpriteType::Tile, "sunflower") => bytes!("tile", "sunflower"),
+        (SpriteType::Tile, "allium") => bytes!("tile", "allium"),
+        (SpriteType::Tile, "blue_orchid") => bytes!("tile", "blue_orchid"),
+        (SpriteType::Tile, "cornflower") => bytes!("tile", "cornflower"),
+        (SpriteType::Tile, "dandelion") => bytes!("tile", "dandelion"),
+        (SpriteType::Tile, "hydrangea") => bytes!("tile", "hydrangea"),
+        (SpriteType::Tile, "iris") => bytes!("tile", "iris"),
+        (SpriteType::Tile, "orange_tulip") => bytes!("tile", "orange_tulip"),
+        (SpriteType::Tile, "pink_tulip") => bytes!("tile", "pink_tulip"),
+        (SpriteType::Tile, "red_tulip") => bytes!("tile", "red_tulip"),
+        (SpriteType::Tile, "white_tulip") => bytes!("tile", "white_tulip"),
+        (SpriteType::Tile, "peony") => bytes!("tile", "peony"),
+        (SpriteType::Tile, "periwinkle") => bytes!("tile", "periwinkle"),
+        (SpriteType::Tile, "pink_lily") => bytes!("tile", "pink_lily"),
+        (SpriteType::Tile, "white_lily") => bytes!("tile", "white_lily"),
+        (SpriteType::Tile, "poppy") => bytes!("tile", "poppy"),
+        (SpriteType::Tile, "violet") => bytes!("tile", "violet"),
+        _ => return None,
+    };
+    Some(bytes)
+}
+
 fn tile(name: &str) -> Result<Image, String> {
+    if let Some(bytes) = expansion230_bytes(SpriteType::Tile, name) {
+        return png(bytes);
+    }
     macro_rules! bytes {
         ($file:literal) => {
             include_bytes!(concat!(
@@ -908,6 +1103,9 @@ fn tile(name: &str) -> Result<Image, String> {
 }
 
 fn entity(name: &str) -> Result<Image, String> {
+    if let Some(bytes) = expansion230_bytes(SpriteType::Entity, name) {
+        return png(bytes);
+    }
     macro_rules! bytes {
         ($file:literal) => {
             include_bytes!(concat!(
@@ -951,6 +1149,9 @@ fn entity(name: &str) -> Result<Image, String> {
 }
 
 fn item_image(name: &str) -> Result<Image, String> {
+    if let Some(bytes) = expansion230_bytes(SpriteType::Item, name) {
+        return png(bytes);
+    }
     macro_rules! bytes {
         ($file:literal) => {
             include_bytes!(concat!(
@@ -1125,6 +1326,71 @@ fn item_image(name: &str) -> Result<Image, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn java230_new_sheets_are_distinct_and_resource_packs_override_them() {
+        let base = Assets::load(&[]).unwrap();
+        let missing_item = item_image("missing_item").unwrap();
+        let missing_tile = tile("missing_tile").unwrap();
+        let missing_entity = entity("missing_entity").unwrap();
+        for color in DyeColor::ALL {
+            assert_ne!(base.item(color.dye_item()), &missing_item);
+            assert_ne!(base.item(color.bed_item()), &missing_item);
+            assert_ne!(base.item(color.wool_item()), &missing_item);
+            assert_ne!(base.colored_bed(color), &missing_entity);
+        }
+        for data in 0..19 {
+            assert_ne!(base.tile(Tile::Flower230, data), &missing_tile);
+        }
+        // A classic pack can replace its old flower shape and a newly named bed
+        // independently. Missing new sheets continue to use embedded defaults.
+        let root = std::env::temp_dir().join(format!(
+            "minicraft-230-pack-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let folder = root.join("resourcepacks/pack");
+        std::fs::create_dir_all(folder.join("assets/textures/entity")).unwrap();
+        std::fs::create_dir_all(folder.join("assets/textures/tile")).unwrap();
+        std::fs::write(
+            folder.join("pack.json"),
+            br#"{"pack_format":1,"name":"230 overrides"}"#,
+        )
+        .unwrap();
+        let replacement = expansion230_bytes(SpriteType::Entity, "black_bed").unwrap();
+        std::fs::write(
+            folder.join("assets/textures/entity/blue_bed.png"),
+            replacement,
+        )
+        .unwrap();
+        let old_shape = include_bytes!("../../../assets/assets/textures/tile/flower_shape1.png");
+        std::fs::write(
+            folder.join("assets/textures/tile/flower_shape0.png"),
+            old_shape,
+        )
+        .unwrap();
+        let (packs, warnings) = crate::resource::pack::discover(&root);
+        assert!(warnings.is_empty());
+        let overridden = Assets::load(&packs).unwrap();
+        assert!(overridden.warnings.is_empty(), "{:?}", overridden.warnings);
+        assert_eq!(
+            overridden.colored_bed(DyeColor::Blue),
+            &png(replacement).unwrap()
+        );
+        assert_eq!(
+            overridden.colored_bed(DyeColor::Red),
+            base.colored_bed(DyeColor::Red)
+        );
+        assert_eq!(overridden.tile(Tile::Flower, 0), &png(old_shape).unwrap());
+        assert_eq!(
+            overridden.tile(Tile::Flower230, 1),
+            base.tile(Tile::Flower230, 1)
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn metadata_connector_cannot_read_outside_folder_pack() {

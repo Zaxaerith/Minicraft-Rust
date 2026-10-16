@@ -67,6 +67,13 @@ pub fn probe_java_save(directory: &Path) -> Result<Option<JavaSaveInfo>, String>
 pub fn import_java_save(directory: &Path) -> Result<World, String> {
     let game = read_save(&directory.join("Game.miniplussave"))?;
     let world_ver = require_version(&game)?;
+    // This stage ports gameplay into native worlds, not Java 2.3 world layout
+    // migration. In particular Torch base IDs and Flower data changed upstream;
+    // accepting them as 2.2.4 would silently reinterpret stored terrain/state.
+    if world_ver.at_least(&Version::parse("2.3.0-dev1")) {
+        return Err("Java 2.3 world import is not supported yet; colored items are supported in native Rust worlds. The Java world was not modified.".to_owned());
+    }
+
     let seed = parse_seed(&game, &world_ver)?;
     let (mode, score_ticks, score_minutes) = parse_mode(field(&game, 2, "mode")?, &world_ver)?;
     let raw_difficulty = parse::<i32>(field(&game, 5, "difficulty")?, "difficulty")?;
@@ -773,6 +780,7 @@ fn item_alias(key: &str) -> Option<ItemId> {
         "totemofwind" | "totemofair" => ItemId::AirTotem,
         "obsidian" => ItemId::RawObsidian,
         "seed" => ItemId::WheatSeeds,
+        "whitewool" => ItemId::Wool,
         _ => return None,
     })
 }
@@ -1223,5 +1231,29 @@ mod java224_fixture_tests {
         assert!(exported["minicraft.tutorial.getting_rocks"]["criteria"]["has_coal"].is_string());
         // The skipped intervening tutorials remain incomplete.
         assert_eq!(restored.progress.tutorial_completed_count(), 2);
+    }
+}
+
+#[cfg(test)]
+mod java230_world_import_tests {
+    use super::*;
+
+    #[test]
+    fn java230_world_import_rejects_changed_layout_without_creating_native_save() {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/parity/java230/rejected-java-world-test");
+        std::fs::create_dir_all(&directory).unwrap();
+        let game = directory.join("Game.miniplussave");
+        let original = "2.3.0-dev2,42,0,0,0,1,false,true,true,false,";
+        std::fs::write(&game, original).unwrap();
+        let error = match import_java_save(&directory) {
+            Ok(_) => panic!("new Java layout must not be interpreted as 2.2.4"),
+            Err(error) => error,
+        };
+        assert!(error.contains("Java 2.3 world import is not supported"));
+        assert_eq!(std::fs::read_to_string(&game).unwrap(), original);
+        assert!(!directory.join("state.json").exists());
+        std::fs::remove_file(game).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
 }

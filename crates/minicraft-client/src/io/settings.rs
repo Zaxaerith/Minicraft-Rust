@@ -27,6 +27,8 @@ pub struct KeyBindings {
     pub toggle_hud: String,
     pub screenshot: String,
     pub fullscreen: String,
+    pub drop_one: String,
+    pub drop_stack: String,
 }
 
 impl Default for KeyBindings {
@@ -49,6 +51,8 @@ impl Default for KeyBindings {
             toggle_hud: "F1".to_owned(),
             screenshot: "F2".to_owned(),
             fullscreen: "F11".to_owned(),
+            drop_one: "Q".to_owned(),
+            drop_stack: "SHIFT-Q".to_owned(),
         }
     }
 }
@@ -68,7 +72,7 @@ impl KeyBindings {
             _ => None,
         }
     }
-    pub const LABELS: [&'static str; 16] = [
+    pub const LABELS: [&'static str; 18] = [
         "MOVE-UP",
         "MOVE-DOWN",
         "MOVE-LEFT",
@@ -85,6 +89,8 @@ impl KeyBindings {
         "TOGGLEHUD",
         "SCREENSHOT",
         "FULLSCREEN",
+        "DROP-ONE",
+        "DROP-STACK",
     ];
 
     /// Java `InputHandler.getMapping` display form (`|` alternatives → `/`).
@@ -111,6 +117,9 @@ impl KeyBindings {
             12 => &self.page_down,
             13 => &self.toggle_hud,
             14 => &self.screenshot,
+            15 => &self.fullscreen,
+            16 => &self.drop_one,
+            17 => &self.drop_stack,
             _ => &self.fullscreen,
         }
     }
@@ -132,6 +141,9 @@ impl KeyBindings {
             12 => self.page_down = value,
             13 => self.toggle_hud = value,
             14 => self.screenshot = value,
+            15 => self.fullscreen = value,
+            16 => self.drop_one = value,
+            17 => self.drop_stack = value,
             _ => self.fullscreen = value,
         }
     }
@@ -293,6 +305,8 @@ impl Config {
                 "toggle_hud": self.settings.key_bindings.toggle_hud,
                 "screenshot": self.settings.key_bindings.screenshot,
                 "fullscreen": self.settings.key_bindings.fullscreen,
+                "drop_one": self.settings.key_bindings.drop_one,
+                "drop_stack": self.settings.key_bindings.drop_stack,
             },
         });
         let text = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
@@ -409,6 +423,9 @@ fn parse_settings(text: &str) -> Option<Settings> {
         binding(bindings, "screenshot", &settings.key_bindings.screenshot);
     settings.key_bindings.fullscreen =
         binding(bindings, "fullscreen", &settings.key_bindings.fullscreen);
+    settings.key_bindings.drop_one = binding(bindings, "drop_one", &settings.key_bindings.drop_one);
+    settings.key_bindings.drop_stack =
+        binding(bindings, "drop_stack", &settings.key_bindings.drop_stack);
     if bindings.is_object() && bindings["format"].as_u64().unwrap_or(1) < 2 {
         // Old clients imposed aliases outside the stored binding. Preserve
         // that effective configuration once, then allow real replacement.
@@ -497,6 +514,10 @@ mod tests {
         assert_eq!(bindings.toggle_hud, "F1");
         assert_eq!(bindings.screenshot, "F2");
         assert_eq!(bindings.fullscreen, "F11");
+        assert_eq!(bindings.drop_one, "Q");
+        assert_eq!(bindings.drop_stack, "SHIFT-Q");
+        assert_eq!(bindings.mapping("DROP-ONE").as_deref(), Some("Q"));
+        assert_eq!(bindings.mapping("DROP-STACK").as_deref(), Some("SHIFT-Q"));
         assert_eq!(bindings.display_value(0), "UP|W");
         assert_eq!(bindings.display_mapping("ATTACK"), "C/SPACE/ENTER");
         assert_eq!(bindings.display_mapping("CURSOR-UP"), "UP");
@@ -540,5 +561,14 @@ mod tests {
         assert_eq!(format_two.key_bindings.up, "I");
         assert_eq!(format_two.key_bindings.toggle_hud, "F5");
         assert_eq!(format_two.key_bindings.page_up, "W");
+        assert_eq!(format_two.key_bindings.drop_one, "Q");
+        assert_eq!(format_two.key_bindings.drop_stack, "SHIFT-Q");
+        let changed = parse_settings(
+            r#"{"key_bindings":{"format":2,"drop_one":"J","drop_stack":"SHIFT-J"}}"#,
+        )
+        .unwrap();
+        assert_eq!(changed.key_bindings.drop_one, "J");
+        assert_eq!(changed.key_bindings.drop_stack, "SHIFT-J");
+        assert_eq!(changed.key_bindings.value(15), "F11");
     }
 }

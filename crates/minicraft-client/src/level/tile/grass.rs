@@ -7,7 +7,7 @@ pub const MAY_SPAWN: bool = true;
 pub fn connects(neighbor: Tile) -> bool {
     matches!(
         neighbor,
-        Tile::Grass | Tile::Flower | Tile::Tree | Tile::TreeSapling | Tile::Path
+        Tile::Grass | Tile::Flower | Tile::Flower230 | Tile::Tree | Tile::TreeSapling | Tile::Path
     )
 }
 

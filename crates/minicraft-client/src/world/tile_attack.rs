@@ -89,6 +89,85 @@ impl World {
             }
         }
 
+        let target = self.levels[self.current_level].tiles[index];
+        let data = self.levels[self.current_level].data[index];
+        if matches!(target, Tile::Flower | Tile::Flower230) {
+            let flower = crate::level::tile::flower::harvested_item(target, data);
+            if target == Tile::Flower230 && flower.is_none() {
+                return;
+            }
+            let tool = self.active_tool();
+            let shovel = tool.is_some_and(|tool| tool.kind == ToolKind::Shovel);
+            if shovel {
+                if self.pay_tool_terrain_damage(ToolKind::Shovel, 2).is_none() {
+                    return;
+                }
+            } else {
+                // Java Shears cannot attack tiles through FlowerTile.hurt.
+                if tool.is_some_and(|tool| tool.kind == ToolKind::Shears) {
+                    return;
+                }
+                self.player.attack_time = 5;
+                self.pay_basic_attack_tool_durability();
+            }
+            // Capture the 2.3 variant before replacing its tile. Upstream's
+            // shovel path reads the reset data afterward, yielding daisies.
+            let drops = if target == Tile::Flower {
+                // Keep 2.2.4's two independent flower drops. Shape / mirror bits
+                // in an old world do not represent a particular flower item.
+                [
+                    ItemStack::new(
+                        ItemId::Flower,
+                        if shovel {
+                            1
+                        } else {
+                            self.random.next_int(2) as u16
+                        },
+                    ),
+                    ItemStack::new(
+                        ItemId::Rose,
+                        if shovel {
+                            1
+                        } else {
+                            self.random.next_int(2) as u16
+                        },
+                    ),
+                ]
+            } else {
+                [
+                    ItemStack::new(flower.expect("validated flower variant"), 1),
+                    ItemStack::new(ItemId::Flower, 0),
+                ]
+            };
+            self.levels[self.current_level].tiles[index] = Tile::Grass;
+            self.levels[self.current_level].data[index] = 0;
+            for stack in drops {
+                if stack.count > 0 {
+                    self.levels[self.current_level].entities.spawn_item(
+                        stack,
+                        tile_x * TILE_SIZE + 8,
+                        tile_y * TILE_SIZE + 8,
+                    );
+                }
+            }
+            self.sound(SoundEffect::MonsterHurt);
+            return;
+        }
+        if let Some(item) = crate::item::wool::item_for_tile(target) {
+            if self.pay_tool_terrain_damage(ToolKind::Shears, 3).is_none() {
+                return;
+            }
+            self.levels[self.current_level].tiles[index] = Tile::Hole;
+            self.levels[self.current_level].data[index] = 0;
+            self.levels[self.current_level].entities.spawn_item(
+                ItemStack::new(item, 1),
+                tile_x * TILE_SIZE + 8,
+                tile_y * TILE_SIZE + 8,
+            );
+            self.sound(SoundEffect::MonsterHurt);
+            return;
+        }
+
         if let Some(tool) = self.active_tool() {
             let target = self.levels[self.current_level].tiles[index];
             let replacement = match (tool.kind, target) {

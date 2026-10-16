@@ -20,6 +20,11 @@ fn run() -> Result<(), String> {
     if arguments.next().is_some() {
         return Err("unexpected extra parity arguments".to_owned());
     }
+    if backend == "java230-preview" {
+        minicraft_client::parity::java230_render_preview(Path::new(&trace_path))?;
+        println!("Rust live renderer preview: {trace_path}");
+        return Ok(());
+    }
     if backend == "java224-generation" {
         return compare_java224_generation(Path::new(&trace_path));
     }

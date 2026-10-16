@@ -23,6 +23,14 @@ mod furniture_action;
 mod generation;
 mod hud;
 mod inventory_ui;
+#[cfg(test)]
+mod java230_furniture_tests;
+#[cfg(test)]
+mod java230_oracle_tests;
+#[cfg(test)]
+mod java230_tests;
+#[cfg(test)]
+mod java230_tile_tests;
 mod level_map;
 mod overlay_ui;
 mod player_actions;
@@ -1223,9 +1231,27 @@ impl World {
                     target_x,
                     target_y,
                     &mut self.random,
-                ) && self.mode != GameMode::Creative
-                {
-                    self.player.inventory.tools_mut()[index].pay_durability();
+                ) {
+                    if self.mode != GameMode::Creative {
+                        self.player.inventory.tools_mut()[index].pay_durability();
+                    }
+                } else {
+                    // Java Shears cannot perform ordinary mob/terrain attacks.
+                    // A miss may interact only with a wool tile.
+                    let tile_x = target_x.div_euclid(TILE_SIZE);
+                    let tile_y = target_y.div_euclid(TILE_SIZE);
+                    if tile_x >= 0
+                        && tile_y >= 0
+                        && tile_x < self.width as i32
+                        && tile_y < self.height as i32
+                    {
+                        let index = tile_x as usize + tile_y as usize * self.width;
+                        if crate::level::tile::wool::is_wool(
+                            self.levels[self.current_level].tiles[index],
+                        ) {
+                            self.attack_target_tile(tile_x, tile_y, index);
+                        }
+                    }
                 }
                 return;
             }
@@ -1621,7 +1647,8 @@ impl World {
             | FurnitureKind::Furnace
             | FurnitureKind::Anvil
             | FurnitureKind::Enchanter
-            | FurnitureKind::Loom => {
+            | FurnitureKind::Loom
+            | FurnitureKind::DyeVat => {
                 self.inventory_open = true;
                 self.container_id = None;
                 self.crafting_station = Some(kind);
@@ -1819,10 +1846,6 @@ impl World {
     }
 }
 
-fn item_for_furniture(kind: FurnitureKind) -> Option<ItemId> {
-    crate::item::item_for_furniture(kind)
-}
-
 fn tile_progress_name(tile: Tile) -> String {
     match tile {
         Tile::Wheat => "wheat".to_owned(),
@@ -1965,6 +1988,7 @@ fn find_spawn(tiles: &[Tile], width: usize, height: usize) -> (i32, i32) {
                         Tile::Grass
                             | Tile::Sand
                             | Tile::Flower
+                            | Tile::Flower230
                             | Tile::Dirt
                             | Tile::Cloud
                             | Tile::ObsidianFloor

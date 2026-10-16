@@ -36,7 +36,7 @@ pub fn hostile_allowed(depth: i8, day_tick: u32, days: u32, tile: Tile, lit: boo
 }
 
 pub fn passive_allowed(depth: i8, tile: Tile) -> bool {
-    depth == 0 && matches!(tile, Tile::Grass | Tile::Flower)
+    depth == 0 && matches!(tile, Tile::Grass | Tile::Flower | Tile::Flower230)
 }
 
 pub fn choose_hostile(depth: i8, roll: i32) -> NaturalMob {
@@ -76,6 +76,7 @@ fn hostile_tile_allowed(depth: i8, tile: Tile) -> bool {
             Tile::Grass
                 | Tile::Dirt
                 | Tile::Flower
+                | Tile::Flower230
                 | Tile::TreeSapling
                 | Tile::Sand
                 | Tile::CactusSapling

@@ -1,0 +1,674 @@
+{
+  "loom": [
+    {
+      "costs": {"WHITE WOOL": 1},
+      "product": "String",
+      "amount": 2
+    },
+    {
+      "costs": {"STRING": 3},
+      "product": "White Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BLACK DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Black Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "RED DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Red Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GREEN DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Green Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BROWN DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Brown Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Blue Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "PURPLE DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Purple Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CYAN DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Cyan Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIGHT GRAY DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Light Gray Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GRAY DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Gray Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "PINK DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Pink Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIME DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Lime Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "YELLOW DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Yellow Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIGHT BLUE DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Light Blue Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "MAGENTA DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Magenta Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "ORANGE DYE": 1,
+        "WHITE WOOL": 1
+      },
+      "product": "Orange Wool",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "WHITE WOOL": 3
+      },
+      "product": "White Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "BLACK WOOL": 3
+      },
+      "product": "Black Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "RED WOOL": 3
+      },
+      "product": "Red Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GREEN WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Green Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BROWN WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Brown Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "BLUE WOOL": 3
+      },
+      "product": "Blue Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "PURPLE WOOL": 3
+      },
+      "product": "Purple Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "CYAN WOOL": 3
+      },
+      "product": "Cyan Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "LIGHT GRAY WOOL": 3
+      },
+      "product": "Light Gray Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GRAY WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Gray Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "PINK WOOL": 3
+      },
+      "product": "Pink Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIME WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Lime Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "YELLOW WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Yellow Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIGHT BLUE WOOL": 3,
+        "WOOD": 5
+      },
+      "product": "Light Blue Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "MAGENTA WOOL": 3
+      },
+      "product": "Magenta Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WOOD": 5,
+        "ORANGE WOOL": 3
+      },
+      "product": "Orange Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WHITE BED": 1,
+        "BLACK DYE": 1
+      },
+      "product": "Black Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "RED DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Red Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GREEN DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Green Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WHITE BED": 1,
+        "BROWN DYE": 1
+      },
+      "product": "Brown Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Blue Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WHITE BED": 1,
+        "PURPLE DYE": 1
+      },
+      "product": "Purple Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CYAN DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Cyan Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "WHITE BED": 1,
+        "LIGHT GRAY DYE": 1
+      },
+      "product": "Light Gray Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "GRAY DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Gray Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "PINK DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Pink Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIME DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Lime Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "YELLOW DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Yellow Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "LIGHT BLUE DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Light Blue Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "MAGENTA DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Magenta Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "ORANGE DYE": 1,
+        "WHITE BED": 1
+      },
+      "product": "Orange Bed",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "CLOTH": 5
+      },
+      "product": "Blue Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CLOTH": 5,
+        "GREEN DYE": 1
+      },
+      "product": "Green Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CLOTH": 5,
+        "YELLOW DYE": 1
+      },
+      "product": "Yellow Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CLOTH": 5,
+        "BLACK DYE": 1
+      },
+      "product": "Black Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CLOTH": 5,
+        "ORANGE DYE": 1
+      },
+      "product": "Orange Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CLOTH": 5,
+        "PURPLE DYE": 1
+      },
+      "product": "Purple Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "CYAN DYE": 1,
+        "CLOTH": 5
+      },
+      "product": "Cyan Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {"CLOTH": 5},
+      "product": "Reg Clothes",
+      "amount": 1
+    },
+    {
+      "costs": {"LEATHER": 10},
+      "product": "Leather Armor",
+      "amount": 1
+    }
+  ],
+  "dyeVat": [
+    {
+      "costs": {"WHITE LILY": 1},
+      "product": "White Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"OXEYE DAISY": 1},
+      "product": "Light Gray Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"HYDRANGEA": 1},
+      "product": "Light Gray Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"WHITE TULIP": 1},
+      "product": "Light Gray Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"LAPIS": 1},
+      "product": "Blue Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"CORNFLOWER": 1},
+      "product": "Blue Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"IRIS": 1},
+      "product": "Blue Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"CACTUS": 1},
+      "product": "Green Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"SUNFLOWER": 1},
+      "product": "Yellow Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"DANDELION": 1},
+      "product": "Yellow Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"BLUE ORCHID": 1},
+      "product": "Light Blue Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"PERIWINKLE": 1},
+      "product": "Light Blue Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"COAL": 1},
+      "product": "Black Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"ROSE": 1},
+      "product": "Red Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"RED TULIP": 1},
+      "product": "Red Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"POPPY": 1},
+      "product": "Red Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"ALLIUM": 1},
+      "product": "Magenta Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"ORANGE TULIP": 1},
+      "product": "Orange Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"PINK TULIP": 1},
+      "product": "Pink Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"PEONY": 1},
+      "product": "Pink Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"PINK LILY": 1},
+      "product": "Pink Dye",
+      "amount": 1
+    },
+    {
+      "costs": {"VIOLET": 1},
+      "product": "Purple Dye",
+      "amount": 1
+    },
+    {
+      "costs": {
+        "YELLOW DYE": 1,
+        "RED DYE": 1
+      },
+      "product": "Orange Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "RED DYE": 1
+      },
+      "product": "Purple Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "GREEN DYE": 1
+      },
+      "product": "Cyan Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "GREEN DYE": 1,
+        "RED DYE": 1
+      },
+      "product": "Brown Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "WHITE DYE": 1,
+        "RED DYE": 1
+      },
+      "product": "Pink Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "WHITE DYE": 1
+      },
+      "product": "Light Blue Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "GREEN DYE": 1,
+        "WHITE DYE": 1
+      },
+      "product": "Lime Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "WHITE DYE": 1,
+        "BLACK DYE": 1
+      },
+      "product": "Gray Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "GRAY DYE": 1,
+        "WHITE DYE": 1
+      },
+      "product": "Light Gray Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "WHITE DYE": 2,
+        "BLACK DYE": 1
+      },
+      "product": "Light Gray Dye",
+      "amount": 3
+    },
+    {
+      "costs": {
+        "PINK DYE": 1,
+        "PURPLE DYE": 1
+      },
+      "product": "Magenta Dye",
+      "amount": 2
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "WHITE DYE": 1,
+        "RED DYE": 2
+      },
+      "product": "Magenta Dye",
+      "amount": 4
+    },
+    {
+      "costs": {
+        "BLUE DYE": 1,
+        "PINK DYE": 1,
+        "RED DYE": 1
+      },
+      "product": "Magenta Dye",
+      "amount": 4
+    }
+  ],
+  "workbenchDyeVat": [{
+    "costs": {
+      "STONE": 10,
+      "IRON": 5
+    },
+    "product": "Dye Vat",
+    "amount": 1
+  }]
+}

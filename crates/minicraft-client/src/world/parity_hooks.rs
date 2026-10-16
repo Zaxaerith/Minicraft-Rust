@@ -392,3 +392,72 @@ impl World {
         }
     }
 }
+
+impl World {
+    pub(crate) fn java230_render_preview(path: &std::path::Path) -> Result<(), String> {
+        use crate::entity::furniture::{FurnitureKind, bed};
+        use crate::item::dye::DyeColor;
+        use crate::level::tile::{Tile, flower::FlowerVariant};
+        let assets = crate::assets::Assets::load(&[])?;
+        let localization = crate::resource::localization::Localization::load("en-us", &[]);
+        let mut world = crate::world::World::new_with_play_options(
+            42,
+            crate::level::WorldSpec::new(128, 0, 0),
+            crate::world::PlayOptions {
+                difficulty: 1,
+                mode: GameMode::Survival,
+                score_minutes: 20,
+                tutorials: false,
+                quests: false,
+                show_quests: false,
+                custom_skin: false,
+            },
+        );
+        world.player.x = 8 * 16 + 8;
+        world.player.y = 9 * 16 + 8;
+        world.player_removed = true;
+        world.render_gui = false;
+        world.clock.set_day_tick(18_000);
+        let level = &mut world.levels[world.current_level];
+        level.tiles.fill(Tile::Grass);
+        level.data.fill(0);
+        level.entities = Default::default();
+        for color in DyeColor::ALL {
+            let index = 1 + color as usize + 5 * world.width;
+            level.tiles[index] =
+                crate::item::wool::wool_tile(color.wool_item()).ok_or("missing wool tile")?;
+            level.entities.spawn_furniture_with_state(
+                FurnitureKind::Bed,
+                (1 + (color as i32 % 8) * 2) * 16 + 8,
+                (10 + (color as i32 / 8) * 2) * 16 + 8,
+                bed::state_for_color(color),
+            );
+        }
+        for (index, variant) in FlowerVariant::ALL.into_iter().enumerate() {
+            let offset = 1 + index % 16 + (7 + index / 16) * world.width;
+            level.tiles[offset] = Tile::Flower230;
+            level.data[offset] = variant as u16;
+        }
+        let mut screen = crate::gfx::Screen::new();
+        world.render(&mut screen, &assets, &localization);
+        for (text, y) in [
+            ("16 WOOL", 8),
+            ("19 FLOWERS", 42),
+            ("16 BEDS", 86),
+            ("16 DYES", 166),
+        ] {
+            screen.text(assets.font(), text, 8, y);
+        }
+        for color in DyeColor::ALL {
+            screen.blit(
+                assets.item(color.dye_item()),
+                8 + i32::from(color as u8) * 16,
+                178,
+            );
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        screen.save_png(path)
+    }
+}

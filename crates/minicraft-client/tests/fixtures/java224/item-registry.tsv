@@ -1,0 +1,142 @@
+PowerGlove	missing_item	Power Glove
+Wood	wood	Wood
+Stone	stone	Stone
+Coal	coal	Coal
+Slime	slime	Slime
+Cloth	cloth	Cloth
+Leather	leather	Leather
+RawBeef	beef	Raw Beef
+RawPork	pork	Raw Pork
+Wool	wool	Wool
+Bone	bone	Bone
+Arrow	arrow	Arrow
+Gunpowder	gunpowder	Gunpowder
+Scale	scale	Scale
+Shard	shard	Shard
+Plank	plank	Plank
+Torch	torch	Torch
+Workbench	workbench	Workbench
+IronOre	iron_ore	Iron Ore
+GoldOre	gold_ore	Gold Ore
+Gem	gem	Gem
+Lapis	lapis	Lapis
+CloudOre	cloud_ore	Cloud Ore
+IronIngot	iron_ingot	Iron
+GoldIngot	gold_ingot	Gold
+Oven	oven	Oven
+Furnace	furnace	Furnace
+Anvil	anvil	Anvil
+Enchanter	enchanter	Enchanter
+Loom	loom	Loom
+String	string	String
+CookedPork	cooked_pork	Cooked Pork
+Steak	cooked_beef	Steak
+ArcaneFertilizer	arcane_fertilizer	Arcane Fertilizer
+Apple	apple	Apple
+RawFish	fish	Raw Fish
+Bread	bread	Bread
+CookedFish	cooked_fish	Cooked Fish
+GoldenApple	golden_apple	Gold Apple
+Potato	potato	Potato
+Tomato	tomato	Tomato
+BakedPotato	baked_potato	Baked Potato
+Wheat	wheat	Wheat
+Key	key	Key
+Rose	rose	Rose
+Flower	oxeye_daisy	Oxeye Daisy
+Cactus	cactus	Cactus
+Sand	sand	Sand
+Glass	glass	Glass
+GlassBottle	glass_bottle	Glass Bottle
+Fertilizer	fertilizer	Fertilizer
+Dirt	dirt	Dirt
+Acorn	acorn	Acorn
+NaturalRock	stone	Natural Rock
+Cloud	cloud	Cloud
+PlankWall	plank_wall	Plank Wall
+WoodDoor	wood_door	Wood Door
+WoodFence	wood_fence	Wood Fence
+StoneBrick	stone_brick	Stone Brick
+OrnateStone	stone_brick	Ornate Stone
+StoneWall	stone_wall	Stone Wall
+StoneDoor	stone_door	Stone Door
+StoneFence	stone_fence	Stone Fence
+RawObsidian	obsidian	Raw Obsidian
+ObsidianBrick	obsidian_brick	Obsidian Brick
+OrnateObsidian	obsidian_brick	Ornate Obsidian
+ObsidianWall	obsidian_wall	Obsidian Wall
+ObsidianDoor	obsidian_door	Obsidian Door
+ObsidianFence	obsidian_fence	Obsidian Fence
+RedWool	red_wool	Red Wool
+BlueWool	blue_wool	Blue Wool
+GreenWool	green_wool	Green Wool
+YellowWool	yellow_wool	Yellow Wool
+BlackWool	black_wool	Black Wool
+RedClothes	red_clothes	Red Clothes
+BlueClothes	blue_clothes	Blue Clothes
+GreenClothes	green_clothes	Green Clothes
+YellowClothes	yellow_clothes	Yellow Clothes
+BlackClothes	black_clothes	Black Clothes
+OrangeClothes	orange_clothes	Orange Clothes
+PurpleClothes	purple_clothes	Purple Clothes
+CyanClothes	cyan_clothes	Cyan Clothes
+RegularClothes	reg_clothes	Reg Clothes
+LeatherArmor	leather_armor	Leather Armor
+SnakeArmor	snake_armor	Snake Armor
+IronArmor	iron_armor	Iron Armor
+GoldArmor	gold_armor	Gold Armor
+GemArmor	gem_armor	Gem Armor
+EmptyBucket	bucket	Empty Bucket
+WaterBucket	water_bucket	Water Bucket
+LavaBucket	lava_bucket	Lava Bucket
+AwkwardPotion	potion	Awkward Potion
+SpeedPotion	potion	Speed Potion
+LightPotion	potion	Light Potion
+SwimPotion	potion	Swim Potion
+HastePotion	potion	Haste Potion
+LavaPotion	potion	Lava Potion
+EnergyPotion	potion	Energy Potion
+RegenPotion	potion	Regen Potion
+HealthPotion	potion	Health Potion
+EscapePotion	potion	Escape Potion
+ShieldPotion	potion	Shield Potion
+TimePotion	potion	Time Potion
+AirTotem	air_totem	Totem of Air
+ObsidianPoppet	knight_statue	Obsidian Poppet
+ObsidianHeart	obsidian_heart	Obsidian Heart
+WoodFishingRod	wooden_fishing_rod	Wood Fishing Rod
+IronFishingRod	iron_fishing_rod	Iron Fishing Rod
+GoldFishingRod	gold_fishing_rod	Gold Fishing Rod
+GemFishingRod	gem_fishing_rod	Gem Fishing Rod
+WateringCan	watering_can	Watering Can
+WheatSeeds	seed	Wheat Seeds
+Carrot	carrot	Carrot
+TomatoSeeds	seed	Tomato Seeds
+HeavenlyBerries	heavenly_berries	Heavenly Berries
+HellishBerries	hellish_berries	Hellish Berries
+GrassSeeds	seed	Grass Seeds
+Sign	sign	Sign
+FarmlandItem	missing_item	Farmland
+HoleItem	missing_item	Hole
+LavaItem	missing_item	Lava
+PathItem	missing_item	Path
+WaterItem	missing_item	Water
+Chest	chest	Chest
+DungeonChest	dungeon_chest	Dungeon Chest
+Tnt	tnt	TNT
+Bed	bed	Bed
+Composter	composter	Composter
+Lantern	lantern	Lantern
+IronLantern	iron_lantern	Iron Lantern
+GoldLantern	gold_lantern	Gold Lantern
+CowSpawner	cow_spawner	Cow Spawner
+PigSpawner	pig_spawner	Pig Spawner
+SheepSpawner	sheep_spawner	Sheep Spawner
+SlimeSpawner	slime_spawner	Slime Spawner
+ZombieSpawner	zombie_spawner	Zombie Spawner
+CreeperSpawner	creeper_spawner	Creeper Spawner
+SkeletonSpawner	skeleton_spawner	Skeleton Spawner
+SnakeSpawner	snake_spawner	Snake Spawner
+KnightSpawner	knight_spawner	Knight Spawner
+Book	book	Book
+AntidiousBook	antidious_book	Antidious

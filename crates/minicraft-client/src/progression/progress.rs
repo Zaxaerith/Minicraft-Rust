@@ -14,16 +14,76 @@ use super::quest::{Quest, QuestGroup, QuestGroupView, QuestView, quests};
 use super::tutorial::{TutorialStep, tutorials};
 use serde_json::{Value, json};
 
+/// Preserve 2.2.4 owners and append namespaced 2.3 definitions so old saved
+/// completion cannot suppress new dye-cost unlock rules with the same Java ID.
 fn recipe_elements() -> Result<Vec<AdvancementElement>, String> {
-    let value: Value =
-        serde_json::from_str(include_str!("../../../../assets/resources/recipes.json"))
+    let mut elements = Vec::new();
+    for (source, prefix) in [
+        (
+            include_str!("../../../../assets/resources/recipes.json"),
+            "",
+        ),
+        (
+            include_str!("../../../../assets/expansion230/recipe_unlocks.json"),
+            "java230:",
+        ),
+    ] {
+        let value: Value = serde_json::from_str(source)
             .map_err(|error| format!("invalid bundled recipes: {error}"))?;
-    value
-        .as_object()
-        .ok_or("bundled recipes must be an object")?
-        .iter()
-        .map(|(id, element)| parse_element(id, element, false))
-        .collect()
+        for (id, element) in value
+            .as_object()
+            .ok_or("bundled recipes must be an object")?
+        {
+            elements.push(parse_element(&format!("{prefix}{id}"), element, false)?);
+        }
+    }
+    Ok(elements)
+}
+
+fn recipe_name(name: &str) -> String {
+    if name.eq_ignore_ascii_case("White Wool") {
+        "WOOL".to_owned()
+    } else {
+        name.to_ascii_uppercase()
+    }
+}
+
+fn recipe_product(name: &str) -> String {
+    name.rsplit_once('_').map_or_else(
+        || recipe_name(name),
+        |(name, count)| format!("{}_{count}", recipe_name(name)),
+    )
+}
+
+fn recipe_costs_match(
+    recipe: &crate::item::RecipeView,
+    costs: impl Iterator<Item = impl AsRef<str>>,
+) -> bool {
+    let mut expected = HashMap::<String, u32>::new();
+    for cost in recipe.costs {
+        *expected
+            .entry(recipe_name(cost.item.display_name()))
+            .or_default() += u32::from(cost.count);
+    }
+    if let Some((kind, tier)) = recipe.tool_cost {
+        *expected
+            .entry(recipe_name(
+                &crate::item::ToolItem::new(kind, tier).display_name(),
+            ))
+            .or_default() += 1;
+    }
+    let mut actual = HashMap::<String, u32>::new();
+    for cost in costs {
+        let Some((name, amount)) = cost.as_ref().rsplit_once('_') else {
+            return false;
+        };
+        let Ok(amount) = amount.parse::<u32>() else {
+            return false;
+        };
+        let count = actual.entry(recipe_name(name)).or_default();
+        *count = count.saturating_add(amount);
+    }
+    expected == actual
 }
 
 /// ISO local-date-time accepted by Java. New events use UTC; imported local
@@ -92,6 +152,10 @@ pub struct ProgressState {
     unlocking_times: HashMap<String, String>,
     #[serde(default)]
     imported_recipe_unlocks: bool,
+    #[serde(default)]
+    recipe_variants: HashMap<String, Vec<Vec<String>>>,
+    #[serde(default)]
+    recipe_catalog_version: u8,
 }
 
 impl ProgressState {
@@ -111,44 +175,23 @@ impl ProgressState {
             RecipeOutput::Stack(stack) => stack.count,
             RecipeOutput::Tool(_) => 1,
         };
-        let key = format!("{}_{amount}", recipe.product_name());
-        let Some((_, costs)) = self
-            .unlocked_recipes
-            .iter()
-            .find(|(saved, _)| saved.eq_ignore_ascii_case(&key))
-        else {
-            return false;
-        };
-        let mut expected: HashMap<String, u32> = recipe
-            .costs
-            .iter()
-            .map(|cost| {
-                (
-                    cost.item.display_name().to_ascii_uppercase(),
-                    u32::from(cost.count),
-                )
-            })
-            .collect();
-        if let Some((kind, tier)) = recipe.tool_cost {
-            expected.insert(
-                crate::item::ToolItem::new(kind, tier)
-                    .display_name()
-                    .to_ascii_uppercase(),
-                1,
-            );
-        }
-        let mut actual = HashMap::new();
-        for cost in costs.as_array().into_iter().flatten() {
-            let Some((name, amount)) = cost.as_str().and_then(|s| s.rsplit_once('_')) else {
+        let key = format!("{}_{amount}", recipe_name(&recipe.product_name()));
+        self.recipe_variants.get(&key).is_some_and(|variants| {
+            variants
+                .iter()
+                .any(|costs| recipe_costs_match(recipe, costs.iter()))
+        }) || self.unlocked_recipes.iter().any(|(product, costs)| {
+            if recipe_product(product) != key {
+                return false;
+            }
+            let Some(costs) = costs.as_array() else {
                 return false;
             };
-            let Ok(amount) = amount.parse::<u32>() else {
+            if costs.iter().any(|v| !v.is_string()) {
                 return false;
-            };
-            let count = actual.entry(name.to_ascii_uppercase()).or_insert(0u32);
-            *count = count.saturating_add(amount);
-        }
-        expected == actual
+            }
+            recipe_costs_match(recipe, costs.iter().filter_map(Value::as_str))
+        })
     }
     /// Java Save.writePlayer stores full recipe definitions, not recipe IDs.
     pub fn import_unlocked_recipes(&mut self, value: Value) -> Result<(), String> {
@@ -162,8 +205,34 @@ impl ProgressState {
             }
         }
         self.unlocked_recipes = map.clone();
+        self.recipe_variants.clear();
+        self.remember_unlocked_recipes();
         self.imported_recipe_unlocks = true;
         Ok(())
+    }
+
+    /// Keep earned legacy definitions even when the new catalog introduces
+    /// another cost list for the same output. This migrates metadata only.
+    fn remember_unlocked_recipes(&mut self) {
+        for (product, costs) in &self.unlocked_recipes {
+            let Some(costs) = costs.as_array() else {
+                continue;
+            };
+            let Some(costs) = costs
+                .iter()
+                .map(|value| value.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            let variants = self
+                .recipe_variants
+                .entry(recipe_product(product))
+                .or_default();
+            if !variants.contains(&costs) {
+                variants.push(costs);
+            }
+        }
     }
 
     pub fn unlocked_recipes_json(&self) -> Value {
@@ -328,6 +397,8 @@ impl ProgressState {
             criterion_times: Default::default(),
             unlocking_times: Default::default(),
             imported_recipe_unlocks: false,
+            recipe_variants: HashMap::new(),
+            recipe_catalog_version: 1,
         })
     }
 
@@ -346,8 +417,14 @@ impl ProgressState {
         tutorials_enabled: bool,
         quests_enabled: bool,
     ) -> ProgressUpdate {
-        if self.recipe_elements.is_empty() {
-            self.recipe_elements = recipe_elements().unwrap_or_default();
+        if self.recipe_catalog_version == 0 || self.recipe_elements.is_empty() {
+            self.remember_unlocked_recipes();
+            // Definitions are static metadata, not earned state; preserve all
+            // recorded completions/timestamps and add the new catalog once.
+            if let Ok(elements) = recipe_elements() {
+                self.recipe_elements = elements;
+                self.recipe_catalog_version = 1;
+            }
         }
         for element in &self.recipe_elements {
             if self.recipe_completed.contains(&element.key) {
@@ -375,6 +452,16 @@ impl ProgressState {
                 self.recipe_completed.insert(element.key.clone());
                 if let Some(rewards) = &element.rewards {
                     for recipe in &rewards.recipes {
+                        // Java's JSON object holds one cost list per product.
+                        // Native progress also retains alternatives (e.g. three
+                        // flowers yielding Light Gray Dye) without overwriting.
+                        let variants = self
+                            .recipe_variants
+                            .entry(recipe_product(&recipe.product))
+                            .or_default();
+                        if !variants.contains(&recipe.costs) {
+                            variants.push(recipe.costs.clone());
+                        }
                         self.unlocked_recipes
                             .insert(recipe.product.clone(), json!(recipe.costs));
                     }

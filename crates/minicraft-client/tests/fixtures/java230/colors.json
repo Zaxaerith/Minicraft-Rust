@@ -1,0 +1,178 @@
+[
+  {
+    "dye": "Black Dye",
+    "wool": "Black Wool",
+    "dyeData": "Black Dye_1",
+    "woolData": "Black Wool_1",
+    "dyeSprite": "black_dye",
+    "name": "Black",
+    "ordinal": 0,
+    "packedColor": 18685217,
+    "woolSprite": "black_wool"
+  },
+  {
+    "dye": "Red Dye",
+    "wool": "Red Wool",
+    "dyeData": "Red Dye_1",
+    "woolData": "Red Wool_1",
+    "dyeSprite": "red_dye",
+    "name": "Red",
+    "ordinal": 1,
+    "packedColor": 28323366,
+    "woolSprite": "red_wool"
+  },
+  {
+    "dye": "Green Dye",
+    "wool": "Green Wool",
+    "dyeData": "Green Dye_1",
+    "woolData": "Green Wool_1",
+    "dyeSprite": "green_dye",
+    "name": "Green",
+    "ordinal": 2,
+    "packedColor": 22969366,
+    "woolSprite": "green_wool"
+  },
+  {
+    "dye": "Brown Dye",
+    "wool": "Brown Wool",
+    "dyeData": "Brown Dye_1",
+    "woolData": "Brown Wool_1",
+    "dyeSprite": "brown_dye",
+    "name": "Brown",
+    "ordinal": 3,
+    "packedColor": 25383986,
+    "woolSprite": "brown_wool"
+  },
+  {
+    "dye": "Blue Dye",
+    "wool": "Blue Wool",
+    "dyeData": "Blue Dye_1",
+    "woolData": "Blue Wool_1",
+    "dyeSprite": "blue_dye",
+    "name": "Blue",
+    "ordinal": 4,
+    "packedColor": 20726954,
+    "woolSprite": "blue_wool"
+  },
+  {
+    "dye": "Purple Dye",
+    "wool": "Purple Wool",
+    "dyeData": "Purple Dye_1",
+    "woolData": "Purple Wool_1",
+    "dyeSprite": "purple_dye",
+    "name": "Purple",
+    "ordinal": 5,
+    "packedColor": 25768632,
+    "woolSprite": "purple_wool"
+  },
+  {
+    "dye": "Cyan Dye",
+    "wool": "Cyan Wool",
+    "dyeData": "Cyan Dye_1",
+    "woolData": "Cyan Wool_1",
+    "dyeSprite": "cyan_dye",
+    "name": "Cyan",
+    "ordinal": 6,
+    "packedColor": 18259100,
+    "woolSprite": "cyan_wool"
+  },
+  {
+    "dye": "Light Gray Dye",
+    "wool": "Light Gray Wool",
+    "dyeData": "Light Gray Dye_1",
+    "woolData": "Light Gray Wool_1",
+    "dyeSprite": "light_gray_dye",
+    "name": "Light Gray",
+    "ordinal": 7,
+    "packedColor": 27106711,
+    "woolSprite": "light_gray_wool"
+  },
+  {
+    "dye": "Gray Dye",
+    "wool": "Gray Wool",
+    "dyeData": "Gray Dye_1",
+    "woolData": "Gray Wool_1",
+    "dyeSprite": "gray_dye",
+    "name": "Gray",
+    "ordinal": 8,
+    "packedColor": 21450578,
+    "woolSprite": "gray_wool"
+  },
+  {
+    "dye": "Pink Dye",
+    "wool": "Pink Wool",
+    "dyeData": "Pink Dye_1",
+    "woolData": "Pink Wool_1",
+    "dyeSprite": "pink_dye",
+    "name": "Pink",
+    "ordinal": 9,
+    "packedColor": 32738218,
+    "woolSprite": "pink_wool"
+  },
+  {
+    "dye": "Lime Dye",
+    "wool": "Lime Wool",
+    "dyeData": "Lime Dye_1",
+    "woolData": "Lime Wool_1",
+    "dyeSprite": "lime_dye",
+    "name": "Lime",
+    "ordinal": 10,
+    "packedColor": 25216799,
+    "woolSprite": "lime_wool"
+  },
+  {
+    "dye": "Yellow Dye",
+    "wool": "Yellow Wool",
+    "dyeData": "Yellow Dye_1",
+    "woolData": "Yellow Wool_1",
+    "dyeSprite": "yellow_dye",
+    "name": "Yellow",
+    "ordinal": 11,
+    "packedColor": 33478717,
+    "woolSprite": "yellow_wool"
+  },
+  {
+    "dye": "Light Blue Dye",
+    "wool": "Light Blue Wool",
+    "dyeData": "Light Blue Dye_1",
+    "woolData": "Light Blue Wool_1",
+    "dyeSprite": "light_blue_dye",
+    "name": "Light Blue",
+    "ordinal": 12,
+    "packedColor": 20624346,
+    "woolSprite": "light_blue_wool"
+  },
+  {
+    "dye": "Magenta Dye",
+    "wool": "Magenta Wool",
+    "dyeData": "Magenta Dye_1",
+    "woolData": "Magenta Wool_1",
+    "dyeSprite": "magenta_dye",
+    "name": "Magenta",
+    "ordinal": 13,
+    "packedColor": 29839037,
+    "woolSprite": "magenta_wool"
+  },
+  {
+    "dye": "Orange Dye",
+    "wool": "Orange Wool",
+    "dyeData": "Orange Dye_1",
+    "woolData": "Orange Wool_1",
+    "dyeSprite": "orange_dye",
+    "name": "Orange",
+    "ordinal": 14,
+    "packedColor": 33128477,
+    "woolSprite": "orange_wool"
+  },
+  {
+    "dye": "White Dye",
+    "wool": "White Wool",
+    "dyeData": "White Dye_1",
+    "woolData": "White Wool_1",
+    "dyeSprite": "white_dye",
+    "name": "White",
+    "ordinal": 15,
+    "packedColor": 33161214,
+    "woolSprite": "white_wool"
+  }
+]

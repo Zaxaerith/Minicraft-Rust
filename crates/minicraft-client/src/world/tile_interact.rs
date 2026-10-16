@@ -59,7 +59,8 @@ impl World {
         let tile = self.levels[self.current_level].tiles[index];
         let data = self.levels[self.current_level].data[index];
         let replacement = match tile {
-            Tile::Tree | Tile::TreeSapling | Tile::Flower => Tile::Grass,
+            Tile::Tree | Tile::TreeSapling | Tile::Flower | Tile::Flower230 => Tile::Grass,
+            wool if crate::level::tile::wool::is_wool(wool) => Tile::Hole,
             Tile::Cactus | Tile::CactusSapling => Tile::Sand,
             Tile::Rock
             | Tile::HardRock

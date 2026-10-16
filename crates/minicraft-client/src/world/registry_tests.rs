@@ -2110,12 +2110,14 @@ fn hoe_plant_growth_and_harvest_form_a_playable_farm_loop() {
 
 #[test]
 fn all_2_2_4_tile_ids_round_trip() {
-    assert_eq!(Tile::ALL.len(), 59);
-    for (id, tile) in Tile::ALL.iter().copied().enumerate() {
+    assert!(Tile::ALL.len() > 59);
+    // The stable 0..58 prefix is unchanged even after appending 2.3 tiles.
+    for (id, tile) in Tile::ALL[..59].iter().copied().enumerate() {
         assert_eq!(tile.id(), id as u8);
         assert_eq!(Tile::from_id(id as u8), Some(tile));
     }
-    assert_eq!(Tile::from_id(59), None);
+    assert!(Tile::from_id(59).is_some());
+    assert_eq!(Tile::from_id(Tile::ALL.len() as u8), None);
     assert_eq!(Tile::Sign.id(), 58);
     assert_eq!(Tile::from_legacy_id(1), Some((Tile::Rock, 0)));
     assert_eq!(

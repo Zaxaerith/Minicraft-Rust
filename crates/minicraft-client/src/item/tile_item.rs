@@ -32,17 +32,22 @@ fn is_fluid_or_hole(target: Tile) -> bool {
 }
 
 fn is_floor_target(target: Tile) -> bool {
-    SOLID_TILES.contains(&target)
+    SOLID_TILES.contains(&target) || crate::level::tile::wool::is_wool(target)
 }
 
 /// Java `TileItem.interactOn` success path: `(placed_tile, tile_data)`.
 /// Data preserves the underlying floor for fences/torches/signs
 /// (`placeOverWithID`) and is 0 for plain floor/fluid replacements.
 pub fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
+    if let Some(flower) = crate::level::tile::flower::FlowerVariant::from_item(item) {
+        return (target == Tile::Grass).then_some((Tile::Flower230, flower as u16));
+    }
+    if let Some(wool) = super::wool::placement(item, target) {
+        return Some(wool);
+    }
     let fluid_or_hole = is_fluid_or_hole(target);
     let floor_target = is_floor_target(target);
     Some(match item {
-        ItemId::Flower if target == Tile::Grass => (Tile::Flower, 0),
         ItemId::Acorn if target == Tile::Grass => (Tile::TreeSapling, 0),
         ItemId::Dirt if fluid_or_hole => (Tile::Dirt, 0),
         ItemId::NaturalRock
@@ -91,12 +96,6 @@ pub fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
         ItemId::ObsidianWall if target == Tile::ObsidianFloor => (Tile::ObsidianWall, 0),
         ItemId::ObsidianDoor if target == Tile::ObsidianFloor => (Tile::ObsidianDoor, 0),
         ItemId::ObsidianFence if floor_target => (Tile::ObsidianFence, target.id() as u16),
-        ItemId::Wool if matches!(target, Tile::Hole | Tile::Water) => (Tile::WhiteWool, 0),
-        ItemId::RedWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::RedWool, 0),
-        ItemId::BlueWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlueWool, 0),
-        ItemId::GreenWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::GreenWool, 0),
-        ItemId::YellowWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::YellowWool, 0),
-        ItemId::BlackWool if matches!(target, Tile::Hole | Tile::Water) => (Tile::BlackWool, 0),
         ItemId::Sand if fluid_or_hole => (Tile::Sand, 0),
         ItemId::Cactus if target == Tile::Sand => (Tile::CactusSapling, 0),
         ItemId::Cloud if target == Tile::InfiniteFall => (Tile::Cloud, 0),

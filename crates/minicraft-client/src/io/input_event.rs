@@ -28,6 +28,9 @@ pub struct Input {
     pub menu: bool,
     pub craft: bool,
     pub pickup: bool,
+    /// Keyboard drop edges: one item, or the selected stack (stack wins if both).
+    pub drop_one: bool,
+    pub drop_stack: bool,
     /// Java SEARCHER-BAR / PAGE-UP / PAGE-DOWN menu actions.
     pub search: bool,
     pub page_up: bool,
@@ -72,6 +75,8 @@ impl Input {
         self.menu |= latest.menu;
         self.craft |= latest.craft;
         self.pickup |= latest.pickup;
+        self.drop_one |= latest.drop_one;
+        self.drop_stack |= latest.drop_stack;
         self.search |= latest.search;
         self.page_up |= latest.page_up;
         self.page_down |= latest.page_down;
@@ -102,6 +107,8 @@ impl Input {
         self.menu = false;
         self.craft = false;
         self.pickup = false;
+        self.drop_one = false;
+        self.drop_stack = false;
         self.search = false;
         self.page_up = false;
         self.page_down = false;
@@ -111,5 +118,29 @@ impl Input {
         self.backspace = false;
         self.text.clear();
         tick
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Input;
+
+    #[test]
+    fn drop_edges_survive_empty_frames_and_are_consumed_once() {
+        let mut pending = Input::default();
+        pending.latch(Input {
+            drop_one: true,
+            ..Input::default()
+        });
+        pending.latch(Input::default());
+        assert!(pending.take_tick().drop_one);
+        assert!(!pending.take_tick().drop_one);
+        pending.latch(Input {
+            drop_stack: true,
+            ..Input::default()
+        });
+        pending.latch(Input::default());
+        assert!(pending.take_tick().drop_stack);
+        assert!(!pending.take_tick().drop_stack);
     }
 }

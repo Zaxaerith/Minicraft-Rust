@@ -389,7 +389,12 @@ impl World {
                 } else {
                     player_y - 12
                 };
-                assets.furniture_linked(kind).render(
+                let sprite = if let Some(color) = crate::item::dye::DyeColor::from_bed_item(item) {
+                    assets.colored_bed_linked(color)
+                } else {
+                    assets.furniture_linked(kind)
+                };
+                sprite.render(
                     assets.sheets(),
                     screen,
                     self.player.x - 8 - camera_x,

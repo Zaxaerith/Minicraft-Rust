@@ -234,6 +234,18 @@ impl EntityArena {
         id
     }
 
+    pub fn spawn_furniture_with_state(
+        &mut self,
+        kind: FurnitureKind,
+        x: i32,
+        y: i32,
+        state: u16,
+    ) -> u64 {
+        let id = self.spawn_furniture(kind, x, y);
+        self.entities.last_mut().expect("inserted furniture").state = state;
+        id
+    }
+
     pub fn spawn_arrow(
         &mut self,
         x: i32,
@@ -339,6 +351,38 @@ impl EntityArena {
         })
     }
 
+    /// Checks the same Power Glove rules without removing anything. The caller
+    /// can reserve inventory room before committing the pickup.
+    pub fn pickup_furniture_candidate_near(
+        &self,
+        x: i32,
+        y: i32,
+        radius: i32,
+        creative: bool,
+    ) -> Option<(u64, FurnitureKind, u16)> {
+        self.entities.iter().find_map(|entity| {
+            if entity.removed || squared_distance(entity.x, entity.y, x, y) > radius * radius {
+                return None;
+            }
+            let EntityKind::Furniture(kind) = entity.kind else {
+                return None;
+            };
+            if (chest::is_container(kind) && entity.state == chest::DEATH_CHEST_STATE)
+                || kind == FurnitureKind::KnightStatue
+                || (kind == FurnitureKind::Tnt && entity.state > 0)
+                || (!creative
+                    && (kind.spawner_mob().is_some()
+                        || entity
+                            .storage
+                            .as_ref()
+                            .is_some_and(|storage| storage.used_slots() > 0)))
+            {
+                return None;
+            }
+            Some((entity.id, kind, entity.state))
+        })
+    }
+
     pub fn pickup_furniture_near(
         &mut self,
         x: i32,
@@ -346,35 +390,8 @@ impl EntityArena {
         radius: i32,
         creative: bool,
     ) -> Option<FurnitureKind> {
-        let entity = self.entities.iter_mut().find(|entity| {
-            if entity.removed || squared_distance(entity.x, entity.y, x, y) > radius * radius {
-                return false;
-            }
-            let EntityKind::Furniture(kind) = entity.kind else {
-                return false;
-            };
-            if entity.state == chest::DEATH_CHEST_STATE
-                || kind == FurnitureKind::KnightStatue
-                || (kind == FurnitureKind::Tnt && entity.state > 0)
-            {
-                return false;
-            }
-            if !creative
-                && (kind.spawner_mob().is_some()
-                    || entity
-                        .storage
-                        .as_ref()
-                        .is_some_and(|storage| storage.used_slots() > 0))
-            {
-                return false;
-            }
-            true
-        })?;
-        let EntityKind::Furniture(kind) = entity.kind else {
-            unreachable!();
-        };
-        entity.removed = true;
-        self.entities.retain(|entity| !entity.removed);
+        let (id, kind, _) = self.pickup_furniture_candidate_near(x, y, radius, creative)?;
+        self.mark_removed_by_id(id);
         Some(kind)
     }
 
@@ -417,7 +434,9 @@ impl EntityArena {
             let EntityKind::Furniture(kind) = entity.kind else {
                 continue;
             };
-            if entity.state == chest::DEATH_CHEST_STATE || entity.push_time != 0 {
+            if (chest::is_container(kind) && entity.state == chest::DEATH_CHEST_STATE)
+                || entity.push_time != 0
+            {
                 continue;
             }
             if !statue::can_push() && kind == FurnitureKind::KnightStatue {

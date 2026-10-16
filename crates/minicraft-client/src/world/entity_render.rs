@@ -1,5 +1,5 @@
 //! Per-kind entity drawing (Java Entity.render / MobAi / Furniture / particles).
-use super::{Assets, EntityKind, Screen, TILE_SIZE, Tile, entity, spawn};
+use super::{Assets, EntityKind, FurnitureKind, Screen, TILE_SIZE, Tile, entity, spawn};
 
 // Keep the existing coordinate/render API without adding wrapper state.
 #[allow(clippy::too_many_arguments)]
@@ -201,7 +201,14 @@ pub(super) fn render_entity(
         }
         EntityKind::Furniture(kind) => {
             // Java Furniture.render: LinkedSprite at (x-8, y-8).
-            assets.furniture_linked(*kind).render(
+            let sprite = if *kind == FurnitureKind::Bed && entity.state != 0 {
+                assets.colored_bed_linked(crate::entity::furniture::bed::color_from_state(
+                    entity.state,
+                ))
+            } else {
+                assets.furniture_linked(*kind)
+            };
+            sprite.render(
                 assets.sheets(),
                 screen,
                 entity.x - 8 - camera_x,

@@ -57,6 +57,8 @@ impl InputBuffer {
             input.menu = clicked("MENU") || pad[7];
             input.craft = clicked("CRAFT");
             input.pickup = clicked("PICKUP") || pad[8];
+            input.drop_stack = clicked("DROP-STACK");
+            input.drop_one = clicked("DROP-ONE") && !input.drop_stack;
             input.search = clicked("SEARCHER-BAR");
             input.page_up = clicked("PAGE-UP");
             input.page_down = clicked("PAGE-DOWN");
@@ -309,6 +311,9 @@ pub fn poll_input(
         menu: binding_pressed(window, &bindings.menu) || pad.menu,
         craft: binding_pressed(window, &bindings.craft) || pad.craft,
         pickup: binding_pressed(window, &bindings.pickup) || pad.pickup,
+        drop_one: binding_pressed(window, &bindings.drop_one)
+            && !binding_pressed(window, &bindings.drop_stack),
+        drop_stack: binding_pressed(window, &bindings.drop_stack),
         search: binding_pressed(window, &bindings.searcher_bar),
         page_up: binding_pressed(window, &bindings.page_up),
         page_down: binding_pressed(window, &bindings.page_down),
@@ -349,6 +354,55 @@ mod tests {
         assert!(!next.attack);
         assert!(!next.craft);
         assert!(next.text.is_empty());
+    }
+
+    #[test]
+    fn drop_bindings_use_fixed_tick_edges_and_stack_has_priority() {
+        use crate::io::{KeyBindings, input::PhysicalKey};
+        let mut buffer = InputBuffer {
+            bindings: Some(KeyBindings::default()),
+            ..InputBuffer::default()
+        };
+        buffer
+            .keyboard
+            .entry("Q".to_owned())
+            .or_default()
+            .toggle(true);
+        let (one, _) = buffer.tick();
+        assert!(one.drop_one && !one.drop_stack);
+        let (held, _) = buffer.tick();
+        assert!(!held.drop_one && !held.drop_stack);
+        buffer.keyboard.get_mut("Q").unwrap().toggle(false);
+        buffer.tick();
+        buffer.keyboard.get_mut("Q").unwrap().toggle(true);
+        buffer
+            .keyboard
+            .entry("SHIFT".to_owned())
+            .or_default()
+            .set_down(true);
+        let (stack, _) = buffer.tick();
+        assert!(stack.drop_stack && !stack.drop_one);
+        let (held, _) = buffer.tick();
+        assert!(!held.drop_one && !held.drop_stack);
+        // Appending the two bindings leaves every existing controls index intact.
+        let mut custom = KeyBindings::default();
+        custom.set(16, "J".to_owned());
+        custom.set(17, "SHIFT-J".to_owned());
+        buffer.bindings = Some(custom);
+        buffer.keyboard.clear();
+        buffer
+            .keyboard
+            .insert("Q".to_owned(), PhysicalKey::default());
+        buffer.keyboard.get_mut("Q").unwrap().toggle(true);
+        let (old, _) = buffer.tick();
+        assert!(!old.drop_one && !old.drop_stack);
+        buffer
+            .keyboard
+            .entry("J".to_owned())
+            .or_default()
+            .toggle(true);
+        let (new, _) = buffer.tick();
+        assert!(new.drop_one && !new.drop_stack);
     }
 
     #[test]

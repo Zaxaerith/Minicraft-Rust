@@ -48,7 +48,12 @@ impl World {
         }
         self.levels[self.current_level]
             .entities
-            .spawn_furniture(kind, x, y);
+            .spawn_furniture_with_state(
+                kind,
+                x,
+                y,
+                crate::item::furniture_item::state_for_item(item),
+            );
         if self.mode != GameMode::Creative && self.player.inventory.count(item) == 0 {
             self.player.active_item = None;
         }

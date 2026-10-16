@@ -1,0 +1,11 @@
+{
+  "redDyeCrafted": true,
+  "spawnx": 6,
+  "rosesAfterCraft": 2,
+  "spawny": 7,
+  "violetShovelHarvest": true,
+  "redDyeAfterCraft": 1,
+  "bedUse": true,
+  "sleeping": true,
+  "violetShovelDrops": ["Oxeye Daisy_1"]
+}

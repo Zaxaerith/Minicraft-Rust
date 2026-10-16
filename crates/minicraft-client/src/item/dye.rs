@@ -43,6 +43,158 @@ impl DyeColor {
         Self::White,
     ];
 
+    /// Java enum ordinal, checked before using saved furniture / recipe data.
+    pub const fn from_index(index: u16) -> Option<Self> {
+        match index {
+            0 => Some(Self::Black),
+            1 => Some(Self::Red),
+            2 => Some(Self::Green),
+            3 => Some(Self::Brown),
+            4 => Some(Self::Blue),
+            5 => Some(Self::Purple),
+            6 => Some(Self::Cyan),
+            7 => Some(Self::LightGray),
+            8 => Some(Self::Gray),
+            9 => Some(Self::Pink),
+            10 => Some(Self::Lime),
+            11 => Some(Self::Yellow),
+            12 => Some(Self::LightBlue),
+            13 => Some(Self::Magenta),
+            14 => Some(Self::Orange),
+            15 => Some(Self::White),
+            _ => None,
+        }
+    }
+
+    pub const fn dye_item(self) -> ItemId {
+        match self {
+            Self::Black => ItemId::BlackDye,
+            Self::Red => ItemId::RedDye,
+            Self::Green => ItemId::GreenDye,
+            Self::Brown => ItemId::BrownDye,
+            Self::Blue => ItemId::BlueDye,
+            Self::Purple => ItemId::PurpleDye,
+            Self::Cyan => ItemId::CyanDye,
+            Self::LightGray => ItemId::LightGrayDye,
+            Self::Gray => ItemId::GrayDye,
+            Self::Pink => ItemId::PinkDye,
+            Self::Lime => ItemId::LimeDye,
+            Self::Yellow => ItemId::YellowDye,
+            Self::LightBlue => ItemId::LightBlueDye,
+            Self::Magenta => ItemId::MagentaDye,
+            Self::Orange => ItemId::OrangeDye,
+            Self::White => ItemId::WhiteDye,
+        }
+    }
+
+    pub const fn from_dye_item(item: ItemId) -> Option<Self> {
+        match item {
+            ItemId::BlackDye => Some(Self::Black),
+            ItemId::RedDye => Some(Self::Red),
+            ItemId::GreenDye => Some(Self::Green),
+            ItemId::BrownDye => Some(Self::Brown),
+            ItemId::BlueDye => Some(Self::Blue),
+            ItemId::PurpleDye => Some(Self::Purple),
+            ItemId::CyanDye => Some(Self::Cyan),
+            ItemId::LightGrayDye => Some(Self::LightGray),
+            ItemId::GrayDye => Some(Self::Gray),
+            ItemId::PinkDye => Some(Self::Pink),
+            ItemId::LimeDye => Some(Self::Lime),
+            ItemId::YellowDye => Some(Self::Yellow),
+            ItemId::LightBlueDye => Some(Self::LightBlue),
+            ItemId::MagentaDye => Some(Self::Magenta),
+            ItemId::OrangeDye => Some(Self::Orange),
+            ItemId::WhiteDye => Some(Self::White),
+            _ => None,
+        }
+    }
+
+    pub const fn wool_item(self) -> ItemId {
+        match self {
+            Self::Black => ItemId::BlackWool,
+            Self::Red => ItemId::RedWool,
+            Self::Green => ItemId::GreenWool,
+            Self::Brown => ItemId::BrownWool,
+            Self::Blue => ItemId::BlueWool,
+            Self::Purple => ItemId::PurpleWool,
+            Self::Cyan => ItemId::CyanWool,
+            Self::LightGray => ItemId::LightGrayWool,
+            Self::Gray => ItemId::GrayWool,
+            Self::Pink => ItemId::PinkWool,
+            Self::Lime => ItemId::LimeWool,
+            Self::Yellow => ItemId::YellowWool,
+            Self::LightBlue => ItemId::LightBlueWool,
+            Self::Magenta => ItemId::MagentaWool,
+            Self::Orange => ItemId::OrangeWool,
+            Self::White => ItemId::Wool,
+        }
+    }
+
+    pub const fn from_wool_item(item: ItemId) -> Option<Self> {
+        match item {
+            ItemId::BlackWool => Some(Self::Black),
+            ItemId::RedWool => Some(Self::Red),
+            ItemId::GreenWool => Some(Self::Green),
+            ItemId::BrownWool => Some(Self::Brown),
+            ItemId::BlueWool => Some(Self::Blue),
+            ItemId::PurpleWool => Some(Self::Purple),
+            ItemId::CyanWool => Some(Self::Cyan),
+            ItemId::LightGrayWool => Some(Self::LightGray),
+            ItemId::GrayWool => Some(Self::Gray),
+            ItemId::PinkWool => Some(Self::Pink),
+            ItemId::LimeWool => Some(Self::Lime),
+            ItemId::YellowWool => Some(Self::Yellow),
+            ItemId::LightBlueWool => Some(Self::LightBlue),
+            ItemId::MagentaWool => Some(Self::Magenta),
+            ItemId::OrangeWool => Some(Self::Orange),
+            ItemId::Wool => Some(Self::White),
+            _ => None,
+        }
+    }
+
+    pub const fn bed_item(self) -> ItemId {
+        match self {
+            Self::Black => ItemId::BlackBed,
+            Self::Red => ItemId::RedBed,
+            Self::Green => ItemId::GreenBed,
+            Self::Brown => ItemId::BrownBed,
+            Self::Blue => ItemId::BlueBed,
+            Self::Purple => ItemId::PurpleBed,
+            Self::Cyan => ItemId::CyanBed,
+            Self::LightGray => ItemId::LightGrayBed,
+            Self::Gray => ItemId::GrayBed,
+            Self::Pink => ItemId::PinkBed,
+            Self::Lime => ItemId::LimeBed,
+            Self::Yellow => ItemId::YellowBed,
+            Self::LightBlue => ItemId::LightBlueBed,
+            Self::Magenta => ItemId::MagentaBed,
+            Self::Orange => ItemId::OrangeBed,
+            Self::White => ItemId::WhiteBed,
+        }
+    }
+
+    pub const fn from_bed_item(item: ItemId) -> Option<Self> {
+        match item {
+            ItemId::BlackBed => Some(Self::Black),
+            ItemId::RedBed => Some(Self::Red),
+            ItemId::GreenBed => Some(Self::Green),
+            ItemId::BrownBed => Some(Self::Brown),
+            ItemId::BlueBed => Some(Self::Blue),
+            ItemId::PurpleBed => Some(Self::Purple),
+            ItemId::CyanBed => Some(Self::Cyan),
+            ItemId::LightGrayBed => Some(Self::LightGray),
+            ItemId::GrayBed => Some(Self::Gray),
+            ItemId::PinkBed => Some(Self::Pink),
+            ItemId::LimeBed => Some(Self::Lime),
+            ItemId::YellowBed => Some(Self::Yellow),
+            ItemId::LightBlueBed => Some(Self::LightBlue),
+            ItemId::MagentaBed => Some(Self::Magenta),
+            ItemId::OrangeBed => Some(Self::Orange),
+            ItemId::WhiteBed => Some(Self::White),
+            _ => None,
+        }
+    }
+
     /// Java `DyeColor.color` field.
     pub const fn packed_color(self) -> u32 {
         match self {
@@ -110,9 +262,8 @@ impl DyeColor {
     }
 }
 
-/// Dye items are not yet separate `ItemId` variants in the Rust registry;
-/// wool/clothing recipes reference the color sources that exist today
-/// (Rose / Lapis / Cactus / Flower / Coal). Kept for Java parity tables.
+/// Legacy 2.2.4 color sources, retained for compatibility with old recipes.
+/// 2.3.0 recipes use `DyeColor::dye_item` instead.
 pub const fn dye_source_item(color: DyeColor) -> Option<ItemId> {
     match color {
         DyeColor::Red => Some(ItemId::Rose),
@@ -127,6 +278,28 @@ pub const fn dye_source_item(color: DyeColor) -> Option<ItemId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn java230_color_items_are_unique_and_inventory_round_trip() {
+        let mut inventory = crate::item::Inventory::new(27);
+        let mut items = std::collections::HashSet::new();
+        for color in DyeColor::ALL {
+            assert_eq!(DyeColor::from_index(color as u16), Some(color));
+            assert_eq!(DyeColor::from_dye_item(color.dye_item()), Some(color));
+            assert_eq!(DyeColor::from_wool_item(color.wool_item()), Some(color));
+            assert_eq!(DyeColor::from_bed_item(color.bed_item()), Some(color));
+            assert!(items.insert(color.dye_item()));
+            assert_eq!(inventory.add(color.dye_item(), 3), 0);
+            assert!(inventory.remove(color.dye_item(), 1));
+        }
+        assert_eq!(DyeColor::from_index(16), None);
+        assert_eq!(DyeColor::from_bed_item(ItemId::Bed), None);
+        let saved = serde_json::to_string(&inventory).unwrap();
+        let loaded: crate::item::Inventory = serde_json::from_str(&saved).unwrap();
+        for color in DyeColor::ALL {
+            assert_eq!(loaded.count(color.dye_item()), 2);
+        }
+    }
 
     #[test]
     fn dye_colors_match_java_palette() {

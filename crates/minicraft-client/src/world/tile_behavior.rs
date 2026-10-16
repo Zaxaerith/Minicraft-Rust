@@ -20,7 +20,7 @@ fn tick(
     let index = x + y * width;
     let tile = level.tiles[index];
     match tile {
-        Tile::Grass | Tile::Flower => {
+        Tile::Grass | Tile::Flower | Tile::Flower230 => {
             let chance = if tile == Tile::Grass {
                 grass::SPREAD_CHANCE
             } else {

@@ -12,15 +12,7 @@ pub fn connects(center: Tile, neighbor: Tile) -> bool {
 }
 
 pub fn is_wool(tile: Tile) -> bool {
-    matches!(
-        tile,
-        Tile::WhiteWool
-            | Tile::RedWool
-            | Tile::BlueWool
-            | Tile::GreenWool
-            | Tile::YellowWool
-            | Tile::BlackWool
-    )
+    crate::item::wool::item_for_tile(tile).is_some()
 }
 
 /// Stamina cost to shear wool (Java `payStamina(3 - tool.level)` base 3).

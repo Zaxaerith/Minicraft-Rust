@@ -3,7 +3,7 @@ use super::{
     ActiveItem, Direction, FurnitureKind, GameMode, HUNGER_MOVE_STEPS, HUNGER_STAMINA_STEPS,
     HUNGER_TICK_INTERVALS, ItemId, MAX_HEALTH, MAX_HUNGER_TICKS, MAX_STAT, PotionKind,
     STARVATION_HEALTH_FLOORS, SoundEffect, TILE_SIZE, Tile, World, direction_for_move, find_spawn,
-    item_for_furniture, spawn,
+    spawn,
 };
 use std::collections::HashMap;
 
@@ -92,6 +92,9 @@ impl World {
             }
             if !collected.is_empty() {
                 self.sound(SoundEffect::Pickup);
+            }
+            if input.drop_one || input.drop_stack {
+                self.drop_active_item(input.drop_stack);
             }
             if input.attack {
                 if self.player.stamina > 0
@@ -438,6 +441,10 @@ impl World {
             );
             *inventory.entry(name).or_insert(0) += 1;
         }
+        let white_wool = self.player.inventory.count(ItemId::Wool);
+        if white_wool > 0 {
+            inventory.insert("white wool".to_owned(), white_wool);
+        }
         inventory
     }
 
@@ -485,30 +492,86 @@ impl World {
             Direction::Right => (12, 0),
         };
         let creative = self.mode == GameMode::Creative;
-        let picked = self.levels[self.current_level]
+        let candidate = self.levels[self.current_level]
             .entities
-            .pickup_furniture_near(
+            .pickup_furniture_candidate_near(
                 self.player.x + offset_x,
                 self.player.y + offset_y,
                 14,
                 creative,
             );
-        let Some(kind) = picked else {
+        let Some((id, kind, state)) = candidate else {
             return;
         };
-        let Some(item) = item_for_furniture(kind) else {
+        let Some(item) = crate::item::furniture_item::item_for_furniture_state(kind, state) else {
             return;
         };
-        if creative || self.player.inventory.add(item, 1) == 0 {
-            self.player.active_item = Some(ActiveItem::Stack(item));
-        } else {
-            self.levels[self.current_level].entities.spawn_item(
-                ItemStack::new(item, 1),
-                self.player.x,
-                self.player.y,
-            );
+        // A full bag must leave the furniture and its color/state in the world.
+        if !creative && self.player.inventory.add(item, 1) != 0 {
+            return;
         }
+        self.levels[self.current_level]
+            .entities
+            .mark_removed_by_id(id);
+        self.player.active_item = Some(ActiveItem::Stack(item));
         self.sound(SoundEffect::Pickup);
+    }
+
+    /// Java's keymap describes Q as one and Shift-Q as the whole stack. Its
+    /// Player branch is reversed; keep the documented controls here.
+    pub(super) fn drop_active_item(&mut self, whole_stack: bool) {
+        let Some(active) = self.player.active_item else {
+            return;
+        };
+        match active {
+            ActiveItem::Stack(item) => {
+                let Some(stack) = self
+                    .player
+                    .inventory
+                    .slots()
+                    .iter()
+                    .find(|stack| stack.item == item)
+                else {
+                    self.player.active_item = None;
+                    return;
+                };
+                let count = if whole_stack { stack.count } else { 1 };
+                if count == 0 {
+                    self.player.active_item = None;
+                    return;
+                }
+                if !self.player.inventory.remove(item, count) {
+                    return;
+                }
+                self.levels[self.current_level].entities.spawn_item(
+                    ItemStack::new(item, count),
+                    self.player.x,
+                    self.player.y,
+                );
+                if self.player.inventory.count(item) == 0 {
+                    self.player.active_item = None;
+                }
+            }
+            ActiveItem::Tool(index) => {
+                if index >= self.player.inventory.tools.len() {
+                    self.player.active_item = None;
+                    return;
+                }
+                let tool = self.player.inventory.tools.remove(index);
+                self.levels[self.current_level].entities.spawn_tool(
+                    tool,
+                    self.player.x,
+                    self.player.y,
+                );
+                self.player.active_item = None;
+            }
+        }
+        // Dropping transfers actual inventory ownership even in Creative; the
+        // normal consumable exemption must never create a second item here.
+        self.player.fishing_level = None;
+        self.player.fishing_ticks = 0;
+        self.player.attack_item = None;
+        self.player.attack_time = 0;
     }
 
     pub(super) fn consume_active_stack(&mut self, item: ItemId) {
