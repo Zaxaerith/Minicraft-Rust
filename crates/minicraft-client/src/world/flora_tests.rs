@@ -164,15 +164,23 @@ fn java230_flora_watering_is_renewable_deterministic_saved_and_rng_isolated() {
     world.levels[0].tiles[target] = Tile::StairsDown;
     world.attack_target_tile(9, 8, target);
     assert_eq!(world.levels[0].tiles[target], Tile::StairsDown);
-    // Legacy worlds keep their old map and interaction contract.
+    // Generation version governs generation only. Explicit player watering
+    // also works in an old world, without modifying maps merely on load.
     world.generation_version = GenerationVersion::Legacy224;
+    world.flora_random = JavaRandom::new(0);
     world.levels[0].tiles[target] = Tile::Grass;
-    for _ in 0..100 {
-        world.player.watering_content = 1;
+    world.player.watering_content = 1800;
+    for _ in 0..1800 {
         world.attack_target_tile(9, 8, target);
+        if world.levels[0].tiles[target] == Tile::Flower230 {
+            break;
+        }
     }
-    assert_eq!(world.levels[0].tiles[target], Tile::Grass);
-    assert_eq!(before, serde_json::to_value(&world.flora_random).unwrap());
+    assert_eq!(world.levels[0].tiles[target], Tile::Flower230);
+    assert_eq!(
+        roundtrip(&world).generation_version(),
+        GenerationVersion::Legacy224
+    );
 }
 
 #[test]

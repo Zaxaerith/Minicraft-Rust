@@ -620,6 +620,81 @@ mod generation_compatibility_tests {
                 .generation_version,
             GenerationVersion::Java230Flora
         );
+        // Actual disk migration of the pre-marker native shape (including
+        // Phase1 items), followed by another save, copy and rename.
+        let old = create_named(
+            &root,
+            "OLD",
+            42,
+            WorldSpec::default(),
+            GameMode::Survival,
+            20,
+        )
+        .unwrap();
+        let mut old_metadata: Value =
+            serde_json::from_str(&fs::read_to_string(old.directory.join("world.json")).unwrap())
+                .unwrap();
+        old_metadata
+            .as_object_mut()
+            .unwrap()
+            .remove("generation_version");
+        fs::write(old.directory.join("world.json"), old_metadata.to_string()).unwrap();
+        let mut historical = crate::world::registry_tests::tiny_world();
+        historical
+            .player
+            .inventory
+            .add(crate::item::ItemId::CyanWool, 4);
+        historical.levels[0].tiles[0] = crate::level::tile::Tile::Flower;
+        historical.levels[0].data[0] = 51;
+        historical.levels[0].tiles[1] = crate::level::tile::Tile::Flower230;
+        historical.levels[0].data[1] = 18;
+        let mut old_state: Value =
+            serde_json::from_str(&historical.to_save_string().unwrap()).unwrap();
+        old_state["world"]
+            .as_object_mut()
+            .unwrap()
+            .remove("generation_version");
+        old_state["world"]
+            .as_object_mut()
+            .unwrap()
+            .remove("flora_random");
+        fs::write(old.directory.join("state.json"), old_state.to_string()).unwrap();
+        let old = load(&root)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.name == "OLD")
+            .unwrap();
+        assert_eq!(old.generation_version, GenerationVersion::Legacy224);
+        let loaded = load_state(&old).unwrap().unwrap();
+        assert_eq!(loaded.generation_version(), GenerationVersion::Legacy224);
+        assert_eq!(loaded.levels[0].tiles, historical.levels[0].tiles);
+        assert_eq!(loaded.levels[0].data, historical.levels[0].data);
+        save_state(&old, &loaded).unwrap();
+        copy_record(&root, &old, "OLD_COPY").unwrap();
+        let copy = load(&root)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.name == "OLD_COPY")
+            .unwrap();
+        rename_record(&root, &copy, "OLD_RENAMED").unwrap();
+        let copy = load(&root)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.name == "OLD_RENAMED")
+            .unwrap();
+        let restored = load_state(&copy).unwrap().unwrap();
+        assert_eq!(copy.generation_version, GenerationVersion::Legacy224);
+        assert_eq!(restored.levels[0].tiles, historical.levels[0].tiles);
+        assert_eq!(restored.levels[0].data, historical.levels[0].data);
+        assert_eq!(
+            restored
+                .player
+                .inventory
+                .count(crate::item::ItemId::CyanWool),
+            4
+        );
+        delete_record(&root, &old).unwrap();
+        delete_record(&root, &copy).unwrap();
         delete_record(&root, &record).unwrap();
         delete_record(&root, &renamed).unwrap();
         fs::remove_dir(root.join("saves")).unwrap();

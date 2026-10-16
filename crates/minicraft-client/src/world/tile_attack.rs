@@ -28,10 +28,7 @@ impl World {
                             crate::item::watering_can::water_crop_data(data);
                     } else if target == Tile::Farmland {
                         self.levels[self.current_level].data[index] = 7;
-                    } else if target == Tile::Grass
-                        && self.generation_version == super::GenerationVersion::Java230Flora
-                        && self.flora_random.next_int(60) == 0
-                    {
+                    } else if target == Tile::Grass && self.flora_random.next_int(60) == 0 {
                         // Java WateringCanItem: actively watering grass can
                         // grow any of the 19 flowers, including White Lily.
                         self.levels[self.current_level].tiles[index] = Tile::Flower230;
