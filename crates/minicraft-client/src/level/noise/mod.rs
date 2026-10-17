@@ -57,6 +57,10 @@ impl JavaRandom {
         self.seed
     }
 
+    pub fn next_double(&mut self) -> f64 {
+        (((self.next(26) as u64) << 27) + self.next(27) as u64) as f64 / (1_u64 << 53) as f64
+    }
+
     pub fn next_bool(&mut self) -> bool {
         self.next(1) != 0
     }

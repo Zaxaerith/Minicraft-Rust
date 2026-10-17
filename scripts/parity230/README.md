@@ -117,3 +117,48 @@ The old surface-eight and all224 goldens remain independent. Raw map equivalence
 does not establish full World.initWorld, per-layer seed derivation, structure,
 loot, boss layout, or entity AI equivalence. No generation version was renamed.
 Ornate Wood oracle invokes real placement/mining and reads real Recipe objects.
+
+## Phase 3.6: actual World.initWorld stages and sheep
+
+```powershell
+./scripts/parity230/run-world36.ps1
+cargo test --release --locked -p minicraft-client --lib assembly36_tests
+cargo test --release --locked -p minicraft-client --lib behavior36_tests
+```
+
+JDK17 is required. The wrapper reuses `run.ps1` for complete pinned source and
+resource verification, compilation, and all earlier oracles. It then launches
+six separate JVMs:128 seeds42/256/0/-1,256 seed42,512 seed42. `WorldProbe36`
+adds read-only constructor callbacks using JDK ASM; it never replaces an RNG,
+changes a branch or advances game randomness. No reference source is edited.
+`WorldStages36` reads the original Level Random48 state, maps, all entities
+emitted by official Save.writeEntity, and source constructor chest counters.
+There are30 actual observation points per world, in the original call order.
+
+Each compressed `world36-SIZE-SEED.zip` contains the30 raw Tile/Data snapshots,
+stage metadata and four official initial Save files. Complete official saves,
+classes and unpacked maps remain under ignored `target/parity/java230/world36`.
+All six committed fixtures reproduce byte-for-byte entry content. For seed42,
+every official Save file also matches the uninstrumented WorldAssembly35 run.
+These expected maps come from Java, never Rust. Tests compare every cell, the
+constructor RNG states, every persistent entity/loot field, player state,
+stairs, and native disk recovery. Old version goldens remain unchanged.
+
+`Behavior36.java`, called by the existing Oracle230 driver, invokes original
+Sheep dye/shear/death methods in48 color/difficulty scenarios, observes actual
+Level.trySpawn color rolls, and records real KnightStatue/ObsidianKnight room
+activation and removed-player behavior. Native tests additionally exercise real
+World interaction, last shears durability, grass regrowth, saved color, pending
+spawns and actual rendering. The dev2 sheep PNG is an attributed expansion;
+the old403 resources are preserved. Java Save omits sheep color: importing it
+initializes white exactly as Java Load does, rather than inventing past color.
+
+The new native generation marker is `Java230World`. Normal new-world creation
+uses it after this matrix passes; missing markers and historical Java230Flora
+retain their old behavior. This does not establish whole-game AI, all themes,
+all seeds, transient RNG, or GUI parity. See `AUDIT_JAVA230_PHASE36.md` for the
+explicit arena player-edit protection and remaining advanced Spawner limit.
+
+Both source runners now share batched, unfiltered Git blob verification in
+`scripts/parity224/verify-source.ps1`: the same per-file byte check with two Git
+calls, rather than hundreds of processes. Changed reference bytes still fail.

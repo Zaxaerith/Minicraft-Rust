@@ -621,3 +621,29 @@ fn add_loot(inventory: &mut Inventory, name: &str, count: u16) {
         assert_eq!(inventory.add(item, count), 0, "bundled table fits chest");
     }
 }
+
+/// Activation-only room repair. Saved maps and level switches never call this.
+/// Preserve player-installed non-arena tiles and every entity/container. This
+/// explicit safety deviation avoids Java's blanket replacement of player work.
+pub(super) fn repair_boss_room(level: &mut Level, size: usize) {
+    if level.depth != -4 {
+        return;
+    }
+    let mut protected = Vec::new();
+    for y in size / 2 - 4..=size / 2 + 4 {
+        for x in size / 2 - 4..=size / 2 + 4 {
+            let i = x + y * size;
+            if !matches!(
+                level.tiles[i],
+                Tile::BossWall | Tile::BossFloor | Tile::BossDoor
+            ) {
+                protected.push((i, level.tiles[i], level.data[i]));
+            }
+        }
+    }
+    boss_room(level, size);
+    for (i, tile, data) in protected {
+        level.tiles[i] = tile;
+        level.data[i] = data;
+    }
+}

@@ -13,12 +13,8 @@ $pin = '47227a89fe05f1e3fe962f070f25c53111254a1f'
 # and put fresh classes + pinned resources before the jar on the classpath.
 $sources = @(Get-ChildItem "$sourceRoot/src/client/java", "$sourceRoot/src/common/java" -Recurse -Filter '*.java')
 $resources = @(Get-ChildItem "$sourceRoot/src/client/resources" -Recurse -File)
-foreach ($file in @($sources) + @($resources)) {
-    $relative = [IO.Path]::GetRelativePath($sourceRoot, $file.FullName).Replace('\','/')
-    $expected = & git --git-dir=$referenceGit rev-parse "${pin}:$relative"
-    $actual = & git hash-object --no-filters -- $file.FullName
-    if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) { throw "Reference source differs from pin: $relative" }
-}
+. "$repo/scripts/parity224/verify-source.ps1"
+Assert-ReferencePin $referenceGit $pin $sourceRoot (@($sources) + @($resources))
 $outputRoot = Join-Path $repo 'target/parity/java224'
 $classes = Join-Path $outputRoot 'classes'
 $output = Join-Path $outputRoot 'output'

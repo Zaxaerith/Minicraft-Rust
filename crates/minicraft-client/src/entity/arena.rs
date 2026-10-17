@@ -45,7 +45,9 @@ impl EntityArena {
                     || mob.max_health == 0
                     || mob.health > mob.max_health
                     || (!entity.removed && mob.health == 0)
-                    || mob.phase > 1)
+                    || mob.phase > 1
+                    || mob.sheep_color > 15
+                    || (mob.species != NaturalMob::Sheep && mob.sheep_color != 15))
             {
                 return Err(format!(
                     "invalid native {:?} level/health/state",
@@ -142,6 +144,7 @@ impl EntityArena {
                 attack_time: 0,
                 phase: 0,
                 sheared: false,
+                sheep_color: super::types::default_sheep_color(),
                 walk_time: 0,
             }),
         )
@@ -665,7 +668,15 @@ impl EntityArena {
         };
         if defeated {
             defeated_mobs.push(species);
-            for stack in mob_drops_at_level(species, level, difficulty, score_mode, random) {
+            let drops = if species == NaturalMob::Sheep {
+                let EntityKind::Mob(mob) = &self.entities[index].kind else {
+                    unreachable!()
+                };
+                super::stats::sheep_drops(mob.sheep_color, mob.sheared, difficulty, random)
+            } else {
+                mob_drops_at_level(species, level, difficulty, score_mode, random)
+            };
+            for stack in drops {
                 self.spawn_item(stack, x, y);
             }
         }
@@ -716,16 +727,45 @@ impl EntityArena {
         }) else {
             return false;
         };
-        let (x, y) = {
+        let (x, y, color) = {
             let entity = &mut self.entities[index];
             let EntityKind::Mob(mob) = &mut entity.kind else {
                 unreachable!();
             };
             mob.sheared = true;
-            (entity.x, entity.y)
+            (entity.x, entity.y, mob.sheep_color)
         };
         let count = (random.next_int(3) + 1) as u16;
-        self.spawn_item(ItemStack::new(ItemId::Wool, count), x, y);
+        self.spawn_item(
+            ItemStack::new(
+                crate::item::dye::DyeColor::from_index(u16::from(color))
+                    .expect("validated sheep color")
+                    .wool_item(),
+                count,
+            ),
+            x,
+            y,
+        );
+        true
+    }
+
+    pub(crate) fn dye_sheep_near(
+        &mut self,
+        x: i32,
+        y: i32,
+        color: crate::item::dye::DyeColor,
+    ) -> bool {
+        let Some(entity) = self.entities.iter_mut().find(|e| {
+            !e.removed
+                && matches!(&e.kind,EntityKind::Mob(m) if m.species==NaturalMob::Sheep)
+                && squared_distance(e.x, e.y, x, y) <= 14 * 14
+        }) else {
+            return false;
+        };
+        let EntityKind::Mob(mob) = &mut entity.kind else {
+            unreachable!()
+        };
+        mob.sheep_color = color as u8;
         true
     }
 

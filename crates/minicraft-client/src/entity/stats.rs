@@ -196,3 +196,35 @@ pub fn mob_drops_at_level(
     }
     drops
 }
+
+/// Java Sheep.die: color-matched wool only when uncut, then raw beef. Both
+/// independent rolls use the same species Random; native drops preserve count.
+pub(crate) fn sheep_drops(
+    color: u8,
+    cut: bool,
+    difficulty: u8,
+    random: &mut JavaRandom,
+) -> Vec<ItemStack> {
+    let (min, max) = match difficulty {
+        0 => (1, 3),
+        1 => (1, 2),
+        _ => (0, 2),
+    };
+    let mut drops = Vec::new();
+    if !cut {
+        let count = (min + random.next_int(max - min + 1)) as u16;
+        if count > 0 {
+            drops.push(ItemStack::new(
+                crate::item::dye::DyeColor::from_index(u16::from(color))
+                    .expect("validated sheep color")
+                    .wool_item(),
+                count,
+            ));
+        }
+    }
+    let count = (min + random.next_int(max - min + 1)) as u16;
+    if count > 0 {
+        drops.push(ItemStack::new(ItemId::RawBeef, count));
+    }
+    drops
+}

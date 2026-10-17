@@ -44,7 +44,15 @@ pub struct Mob {
     pub attack_time: u16,
     pub phase: u8,
     pub sheared: bool,
+    /// Old native sheep were white; Java Load also constructs white sheep
+    /// because its official Save omits color. This never reconstructs history.
+    #[serde(default = "default_sheep_color")]
+    pub sheep_color: u8,
     pub(crate) walk_time: u16,
+}
+
+pub(crate) const fn default_sheep_color() -> u8 {
+    15
 }
 
 pub(crate) const fn default_mob_level() -> u8 {

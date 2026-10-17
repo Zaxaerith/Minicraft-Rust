@@ -1,0 +1,773 @@
+{
+  "cases": [
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Black Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 0,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Black Wool": 3},
+      "dyed": true,
+      "colorAfter": 0
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Red Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 1,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Red Wool": 3},
+      "dyed": true,
+      "colorAfter": 1
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Green Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 2,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Green Wool": 3},
+      "dyed": true,
+      "colorAfter": 2
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Brown Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 3,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Brown Wool": 3},
+      "dyed": true,
+      "colorAfter": 3
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Blue Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 4,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 4
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Purple Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 5,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Purple Wool": 3},
+      "dyed": true,
+      "colorAfter": 5
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Cyan Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 6,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Cyan Wool": 3},
+      "dyed": true,
+      "colorAfter": 6
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Light Gray Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 7,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 7
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Gray Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 8,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 8
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Pink Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 9,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Pink Wool": 3},
+      "dyed": true,
+      "colorAfter": 9
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Lime Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 10,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Lime Wool": 3},
+      "dyed": true,
+      "colorAfter": 10
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Raw Beef": 3,
+        "Yellow Wool": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 11,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Yellow Wool": 3},
+      "dyed": true,
+      "colorAfter": 11
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Light Blue Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 12,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 12
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Magenta Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 13,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Magenta Wool": 3},
+      "dyed": true,
+      "colorAfter": 13
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "Orange Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 14,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Orange Wool": 3},
+      "dyed": true,
+      "colorAfter": 14
+    },
+    {
+      "difficulty": 0,
+      "deathDrops": {
+        "White Wool": 3,
+        "Raw Beef": 3
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 3},
+      "shearsDurability": 0,
+      "color": 15,
+      "saved": "Sheep[120:120:5:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"White Wool": 3},
+      "dyed": true,
+      "colorAfter": 15
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Black Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 0,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Black Wool": 3},
+      "dyed": true,
+      "colorAfter": 0
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Red Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 1,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Red Wool": 3},
+      "dyed": true,
+      "colorAfter": 1
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Green Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 2,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Green Wool": 3},
+      "dyed": true,
+      "colorAfter": 2
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Brown Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 3,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Brown Wool": 3},
+      "dyed": true,
+      "colorAfter": 3
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Blue Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 4,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 4
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Purple Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 5,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Purple Wool": 3},
+      "dyed": true,
+      "colorAfter": 5
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Cyan Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 6,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Cyan Wool": 3},
+      "dyed": true,
+      "colorAfter": 6
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Light Gray Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 7,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 7
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Gray Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 8,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 8
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Pink Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 9,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Pink Wool": 3},
+      "dyed": true,
+      "colorAfter": 9
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Lime Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 10,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Lime Wool": 3},
+      "dyed": true,
+      "colorAfter": 10
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Raw Beef": 1,
+        "Yellow Wool": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 11,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Yellow Wool": 3},
+      "dyed": true,
+      "colorAfter": 11
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Light Blue Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 12,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 12
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Magenta Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 13,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Magenta Wool": 3},
+      "dyed": true,
+      "colorAfter": 13
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "Orange Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 14,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Orange Wool": 3},
+      "dyed": true,
+      "colorAfter": 14
+    },
+    {
+      "difficulty": 1,
+      "deathDrops": {
+        "White Wool": 2,
+        "Raw Beef": 1
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 15,
+      "saved": "Sheep[120:120:8:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"White Wool": 3},
+      "dyed": true,
+      "colorAfter": 15
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Black Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 0,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Black Wool": 3},
+      "dyed": true,
+      "colorAfter": 0
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Red Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 1,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Red Wool": 3},
+      "dyed": true,
+      "colorAfter": 1
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Green Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 2,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Green Wool": 3},
+      "dyed": true,
+      "colorAfter": 2
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Brown Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 3,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Brown Wool": 3},
+      "dyed": true,
+      "colorAfter": 3
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Blue Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 4,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 4
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Purple Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 5,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Purple Wool": 3},
+      "dyed": true,
+      "colorAfter": 5
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Cyan Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 6,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Cyan Wool": 3},
+      "dyed": true,
+      "colorAfter": 6
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Light Gray Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 7,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 7
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Gray Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 8,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Gray Wool": 3},
+      "dyed": true,
+      "colorAfter": 8
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Pink Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 9,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Pink Wool": 3},
+      "dyed": true,
+      "colorAfter": 9
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Lime Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 10,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Lime Wool": 3},
+      "dyed": true,
+      "colorAfter": 10
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Raw Beef": 2,
+        "Yellow Wool": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 11,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Yellow Wool": 3},
+      "dyed": true,
+      "colorAfter": 11
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Light Blue Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 12,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Light Blue Wool": 3},
+      "dyed": true,
+      "colorAfter": 12
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Magenta Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 13,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Magenta Wool": 3},
+      "dyed": true,
+      "colorAfter": 13
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "Orange Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 14,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"Orange Wool": 3},
+      "dyed": true,
+      "colorAfter": 14
+    },
+    {
+      "difficulty": 2,
+      "deathDrops": {
+        "White Wool": 2,
+        "Raw Beef": 2
+      },
+      "sheared": true,
+      "shearedDeathDrops": {"Raw Beef": 2},
+      "shearsDurability": 0,
+      "color": 15,
+      "saved": "Sheep[120:120:11:true:3]",
+      "dyeRemaining": 1,
+      "shearDrops": {"White Wool": 3},
+      "dyed": true,
+      "colorAfter": 15
+    }
+  ],
+  "javaCommit": "4dc00332e24a727b96be7b885d5cbbdd9c85263c"
+}

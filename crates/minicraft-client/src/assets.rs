@@ -996,6 +996,7 @@ fn expansion230_bytes(kind: SpriteType, name: &str) -> Option<&'static [u8]> {
         (SpriteType::Entity, "orange_bed") => bytes!("entity", "orange_bed"),
         (SpriteType::Entity, "white_bed") => bytes!("entity", "white_bed"),
         (SpriteType::Entity, "dyevat") => bytes!("entity", "dyevat"),
+        (SpriteType::Entity, "sheep") => bytes!("entity", "sheep"),
         (SpriteType::Tile, "brown_wool") => bytes!("tile", "brown_wool"),
         (SpriteType::Tile, "purple_wool") => bytes!("tile", "purple_wool"),
         (SpriteType::Tile, "cyan_wool") => bytes!("tile", "cyan_wool"),

@@ -27,6 +27,14 @@ impl World {
                     intent.y,
                 )
                 .expect("validated natural spawn level");
+            if intent.kind == super::spawn::NaturalMob::Sheep {
+                let super::EntityKind::Mob(mob) =
+                    &mut level.entities.entities.last_mut().expect("new mob").kind
+                else {
+                    unreachable!()
+                };
+                mob.sheep_color = intent.sheep_color;
+            }
         }
         let depth = level.depth;
         let outcome = level.entities.tick_with_player_difficulty(

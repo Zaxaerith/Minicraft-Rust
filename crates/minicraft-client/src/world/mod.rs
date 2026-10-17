@@ -21,6 +21,8 @@ mod assembly35_tests;
 mod assembly36;
 #[cfg(test)]
 mod assembly36_tests;
+#[cfg(test)]
+mod behavior36_tests;
 mod boss;
 mod entity;
 mod entity_render;
@@ -370,6 +372,7 @@ struct WorldSaveOwned {
 impl World {
     pub fn to_save_string(&self) -> Result<String, String> {
         self.validate_item_instances()?;
+        self.validate_pending_sheep_colors()?;
         serde_json::to_string(&WorldSaveRef {
             format: 2,
             game_version: "2.2.4-rust",
@@ -462,7 +465,16 @@ impl World {
         if self.signs.len() != self.levels.len() {
             return Err("saved sign storage does not match level count".to_owned());
         }
+        self.validate_pending_sheep_colors()?;
         self.validate_item_instances()?;
+        Ok(())
+    }
+    fn validate_pending_sheep_colors(&self) -> Result<(), String> {
+        if self.levels.iter().flat_map(|l| &l.pending_spawns).any(|s| {
+            s.sheep_color > 15 || (s.kind != spawn::NaturalMob::Sheep && s.sheep_color != 15)
+        }) {
+            return Err("invalid saved pending sheep color".into());
+        }
         Ok(())
     }
     #[cfg(test)]
@@ -1196,19 +1208,18 @@ impl World {
             self.height,
             &mut self.random,
         );
-        try_queue_natural_spawn(
+        try_queue_natural_spawn_for_player(
             &mut self.levels[self.current_level],
             self.width,
             self.height,
-            self.player.x,
-            self.player.y,
+            (!self.player_removed).then_some((self.player.x, self.player.y)),
             self.clock.get().day_tick,
             self.days,
             &mut self.random,
         );
         let time_slowed = self.effect_active(PotionKind::Time);
         let outcome = self.tick_level_entities(
-            Some((self.player.x, self.player.y)),
+            (!self.player_removed).then_some((self.player.x, self.player.y)),
             time_slowed,
             self.mode == GameMode::Creative,
         );
@@ -1399,6 +1410,20 @@ impl World {
                 self.sound(SoundEffect::MonsterHurt);
                 return;
             }
+        }
+        if let Some(ActiveItem::Stack(item)) = self.player.active_item
+            && self.player.inventory.count(item) > 0
+            && let Some(color) = crate::item::dye::DyeColor::from_dye_item(item)
+            && self.levels[self.current_level]
+                .entities
+                .dye_sheep_near(target_x, target_y, color)
+        {
+            // Java consumes dye even in Creative, including reapplying the same color.
+            self.player.inventory.remove(item, 1);
+            if self.player.inventory.count(item) == 0 {
+                self.player.active_item = None;
+            }
+            return;
         }
         if self.levels[self.current_level]
             .entities
@@ -1715,6 +1740,12 @@ impl World {
                     .entities
                     .tap_statue_near(self.player.x + offset_x, self.player.y + offset_y);
                 if let Some(touches) = touches {
+                    if touches >= 3 && self.generation_version == GenerationVersion::Java230World {
+                        assembly36::repair_boss_room(
+                            &mut self.levels[self.current_level],
+                            self.width,
+                        );
+                    }
                     match touches {
                         1 => self.add_notification("minicraft.notifications.statue_tapped"),
                         2 => self.add_notification("minicraft.notifications.statue_touched"),
@@ -2063,6 +2094,7 @@ fn tile_progress_name(tile: Tile) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn try_queue_natural_spawn(
     level: &mut Level,
     width: usize,
@@ -2122,14 +2154,22 @@ fn try_queue_natural_spawn_for_player(
         if spawn::hostile_allowed(level.depth, day_tick, days, tile, lit) {
             level.pending_spawns.push(spawn::SpawnIntent {
                 kind: spawn::choose_hostile(level.depth, roll),
+                sheep_color: crate::entity::types::default_sheep_color(),
                 x: pixel_x,
                 y: pixel_y,
             });
             return;
         }
         if spawn::passive_allowed(level.depth, tile) {
+            let kind = spawn::choose_passive(day_tick >= 48_600, roll);
+            let sheep_color = if kind == spawn::NaturalMob::Sheep {
+                spawn::sheep_color(random.next_double())
+            } else {
+                crate::entity::types::default_sheep_color()
+            };
             level.pending_spawns.push(spawn::SpawnIntent {
-                kind: spawn::choose_passive(day_tick >= 48_600, roll),
+                kind,
+                sheep_color,
                 x: pixel_x,
                 y: pixel_y,
             });

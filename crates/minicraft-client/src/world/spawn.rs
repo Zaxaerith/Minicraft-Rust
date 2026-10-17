@@ -8,6 +8,8 @@ pub struct SpawnIntent {
     pub kind: NaturalMob,
     pub x: i32,
     pub y: i32,
+    #[serde(default = "crate::entity::types::default_sheep_color")]
+    pub sheep_color: u8,
 }
 
 pub fn max_mob_count(depth: i8, difficulty: usize) -> usize {
@@ -92,6 +94,24 @@ fn hostile_tile_allowed(depth: i8, tile: Tile) -> bool {
                 | Tile::BossFloor
         )
     }
+}
+
+/// Java dev2 Level.trySpawn: white80%, black/gray/lightgray5%, brown3%, pink2%.
+pub(crate) fn sheep_color(roll: f64) -> u8 {
+    use crate::item::dye::DyeColor;
+    (if roll < 0.8 {
+        DyeColor::White
+    } else if roll < 0.85 {
+        DyeColor::Black
+    } else if roll < 0.9 {
+        DyeColor::Gray
+    } else if roll < 0.95 {
+        DyeColor::LightGray
+    } else if roll < 0.98 {
+        DyeColor::Brown
+    } else {
+        DyeColor::Pink
+    }) as u8
 }
 
 #[cfg(test)]

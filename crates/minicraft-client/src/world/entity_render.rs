@@ -143,13 +143,21 @@ pub(super) fn render_entity(
                 } else {
                     0
                 };
-                let linked = assets.mob_linked_level(
+                let mut linked = assets.mob_linked_level(
                     mob.species,
                     mob.level,
                     direction,
                     frame,
                     mob.species == spawn::NaturalMob::Sheep && mob.sheared,
                 );
+                if mob.species == spawn::NaturalMob::Sheep {
+                    linked = linked.set_white_tint(
+                        crate::item::dye::DyeColor::from_index(u16::from(mob.sheep_color))
+                            .expect("validated sheep color")
+                            .packed_color()
+                            & 0xff_ffff,
+                    );
+                }
                 if swimming {
                     // Java Player swimming: only the top 16×8 half.
                     linked.render_half_top(
