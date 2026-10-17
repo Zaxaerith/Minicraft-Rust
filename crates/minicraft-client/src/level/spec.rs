@@ -9,6 +9,9 @@ pub enum GenerationVersion {
     Legacy224,
     /// Java 2.3-dev surface flower RNG/data; other layers retain the 2.2.4 path.
     Java230Flora,
+    /// Fixed dev2 World.initWorld: derived layer seeds and full assembly.
+    /// Independent of the historical Phase2 surface-flora contract.
+    Java230World,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

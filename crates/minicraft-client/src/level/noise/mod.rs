@@ -47,6 +47,16 @@ impl JavaRandom {
         self.next(32)
     }
 
+    /// Random.nextLong uses two signed int draws, including sign extension of
+    /// the low word (not a concatenation of two unsigned words).
+    pub fn next_i64(&mut self) -> i64 {
+        (i64::from(self.next(32)) << 32).wrapping_add(i64::from(self.next(32)))
+    }
+
+    pub(crate) fn state(&self) -> u64 {
+        self.seed
+    }
+
     pub fn next_bool(&mut self) -> bool {
         self.next(1) != 0
     }

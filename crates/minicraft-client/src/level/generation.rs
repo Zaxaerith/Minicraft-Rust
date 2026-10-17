@@ -532,11 +532,13 @@ fn create_surface(
         // downstream follows the upstream sequence, not an added Rust RNG call.
         let flower_variant = match version {
             GenerationVersion::Legacy224 => random.next_int(4) as u16,
-            GenerationVersion::Java230Flora => (random.next_int(4) * random.next_int(4)) as u16,
+            GenerationVersion::Java230Flora | GenerationVersion::Java230World => {
+                (random.next_int(4) * random.next_int(4)) as u16
+            }
         };
         let flower = match version {
             GenerationVersion::Legacy224 => Tile::Flower,
-            GenerationVersion::Java230Flora => Tile::Flower230,
+            GenerationVersion::Java230Flora | GenerationVersion::Java230World => Tile::Flower230,
         };
         for _ in 0..30 {
             let xx = x + random.next_int(5) - random.next_int(5);
@@ -544,7 +546,9 @@ fn create_surface(
             if replace_if(&mut map, width, height, xx, yy, Tile::Grass, flower) {
                 data[xx as usize + yy as usize * width] = match version {
                     GenerationVersion::Legacy224 => flower_variant + random.next_int(4) as u16 * 16,
-                    GenerationVersion::Java230Flora => flower_variant + random.next_int(3) as u16,
+                    GenerationVersion::Java230Flora | GenerationVersion::Java230World => {
+                        flower_variant + random.next_int(3) as u16
+                    }
                 };
             }
         }

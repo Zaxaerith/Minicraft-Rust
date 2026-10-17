@@ -33,7 +33,11 @@ fn canonical(name: &str) -> String {
     .to_owned()
 }
 fn normalize_name(name: &str) -> &str {
-    if name == "White Wool" { "Wool" } else { name }
+    match name {
+        "White Wool" => "Wool",
+        "Tnt" => "TNT",
+        _ => name,
+    }
 }
 fn inventory_semantics(items: impl IntoIterator<Item = String>) -> Value {
     let tools = ToolKind::ALL
@@ -47,7 +51,9 @@ fn inventory_semantics(items: impl IntoIterator<Item = String>) -> Value {
     let mut counts = BTreeMap::<String, u64>::new();
     let mut instances = Vec::<String>::new();
     for item in items {
-        let (name, amount) = item.rsplit_once('_').unwrap();
+        // Item.getData is a bare name for Book/FurnitureItem; stackables
+        // and tools provide their actual count/durability suffix.
+        let (name, amount) = item.rsplit_once('_').unwrap_or((&item, "1"));
         if name == "Watering Can" || tools.iter().any(|tool| tool == name) {
             instances.push(item);
         } else {
@@ -79,7 +85,7 @@ fn native_inventory(inventory: &Inventory) -> Value {
             ),
     )
 }
-fn source_entities(text: &str) -> Vec<Value> {
+pub(super) fn source_entities(text: &str) -> Vec<Value> {
     let mut entities = Vec::new();
     for line in fields(text) {
         let (name, body) = line.split_once('[').unwrap();
@@ -136,68 +142,75 @@ fn source_entities(text: &str) -> Vec<Value> {
     entities
 }
 fn native_entities(world: &World) -> Vec<Value> {
+    let mut entities = world
+        .levels
+        .iter()
+        .enumerate()
+        .flat_map(|(index, level)| native_level_entities(level, index))
+        .collect::<Vec<_>>();
+    entities.sort_by_key(Value::to_string);
+    entities
+}
+pub(super) fn native_level_entities(level: &Level, level_index: usize) -> Vec<Value> {
     let mut entities = Vec::new();
-    for (level_index, level) in world.levels.iter().enumerate() {
-        for entity in level.entities.entities() {
-            let mut row = json!({"x":entity.x,"y":entity.y,"levelIndex":level_index});
-            match &entity.kind {
-                EntityKind::Mob(mob) => {
-                    row["name"] = json!(format!("{:?}", mob.species));
-                    row["health"] = json!(mob.health);
-                    if mob.species.hostile() {
-                        row["mobLevel"] = json!(mob.level);
-                    }
-                    if mob.species == spawn::NaturalMob::Sheep {
-                        row["sheared"] = json!(mob.sheared);
-                    }
+    for entity in level.entities.entities() {
+        let mut row = json!({"x":entity.x,"y":entity.y,"levelIndex":level_index});
+        match &entity.kind {
+            EntityKind::Mob(mob) => {
+                row["name"] = json!(format!("{:?}", mob.species));
+                row["health"] = json!(mob.health);
+                if mob.species.hostile() {
+                    row["mobLevel"] = json!(mob.level);
                 }
-                EntityKind::Furniture(kind) => {
-                    if let Some(species) = kind.spawner_mob() {
-                        row["name"] = json!("Spawner");
-                        row["mob"] = json!(format!("{species:?}"));
-                        row["mobLevel"] = json!(
-                            entity
-                                .spawner
-                                .as_ref()
-                                .expect("Spawner configuration")
-                                .level
-                        );
-                    } else {
-                        match kind {
-                            FurnitureKind::KnightStatue => {
-                                row["name"] = json!("KnightStatue");
-                                row["bossHealth"] =
-                                    json!(entity.statue_boss_health.expect("statue health"));
-                            }
-                            FurnitureKind::Chest | FurnitureKind::DungeonChest => {
-                                row["name"] = json!(format!("{kind:?}"));
-                                row["inventory"] =
-                                    native_inventory(entity.storage.as_ref().unwrap());
-                                if *kind == FurnitureKind::DungeonChest {
-                                    row["locked"] = json!(entity.state == 0);
-                                }
-                            }
-                            FurnitureKind::Lantern
-                            | FurnitureKind::IronLantern
-                            | FurnitureKind::GoldLantern => {
-                                row["name"] = json!("Lantern");
-                                row["type"] = json!(match kind {
-                                    FurnitureKind::Lantern => 0,
-                                    FurnitureKind::IronLantern => 1,
-                                    _ => 2,
-                                });
-                            }
-                            FurnitureKind::Enchanter => {
-                                row["name"] = json!("Enchanter");
-                            }
-                            _ => panic!("Unexpected imported native furniture: {kind:?}"),
-                        }
-                    }
+                if mob.species == spawn::NaturalMob::Sheep {
+                    row["sheared"] = json!(mob.sheared);
                 }
-                _ => panic!("Unexpected imported native entity: {:?}", entity.kind),
             }
-            entities.push(row);
+            EntityKind::Furniture(kind) => {
+                if let Some(species) = kind.spawner_mob() {
+                    row["name"] = json!("Spawner");
+                    row["mob"] = json!(format!("{species:?}"));
+                    row["mobLevel"] = json!(
+                        entity
+                            .spawner
+                            .as_ref()
+                            .expect("Spawner configuration")
+                            .level
+                    );
+                } else {
+                    match kind {
+                        FurnitureKind::KnightStatue => {
+                            row["name"] = json!("KnightStatue");
+                            row["bossHealth"] =
+                                json!(entity.statue_boss_health.expect("statue health"));
+                        }
+                        FurnitureKind::Chest | FurnitureKind::DungeonChest => {
+                            row["name"] = json!(format!("{kind:?}"));
+                            row["inventory"] = native_inventory(entity.storage.as_ref().unwrap());
+                            if *kind == FurnitureKind::DungeonChest {
+                                row["locked"] = json!(entity.state == 0);
+                            }
+                        }
+                        FurnitureKind::Lantern
+                        | FurnitureKind::IronLantern
+                        | FurnitureKind::GoldLantern => {
+                            row["name"] = json!("Lantern");
+                            row["type"] = json!(match kind {
+                                FurnitureKind::Lantern => 0,
+                                FurnitureKind::IronLantern => 1,
+                                _ => 2,
+                            });
+                        }
+                        FurnitureKind::Enchanter => {
+                            row["name"] = json!("Enchanter");
+                        }
+                        _ => panic!("Unexpected imported native furniture: {kind:?}"),
+                    }
+                }
+            }
+            _ => panic!("Unexpected imported native entity: {:?}", entity.kind),
         }
+        entities.push(row);
     }
     entities.sort_by_key(Value::to_string);
     entities

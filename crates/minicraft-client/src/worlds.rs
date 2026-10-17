@@ -70,6 +70,27 @@ pub fn create_named(
     mode: GameMode,
     score_minutes: usize,
 ) -> Result<WorldRecord, String> {
+    create_named_with_generation(
+        game_dir,
+        requested_name,
+        seed,
+        spec,
+        mode,
+        score_minutes,
+        crate::level::GenerationVersion::Java230World,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_named_with_generation(
+    game_dir: &Path,
+    requested_name: &str,
+    seed: i64,
+    spec: WorldSpec,
+    mode: GameMode,
+    score_minutes: usize,
+    generation_version: crate::level::GenerationVersion,
+) -> Result<WorldRecord, String> {
     let name = requested_name.trim();
     validate_new_name(game_dir, name, None)?;
     let saves = game_dir.join("saves");
@@ -77,7 +98,7 @@ pub fn create_named(
     fs::create_dir_all(&directory)
         .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
     let record = WorldRecord {
-        generation_version: crate::level::GenerationVersion::Java230Flora,
+        generation_version,
         name: name.to_owned(),
         seed,
         spec,
@@ -554,13 +575,14 @@ mod generation_compatibility_tests {
                     .unwrap()
                     .as_nanos()
             ));
-        let record = create_named(
+        let record = create_named_with_generation(
             &root,
             "NEW",
             42,
             WorldSpec::default(),
             GameMode::Survival,
             20,
+            GenerationVersion::Java230Flora,
         )
         .unwrap();
         assert_eq!(record.generation_version, GenerationVersion::Java230Flora);

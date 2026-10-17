@@ -18,6 +18,9 @@ mod sleep;
 
 #[cfg(test)]
 mod assembly35_tests;
+mod assembly36;
+#[cfg(test)]
+mod assembly36_tests;
 mod boss;
 mod entity;
 mod entity_render;
@@ -481,6 +484,9 @@ impl World {
         options: PlayOptions,
         generation_version: GenerationVersion,
     ) -> Self {
+        if generation_version == GenerationVersion::Java230World {
+            return assembly36::build(seed, spec, options, |_, _, _, _| {});
+        }
         let difficulty = options.difficulty.min(2);
         let size = spec.size;
         let mut levels: Vec<Level> = [1, 0, -1, -2, -3, -4]
