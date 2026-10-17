@@ -3,12 +3,17 @@ use super::{SoundEffect, World, spawn::NaturalMob};
 
 impl World {
     /// Java Mob die side-effects for bosses and scoring.
+    #[cfg(test)]
     pub(super) fn handle_defeated_mob(&mut self, species: NaturalMob) {
+        self.handle_defeated_mob_level(species, 1);
+    }
+
+    pub(super) fn handle_defeated_mob_level(&mut self, species: NaturalMob, level: u8) {
         let (score, multiplier) = match species {
             NaturalMob::AirWizard => (100_000, 0),
             NaturalMob::ObsidianKnight => (300_000, 0),
             NaturalMob::Cow | NaturalMob::Pig | NaturalMob::Sheep => (15, 0),
-            _ => (50, 1),
+            _ => (50 * u32::from(level), 1),
         };
         self.add_score(score, multiplier);
         match species {

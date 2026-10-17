@@ -16,6 +16,8 @@ mod player_update;
 mod render;
 mod sleep;
 
+#[cfg(test)]
+mod assembly35_tests;
 mod boss;
 mod entity;
 mod entity_render;
@@ -23,6 +25,9 @@ mod furniture_action;
 mod generation;
 mod hud;
 mod inventory_ui;
+#[cfg(test)]
+mod item_instance_tests;
+mod item_instances;
 #[cfg(test)]
 mod java230_furniture_tests;
 #[cfg(test)]
@@ -32,6 +37,8 @@ mod java230_tests;
 #[cfg(test)]
 mod java230_tile_tests;
 mod level_map;
+#[cfg(test)]
+mod migration35_world_tests;
 mod overlay_ui;
 mod player_actions;
 mod player_render;
@@ -173,6 +180,7 @@ fn direction_for_move(horizontal: i32, vertical: i32, current: Direction) -> Dir
 pub(crate) enum ActiveItem {
     Stack(ItemId),
     Tool(usize),
+    Slot { index: usize, revision: u64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,7 +219,10 @@ pub(crate) struct Player {
     pub(crate) regen_tick: u8,
     pub(crate) fishing_level: Option<u8>,
     pub(crate) fishing_ticks: u16,
+    /// Pre-instance native-save provenance; never read by the new use path.
     pub(crate) watering_content: u16,
+    #[serde(default)]
+    pub(crate) item_instance_version: u8,
     pub(crate) clothing: ItemId,
     #[serde(default)]
     pub(crate) imported_shirt_color: Option<i32>,
@@ -355,6 +366,7 @@ struct WorldSaveOwned {
 
 impl World {
     pub fn to_save_string(&self) -> Result<String, String> {
+        self.validate_item_instances()?;
         serde_json::to_string(&WorldSaveRef {
             format: 2,
             game_version: "2.2.4-rust",
@@ -377,6 +389,7 @@ impl World {
         }
         let mut world = save.world;
         pause_save::normalize(&mut world.pause, world.quests_enabled);
+        world.upgrade_item_instances()?;
         world.validate_save()?;
         let overflow = world.player.inventory.set_capacity(27);
         for stack in overflow {
@@ -390,6 +403,7 @@ impl World {
         {
             world.player.active_item = None;
         }
+        world.normalize_instance_selection();
         Ok(world)
     }
 
@@ -445,6 +459,7 @@ impl World {
         if self.signs.len() != self.levels.len() {
             return Err("saved sign storage does not match level count".to_owned());
         }
+        self.validate_item_instances()?;
         Ok(())
     }
     #[cfg(test)]
@@ -625,6 +640,7 @@ impl World {
                 fishing_level: None,
                 fishing_ticks: 0,
                 watering_content: 0,
+                item_instance_version: 1,
                 clothing: ItemId::RegularClothes,
                 imported_shirt_color: None,
                 inventory,
@@ -922,6 +938,7 @@ impl World {
     }
 
     pub fn tick(&mut self, input: &Input) -> WorldAction {
+        self.normalize_instance_selection();
         self.begin_display_tick();
         self.tick_after_display(true, input)
     }
@@ -1127,7 +1144,16 @@ impl World {
                         .inventory
                         .slots()
                         .get(self.inventory_item_selection)
-                        .map(|stack| ActiveItem::Stack(stack.item))
+                        .map(|stack| {
+                            if stack.item == ItemId::WateringCan {
+                                ActiveItem::Slot {
+                                    index: self.inventory_item_selection,
+                                    revision: self.player.inventory.slot_revision(),
+                                }
+                            } else {
+                                ActiveItem::Stack(stack.item)
+                            }
+                        })
                 } else {
                     let tool_index = self.inventory_item_selection - stack_count;
                     self.player
@@ -1186,8 +1212,8 @@ impl World {
         for (x, y, radius, player_tnt) in outcome.explosions {
             self.apply_explosion(x, y, radius, player_tnt);
         }
-        for mob in outcome.defeated_mobs {
-            self.handle_defeated_mob(mob);
+        for (mob, level) in outcome.defeated_levels {
+            self.handle_defeated_mob_level(mob, level);
         }
         // Java Updater: level.tick(true); Tile.tickCount++;
         increment_tile_tick();
@@ -1228,6 +1254,7 @@ impl World {
     }
 
     fn attack(&mut self) {
+        self.normalize_instance_selection();
         self.attack_inner();
         self.remove_depleted_active_tool();
     }
@@ -1346,6 +1373,27 @@ impl World {
             return;
         }
 
+        if let Some(tool) = self.active_tool() {
+            let haste = self.effect_active(PotionKind::Haste);
+            if let Some(defeated) = self.levels[self.current_level]
+                .entities
+                .damage_spawner_near(
+                    target_x,
+                    target_y,
+                    tool.tier.level(),
+                    tool.kind == ToolKind::Pickaxe,
+                    self.mode == GameMode::Creative,
+                    haste,
+                    &mut self.random,
+                )
+            {
+                if defeated {
+                    self.add_score(500, 0);
+                }
+                self.sound(SoundEffect::MonsterHurt);
+                return;
+            }
+        }
         if self.levels[self.current_level]
             .entities
             .mob_near(self.player.x + offset_x, self.player.y + offset_y)
@@ -1371,7 +1419,7 @@ impl World {
                     self.sound(SoundEffect::MonsterHurt);
                 }
                 if hit.defeated {
-                    self.handle_defeated_mob(hit.species);
+                    self.handle_defeated_mob_level(hit.species, hit.level);
                 }
                 return;
             }
@@ -1563,11 +1611,15 @@ impl World {
         self.notifications.clear();
         self.player.regen_tick = 0;
         self.player.fishing_level = None;
-        self.player.watering_content = 0;
         self.player.fishing_ticks = 0;
     }
 
     fn use_target(&mut self) {
+        let was_instance = matches!(self.player.active_item, Some(ActiveItem::Slot { .. }));
+        self.normalize_instance_selection();
+        if was_instance && self.player.active_item.is_none() {
+            return;
+        }
         let (offset_x, offset_y) = match self.player.direction {
             Direction::Down => (0, 12),
             Direction::Up => (0, -12),
@@ -1607,6 +1659,20 @@ impl World {
                 self.inventory_selection = 0;
                 self.refresh_crafting_order();
             } else if matches!(kind, FurnitureKind::Chest | FurnitureKind::DungeonChest) {
+                if matches!(self.player.active_item, Some(ActiveItem::Slot { .. })) {
+                    if let Some((index, _)) = self.player.active_slot() {
+                        self.levels[self.current_level]
+                            .entities
+                            .use_container_slot_near(
+                                self.player.x + offset_x,
+                                self.player.y + offset_y,
+                                &mut self.player.inventory,
+                                Some(index),
+                            );
+                        self.normalize_instance_selection();
+                    }
+                    return;
+                }
                 let active = match self.player.active_item {
                     Some(ActiveItem::Stack(item)) => Some(item),
                     _ => None,
@@ -1711,17 +1777,13 @@ impl World {
                 }
                 if kind == FurnitureKind::DungeonChest && state == 0 {
                     // Java DungeonChest.use consumes a key before opening its inventory.
-                    if !self.player.inventory.remove(ItemId::Key, 1) {
+                    if !self.levels[self.current_level]
+                        .entities
+                        .unlock_dungeon_chest(id, &mut self.player.inventory)
+                    {
                         self.add_notification("A KEY IS REQUIRED");
                         return true;
                     }
-                    self.levels[self.current_level]
-                        .entities
-                        .entities
-                        .iter_mut()
-                        .find(|entity| entity.id == id)
-                        .expect("queried dungeon chest")
-                        .state = 1;
                     if self.player.active_item == Some(ActiveItem::Stack(ItemId::Key))
                         && self.player.inventory.count(ItemId::Key) == 0
                     {
@@ -1815,13 +1877,13 @@ impl World {
         }
         let (from_count, _to_count) = if self.inventory_pane == 0 {
             (
-                self.player.inventory.slots().len(),
+                self.player.inventory.used_slots(),
                 self.chest_used_slots(container_id),
             )
         } else {
             (
                 self.chest_used_slots(container_id),
-                self.player.inventory.slots().len(),
+                self.player.inventory.used_slots(),
             )
         };
         if self.inventory_pane == 0 {
@@ -1880,12 +1942,39 @@ impl World {
         from_sel: usize,
         transfer_all: bool,
     ) -> bool {
+        let slots = self.player.inventory.slots().len();
+        if from_sel >= slots {
+            let index = from_sel - slots;
+            let Some(tool) = self.player.inventory.tools().get(index).copied() else {
+                return false;
+            };
+            let Some(storage) = self.levels[self.current_level]
+                .entities
+                .entities_mut_for_storage(container_id)
+            else {
+                return false;
+            };
+            if storage.add_tool(tool).is_none() {
+                return false;
+            }
+            self.player
+                .inventory
+                .take_tool(index)
+                .expect("selected tool");
+            for active in [&mut self.player.active_item, &mut self.player.attack_item] {
+                if let Some(ActiveItem::Tool(i)) = *active {
+                    *active = if i == index {
+                        None
+                    } else {
+                        Some(ActiveItem::Tool(if i > index { i - 1 } else { i }))
+                    };
+                }
+            }
+            return true;
+        }
         let Some(stack) = self.player.inventory.slots().get(from_sel).copied() else {
             return false;
         };
-        if stack.count == 0 {
-            return false;
-        }
         let amount = if transfer_all { stack.count } else { 1 };
         let Some(storage) = self.levels[self.current_level]
             .entities
@@ -1893,46 +1982,69 @@ impl World {
         else {
             return false;
         };
-        let accepted = storage.add(stack.item, amount);
-        let moved = amount - accepted;
+        let left = storage.add_stack(ItemStack {
+            count: amount,
+            ..stack
+        });
+        let moved = amount - left;
         if moved == 0 {
             return false;
         }
-        self.player.inventory.remove(stack.item, moved);
+        self.player
+            .inventory
+            .remove_slot(from_sel, moved)
+            .expect("transferred source stack");
+        self.normalize_instance_selection();
         true
     }
-
     fn transfer_chest_to_player(
         &mut self,
         container_id: u64,
         from_sel: usize,
         transfer_all: bool,
     ) -> bool {
-        let Some(stack) = self.levels[self.current_level]
+        let Some(storage) = self.levels[self.current_level]
             .entities
             .death_chest_storage(container_id)
-            .and_then(|storage| storage.slots().get(from_sel).copied())
         else {
             return false;
         };
-        if stack.count == 0 {
-            return false;
+        let slots = storage.slots().len();
+        if from_sel >= slots {
+            let index = from_sel - slots;
+            let Some(tool) = storage.tools().get(index).copied() else {
+                return false;
+            };
+            if self.player.inventory.add_tool(tool).is_none() {
+                return false;
+            }
+            self.levels[self.current_level]
+                .entities
+                .entities_mut_for_storage(container_id)
+                .expect("source chest")
+                .take_tool(index)
+                .expect("source tool");
+            return true;
         }
+        let Some(stack) = storage.slots().get(from_sel).copied() else {
+            return false;
+        };
         let amount = if transfer_all { stack.count } else { 1 };
-        let accepted = self.player.inventory.add(stack.item, amount);
-        if accepted == amount {
+        let left = self.player.inventory.add_stack(ItemStack {
+            count: amount,
+            ..stack
+        });
+        let moved = amount - left;
+        if moved == 0 {
             return false;
         }
-        let moved = amount - accepted;
-        if let Some(storage) = self.levels[self.current_level]
+        self.levels[self.current_level]
             .entities
             .entities_mut_for_storage(container_id)
-        {
-            storage.remove(stack.item, moved);
-            true
-        } else {
-            false
-        }
+            .expect("source chest")
+            .remove_slot(from_sel, moved)
+            .expect("source stack");
+        true
     }
 }
 
@@ -2099,3 +2211,6 @@ mod flora_tests;
 
 #[cfg(test)]
 mod migration_tests;
+
+#[cfg(test)]
+mod migration35_runtime_tests;

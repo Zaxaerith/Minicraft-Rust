@@ -145,6 +145,15 @@ pub(crate) fn render_hud(
                 .get(index)
                 .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name())))
                 .map_or((None, String::new()), |(image, label)| (Some(image), label)),
+            ActiveItem::Slot { .. } => player
+                .stack_for_active(active)
+                .map(|stack| {
+                    (
+                        Some(assets.item_stack(stack)),
+                        format!(" {} {}", stack.count, stack.item.display_name()),
+                    )
+                })
+                .unwrap_or((None, String::new())),
         };
         if let Some(image) = image {
             screen.blit(image, 80, bottom - 8);
@@ -176,15 +185,20 @@ pub(crate) fn render_hud(
             screen.blit_region(assets.hud(), 84, bottom - 16, 32, 8, 8, 8, false);
         }
     }
-    if player.active_item == Some(ActiveItem::Stack(ItemId::WateringCan)) {
-        let content = u32::from(player.watering_content) * 100 / 1_800;
+    if let Some((_, stack)) = player.active_slot()
+        && stack.item == ItemId::WateringCan
+    {
+        let content = stack
+            .watering_content
+            .map(|water| u32::from(water) * 100 / 1_800);
+        let label = content.map_or_else(|| "?".to_owned(), |water| format!("{water}%"));
         draw_hud_text_background(
             screen,
             assets,
-            &format!("{content}%"),
+            &label,
             164,
             bottom - 16,
-            hud_percentage_color(content),
+            content.map_or(0xFFFFFF, hud_percentage_color),
         );
     }
 
@@ -311,4 +325,41 @@ pub fn render_hud_parity(screen: &mut Screen, assets: &Assets, world: &World) {
         world.clock.get().day_tick,
         world.days,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::item::{Inventory, ItemStack};
+
+    #[test]
+    fn water_hud_renders_individual_contents_and_ignores_stale_slot_selection() {
+        let assets = Assets::load(&[]).unwrap();
+        let mut world = super::super::registry_tests::tiny_world();
+        world.player.inventory = Inventory::new(4);
+        world.player.inventory.add_stack(ItemStack::with_water(731));
+        world.player.inventory.add_stack(ItemStack::with_water(23));
+        let revision = world.player.inventory.slot_revision();
+        let mut previous = Vec::new();
+        for content in [None, Some(0), Some(23), Some(731)] {
+            world.player.inventory.slot_mut(0).unwrap().watering_content = content;
+            world.player.active_item = Some(ActiveItem::Slot { index: 0, revision });
+            let before = world.player.inventory.clone();
+            let mut screen = Screen::new();
+            render_hud_parity(&mut screen, &assets, &world);
+            assert_eq!(world.player.inventory, before);
+            let rendered = screen.pixels().to_vec();
+            assert!(previous.iter().all(|pixels| pixels != &rendered));
+            previous.push(rendered);
+        }
+        world.player.active_item = Some(ActiveItem::Slot { index: 1, revision });
+        world.player.inventory.remove_slot(0, 1).unwrap();
+        let mut stale = Screen::new();
+        render_hud_parity(&mut stale, &assets, &world);
+        world.player.active_item = None;
+        let mut empty = Screen::new();
+        render_hud_parity(&mut empty, &assets, &world);
+        assert!(stale.pixels() == empty.pixels());
+        assert_eq!(world.player.inventory.slots(), &[ItemStack::with_water(23)]);
+    }
 }

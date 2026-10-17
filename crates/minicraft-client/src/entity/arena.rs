@@ -10,7 +10,7 @@ use super::helpers::{gaussian, split_mix, squared_distance, unit};
 use super::mob::NaturalMob;
 use super::particle::ParticleKind;
 use super::projectile::{Projectile, ProjectileKind, arrow_velocity, spark_damage, spark_life};
-use super::stats::{mob_drops, mob_health};
+use super::stats::{mob_drops_at_level, mob_health, mob_health_at_level};
 use super::types::{Entity, EntityKind, HitResult, ItemMotion, Mob};
 
 #[derive(Serialize, Deserialize)]
@@ -32,6 +32,54 @@ impl Default for EntityArena {
 impl EntityArena {
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    /// Reject corrupt instance fields before a native world is published/loaded.
+    /// Historical max_health values remain authoritative: missing level defaults
+    /// to one and must not retroactively rescale a pre-migration Rust entity.
+    pub(crate) fn validate_states(&self) -> Result<(), String> {
+        for entity in &self.entities {
+            if let EntityKind::Mob(mob) = &entity.kind
+                && (!(1..=super::stats::mob_max_level(mob.species)).contains(&mob.level)
+                    || mob.difficulty > 2
+                    || mob.max_health == 0
+                    || mob.health > mob.max_health
+                    || (!entity.removed && mob.health == 0)
+                    || mob.phase > 1)
+            {
+                return Err(format!(
+                    "invalid native {:?} level/health/state",
+                    mob.species
+                ));
+            }
+            if let Some(state) = &entity.spawner {
+                let EntityKind::Furniture(kind) = entity.kind else {
+                    return Err("Spawner state attached to a non-furniture entity".into());
+                };
+                let species = kind
+                    .spawner_mob()
+                    .ok_or("Spawner state attached to wrong furniture")?;
+                if !(1..=super::stats::mob_max_level(species)).contains(&state.level)
+                    || state.spawn_ticks > 500
+                {
+                    return Err("invalid native Spawner level/countdown".into());
+                }
+            }
+            if matches!(entity.kind, EntityKind::Furniture(kind) if kind.spawner_mob().is_some())
+                && ((!entity.removed && entity.health == 0) || entity.health > 100)
+            {
+                return Err("invalid native Spawner health".into());
+            }
+            if let Some(health) = entity.statue_boss_health
+                && (!matches!(
+                    entity.kind,
+                    EntityKind::Furniture(FurnitureKind::KnightStatue)
+                ) || !(1..=5_000).contains(&health))
+            {
+                return Err("invalid native KnightStatue bossHealth".into());
+            }
+        }
+        Ok(())
     }
 
     pub fn mark_removed_by_id(&mut self, id: u64) {
@@ -81,6 +129,9 @@ impl EntityArena {
             y,
             EntityKind::Mob(Mob {
                 species,
+                level: 1,
+                difficulty: 1,
+                score_mode: false,
                 health: max_health,
                 max_health,
                 hurt_time: 0,
@@ -94,6 +145,60 @@ impl EntityArena {
                 walk_time: 0,
             }),
         )
+    }
+
+    /// Constructs Java per-instance level and difficulty attributes. This is
+    /// separate from the historical Rust constructor to preserve old fixtures.
+    pub fn spawn_mob_level(
+        &mut self,
+        species: NaturalMob,
+        level: u8,
+        difficulty: u8,
+        score_mode: bool,
+        x: i32,
+        y: i32,
+    ) -> Result<u64, String> {
+        let max_health = mob_health_at_level(species, level, difficulty)
+            .ok_or("invalid Java mob level or difficulty")?;
+        let id = self.spawn_mob(species, x, y);
+        let EntityKind::Mob(mob) = &mut self.entities.last_mut().expect("inserted mob").kind else {
+            unreachable!()
+        };
+        mob.level = level;
+        mob.difficulty = difficulty;
+        mob.score_mode = score_mode;
+        mob.health = max_health;
+        mob.max_health = max_health;
+        if species == NaturalMob::Skeleton {
+            mob.attack_delay = 500 / (u16::from(level) + 5);
+        }
+        Ok(id)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn import_mob_level(
+        &mut self,
+        species: NaturalMob,
+        level: u8,
+        difficulty: u8,
+        score_mode: bool,
+        x: i32,
+        y: i32,
+        health: u16,
+        sheared: bool,
+    ) -> Result<(), String> {
+        let maximum = mob_health_at_level(species, level, difficulty)
+            .ok_or("invalid Java mob level or difficulty")?;
+        if health == 0 || health > maximum {
+            return Err("invalid Java mob health for level/difficulty".into());
+        }
+        self.spawn_mob_level(species, level, difficulty, score_mode, x, y)?;
+        let EntityKind::Mob(mob) = &mut self.entities.last_mut().expect("inserted mob").kind else {
+            unreachable!()
+        };
+        mob.health = health;
+        mob.sheared = sheared;
+        Ok(())
     }
 
     pub(crate) fn import_mob(
@@ -121,7 +226,7 @@ impl EntityArena {
         x: i32,
         y: i32,
         state: u16,
-        contents: &[(ItemId, u16)],
+        contents: &[ItemStack],
         tools: &[ToolItem],
     ) -> Result<(), String> {
         let id = self.spawn_furniture(kind, x, y);
@@ -130,8 +235,8 @@ impl EntityArena {
             if let Some(storage) = &mut entity.storage {
                 // Import replaces the official saved contents, not generated loot.
                 *storage = Inventory::new(storage.capacity());
-                for (item, count) in contents {
-                    if storage.add(*item, *count) != 0 {
+                for stack in contents {
+                    if storage.add_stack(*stack) != 0 {
                         return Err("Java container exceeds native capacity".into());
                     }
                 }
@@ -162,7 +267,7 @@ impl EntityArena {
                 // must fit even though a normal chest has only 27 slots.
                 storage.set_capacity(usize::MAX);
                 for stack in stacks {
-                    storage.add(stack.item, stack.count);
+                    storage.add_stack(stack);
                 }
                 for tool in tools {
                     let _ = storage.add_tool(tool);
@@ -376,6 +481,9 @@ impl EntityArena {
             };
             if (chest::is_container(kind) && entity.state == chest::DEATH_CHEST_STATE)
                 || kind == FurnitureKind::KnightStatue
+                // A furniture ItemId cannot retain the selected Spawner level.
+                // Until it can, reject pickup instead of resetting the instance.
+                || entity.spawner.as_ref().is_some_and(|spawner| spawner.level != 1)
                 || (kind == FurnitureKind::Tnt && entity.state > 0)
                 || (!creative
                     && (kind.spawner_mob().is_some()
@@ -497,6 +605,8 @@ impl EntityArena {
             age: 0,
             death_chest_lifetime: None,
             kind,
+            spawner: None,
+            statue_boss_health: None,
             state: 0,
             health: 0,
             item_motion: None,
@@ -516,7 +626,21 @@ impl EntityArena {
         random: &mut JavaRandom,
         defeated_mobs: &mut Vec<NaturalMob>,
     ) -> HitResult {
-        let (x, y, species, defeated, health) = {
+        if let EntityKind::Mob(mob) = &self.entities[index].kind
+            && mob.hurt_time > 0
+        {
+            let entity = &self.entities[index];
+            return HitResult {
+                species: mob.species,
+                level: mob.level,
+                defeated: false,
+                health: mob.health,
+                damage: 0,
+                x: entity.x,
+                y: entity.y,
+            };
+        }
+        let (x, y, species, level, difficulty, score_mode, defeated, health) = {
             let entity = &mut self.entities[index];
             let EntityKind::Mob(mob) = &mut entity.kind else {
                 unreachable!();
@@ -528,16 +652,26 @@ impl EntityArena {
             if defeated {
                 entity.removed = true;
             }
-            (entity.x, entity.y, mob.species, defeated, mob.health)
+            (
+                entity.x,
+                entity.y,
+                mob.species,
+                mob.level,
+                mob.difficulty,
+                mob.score_mode,
+                defeated,
+                mob.health,
+            )
         };
         if defeated {
             defeated_mobs.push(species);
-            for stack in mob_drops(species, random) {
+            for stack in mob_drops_at_level(species, level, difficulty, score_mode, random) {
                 self.spawn_item(stack, x, y);
             }
         }
         HitResult {
             species,
+            level,
             defeated,
             health,
             damage,
@@ -613,6 +747,74 @@ impl EntityArena {
         true
     }
 
+    /// Source Save persists only bossHealth; taps restart at zero on Java load.
+    pub(crate) fn import_statue(&mut self, x: i32, y: i32, health: u16) -> Result<(), String> {
+        if health == 0 || health > 5_000 {
+            return Err("invalid KnightStatue bossHealth".into());
+        }
+        self.spawn_furniture(FurnitureKind::KnightStatue, x, y);
+        self.entities
+            .last_mut()
+            .expect("inserted statue")
+            .statue_boss_health = Some(health);
+        Ok(())
+    }
+
+    pub(crate) fn import_spawner(
+        &mut self,
+        kind: FurnitureKind,
+        x: i32,
+        y: i32,
+        level: u8,
+        random: &mut JavaRandom,
+    ) -> Result<(), String> {
+        let species = kind.spawner_mob().ok_or("unsupported Spawner species")?;
+        if !(1..=super::stats::mob_max_level(species)).contains(&level) {
+            return Err("invalid Spawner mob level".into());
+        }
+        self.spawn_furniture(kind, x, y);
+        self.entities.last_mut().expect("inserted spawner").spawner =
+            Some(super::furniture::spawner::new_state(level, random));
+        Ok(())
+    }
+
+    /// Java Spawner.interact: any tool can damage, pickaxe gains 2..6; no loot
+    /// and no durability payment occurs in this Java furniture method.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn damage_spawner_near(
+        &mut self,
+        x: i32,
+        y: i32,
+        tier: u8,
+        pickaxe: bool,
+        creative: bool,
+        haste: bool,
+        random: &mut JavaRandom,
+    ) -> Option<bool> {
+        let entity = self.entities.iter_mut().find(|e| {
+            !e.removed
+                && matches!(e.kind, EntityKind::Furniture(kind) if kind.spawner_mob().is_some())
+                && squared_distance(e.x, e.y, x, y) <= 14 * 14
+        })?;
+        let damage = if creative {
+            entity.health
+        } else {
+            let amount = u16::from(tier)
+                + random.next_int(2) as u16
+                + if pickaxe {
+                    random.next_int(5) as u16 + 2
+                } else {
+                    0
+                };
+            amount * if haste { 2 } else { 1 }
+        };
+        entity.health = entity.health.saturating_sub(damage);
+        let defeated = entity.health == 0;
+        entity.removed = defeated;
+        self.entities.retain(|e| !e.removed);
+        Some(defeated)
+    }
+
     pub fn tap_statue_near(&mut self, target_x: i32, target_y: i32) -> Option<u16> {
         let index = self.entities.iter().position(|entity| {
             matches!(
@@ -620,16 +822,62 @@ impl EntityArena {
                 EntityKind::Furniture(FurnitureKind::KnightStatue)
             ) && squared_distance(entity.x, entity.y, target_x, target_y) <= 14 * 14
         })?;
-        self.entities[index].state += 1;
+        if self.has_mob(NaturalMob::ObsidianKnight) {
+            return None;
+        }
+        self.entities[index].state = self.entities[index].state.saturating_add(1);
         let touches = self.entities[index].state;
         if touches >= statue::TAPS_TO_AWAKEN {
             let x = self.entities[index].x;
             let y = self.entities[index].y;
             self.entities[index].removed = true;
-            self.spawn_mob(NaturalMob::ObsidianKnight, x, y);
+            let health = self.entities[index].statue_boss_health.unwrap_or(5_000);
+            let id = self.spawn_mob(NaturalMob::ObsidianKnight, x, y);
+            if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id)
+                && let EntityKind::Mob(mob) = &mut entity.kind
+            {
+                // Java constructor restores health while phase starts at zero;
+                // its first actual tick transitions the damaged boss.
+                mob.health = health;
+            }
             self.entities.retain(|entity| !entity.removed);
         }
         Some(touches)
+    }
+
+    /// Java DungeonChest.use after Load restores chestCount from locked boxes.
+    /// Derive it from persisted lock states instead of storing a second counter.
+    pub(crate) fn unlock_dungeon_chest(&mut self, id: u64, inventory: &mut Inventory) -> bool {
+        let Some(index) = self.entities.iter().position(|entity| {
+            entity.id == id
+                && !entity.removed
+                && entity.state == 0
+                && matches!(
+                    entity.kind,
+                    EntityKind::Furniture(FurnitureKind::DungeonChest)
+                )
+        }) else {
+            return false;
+        };
+        if !inventory.remove(ItemId::Key, 1) {
+            return false;
+        }
+        let (x, y) = (self.entities[index].x, self.entities[index].y);
+        self.entities[index].state = 1;
+        if !self.entities.iter().any(|entity| {
+            !entity.removed
+                && entity.state == 0
+                && matches!(
+                    entity.kind,
+                    EntityKind::Furniture(FurnitureKind::DungeonChest)
+                )
+        }) {
+            // Java Level.dropItem(x,y,5,Gold Apple) creates five separate drops.
+            for _ in 0..5 {
+                self.spawn_item(ItemStack::new(ItemId::GoldenApple, 1), x, y);
+            }
+        }
+        true
     }
 
     pub fn use_container_near(
@@ -639,36 +887,71 @@ impl EntityArena {
         inventory: &mut Inventory,
         active: Option<ItemId>,
     ) -> Option<String> {
-        let entity = self.entities.iter_mut().find(|entity| {
+        let slot = active.map(|item| {
+            inventory
+                .slots()
+                .iter()
+                .position(|stack| stack.item == item)
+                .unwrap_or(usize::MAX)
+        });
+        self.use_container_slot_near(target_x, target_y, inventory, slot)
+    }
+
+    /// Exact-instance counterpart used by a selected stateful inventory slot.
+    pub(crate) fn use_container_slot_near(
+        &mut self,
+        target_x: i32,
+        target_y: i32,
+        inventory: &mut Inventory,
+        active: Option<usize>,
+    ) -> Option<String> {
+        let index = self.entities.iter().position(|entity| {
             matches!(
                 entity.kind,
                 EntityKind::Furniture(FurnitureKind::Chest | FurnitureKind::DungeonChest)
             ) && entity.state != chest::DEATH_CHEST_STATE
                 && squared_distance(entity.x, entity.y, target_x, target_y) <= 14 * 14
         })?;
-        let EntityKind::Furniture(kind) = entity.kind else {
+        let EntityKind::Furniture(kind) = self.entities[index].kind else {
             unreachable!();
         };
-        if kind == FurnitureKind::DungeonChest && entity.state == 0 {
-            if !inventory.remove(ItemId::Key, 1) {
+        if kind == FurnitureKind::DungeonChest && self.entities[index].state == 0 {
+            if !self.unlock_dungeon_chest(self.entities[index].id, inventory) {
                 return Some("A KEY IS REQUIRED".to_owned());
             }
-            entity.state = 1;
             return Some("DUNGEON CHEST UNLOCKED".to_owned());
         }
+        let entity = &mut self.entities[index];
         let storage = entity.storage.as_mut().expect("container storage");
-        if let Some(item) = active
-            && inventory.remove(item, 1)
-        {
-            storage.add(item, 1);
+        if let Some(index) = active {
+            let Some(mut stack) = inventory.slots().get(index).copied() else {
+                return Some("ITEM MISSING".into());
+            };
+            let item = stack.item;
+            stack.count = 1;
+            if storage.add_stack(stack) != 0 {
+                return Some("CHEST FULL".into());
+            }
+            inventory.remove_slot(index, 1);
             return Some(format!("STORED {item}"));
         }
         let Some(stack) = storage.slots().first().copied() else {
+            if let Some(tool) = storage.tools().first().copied() {
+                if inventory.add_tool(tool).is_none() {
+                    return Some("INVENTORY FULL".into());
+                }
+                storage.tools.remove(0);
+                return Some(format!("TOOK {}", tool.kind.display_name()));
+            }
             return Some("CHEST EMPTY".to_owned());
         };
-        if inventory.add(stack.item, stack.count) == 0 {
-            storage.remove(stack.item, stack.count);
-            Some(format!("TOOK {} x{}", stack.item, stack.count))
+        let remaining = inventory.add_stack(stack);
+        let inserted = stack.count - remaining;
+        if inserted > 0 {
+            storage.remove_slot(0, inserted);
+        }
+        if remaining == 0 {
+            Some(format!("TOOK {} x{}", stack.item, inserted))
         } else {
             Some("INVENTORY FULL".to_owned())
         }
@@ -724,10 +1007,13 @@ impl EntityArena {
                 continue;
             };
             let before = stack.count;
-            stack.count = inventory.add(stack.item, stack.count);
+            stack.count = inventory.add_stack(*stack);
             let inserted = before - stack.count;
             if inserted > 0 {
-                collected.push(ItemStack::new(stack.item, inserted));
+                collected.push(ItemStack {
+                    count: inserted,
+                    ..*stack
+                });
             }
             if stack.count == 0 {
                 entity.removed = true;

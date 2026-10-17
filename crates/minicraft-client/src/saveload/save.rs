@@ -102,66 +102,54 @@ fn potion_effects_field(effects: &[u16; PotionKind::ALL.len()]) -> String {
 }
 
 /// Java `Save.writeInventory` — active item first, then inventory stacks/tools.
-pub fn inventory_fields(world: &World) -> Vec<String> {
+pub fn inventory_fields(world: &World) -> Result<Vec<String>, String> {
     let mut fields = Vec::new();
     let active_stack = match world.player.active_item {
+        Some(ActiveItem::Slot { index, revision })
+            if revision == world.player.inventory.slot_revision() =>
+        {
+            Some(index)
+        }
         Some(ActiveItem::Stack(item)) => world
             .player
             .inventory
             .slots()
             .iter()
-            .position(|stack| stack.item == item),
+            .position(|s| s.item == item),
         _ => None,
     };
-    if let Some(active) = world.player.active_item
-        && let Some(encoded) = encode_active_item(world, active)
+    if let Some(index) = active_stack {
+        if let Some(stack) = world.player.inventory.slots().get(index) {
+            fields.push(encode_item(*stack)?);
+        }
+    } else if let Some(ActiveItem::Tool(index)) = world.player.active_item
+        && let Some(tool) = world.player.inventory.tools().get(index)
     {
-        fields.push(encoded);
-    }
-    for (index, stack) in world.player.inventory.slots().iter().enumerate() {
-        if Some(index) == active_stack {
-            continue;
-        }
-        fields.push(encode_item(
-            stack.item,
-            stack.count,
-            world.player.watering_content,
-        ));
-    }
-    for (index, tool) in world.player.inventory.tools().iter().enumerate() {
-        if world.player.active_item == Some(ActiveItem::Tool(index)) {
-            continue;
-        }
         fields.push(format!("{}_{}", tool.display_name(), tool.durability));
     }
+    for (index, stack) in world.player.inventory.slots().iter().enumerate() {
+        if Some(index) != active_stack {
+            fields.push(encode_item(*stack)?);
+        }
+    }
+    for (index, tool) in world.player.inventory.tools().iter().enumerate() {
+        if world.player.active_item != Some(ActiveItem::Tool(index)) {
+            fields.push(format!("{}_{}", tool.display_name(), tool.durability));
+        }
+    }
     fields.push(String::new());
-    fields
+    Ok(fields)
 }
-
-fn encode_active_item(world: &World, active: ActiveItem) -> Option<String> {
-    match active {
-        ActiveItem::Stack(item) => world
-            .player
-            .inventory
-            .slots()
-            .iter()
-            .find(|stack| stack.item == item)
-            .map(|stack| encode_item(item, stack.count, world.player.watering_content)),
-        ActiveItem::Tool(index) => world
-            .player
-            .inventory
-            .tools()
-            .get(index)
-            .map(|tool| format!("{}_{}", tool.display_name(), tool.durability)),
-    }
-}
-
-fn encode_item(item: ItemId, count: u16, watering_content: u16) -> String {
-    if item == ItemId::WateringCan {
-        format!("{}_{}", item.display_name(), watering_content)
+fn encode_item(stack: crate::item::ItemStack) -> Result<String, String> {
+    stack.validate_instance()?;
+    let value = if stack.item == ItemId::WateringCan {
+        stack
+            .watering_content
+            .ok_or("legacy Watering Can has unknown instance content; refill before Java export")?
     } else {
-        format!("{}_{}", item.display_name(), count)
-    }
+        stack.count
+    };
+    Ok(format!("{}_{}", stack.item.display_name(), value))
 }
 
 /// Java `Save.writeEntity` for a local save (no eid / transient particles).
@@ -302,7 +290,7 @@ mod tests {
             crate::item::ToolItem::new(crate::item::ToolKind::Pickaxe, crate::item::ToolTier::Iron);
         tool.durability = 70;
         world.player.inventory.add_tool(tool).unwrap();
-        let fields = inventory_fields(&world);
+        let fields = inventory_fields(&world).unwrap();
         assert!(fields.iter().any(|field| field == "Wood_3"));
         assert!(
             fields.iter().any(|field| field == "Iron Pickaxe_70"),
@@ -331,7 +319,7 @@ mod tests {
         let mut world = tiny_score_world();
         world.player.inventory.add(ItemId::Wood, 1000);
         world.player.active_item = Some(ActiveItem::Stack(ItemId::Wood));
-        let fields = inventory_fields(&world);
+        let fields = inventory_fields(&world).unwrap();
         let exported: u16 = fields
             .iter()
             .filter_map(|field| field.strip_prefix("Wood_"))
@@ -349,6 +337,7 @@ mod tests {
         world.player.active_item = Some(ActiveItem::Tool(index));
         assert_eq!(
             inventory_fields(&world)
+                .unwrap()
                 .iter()
                 .filter(|field| field.starts_with("Iron Pickaxe_"))
                 .count(),

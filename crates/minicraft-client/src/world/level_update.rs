@@ -11,7 +11,22 @@ impl World {
     ) -> TickOutcome {
         let level = &mut self.levels[self.current_level];
         for intent in std::mem::take(&mut level.pending_spawns) {
-            level.entities.spawn_mob(intent.kind, intent.x, intent.y);
+            let mob_level = if intent.kind.hostile() {
+                (-level.depth.clamp(-4, 0)).max(1) as u8
+            } else {
+                1
+            };
+            level
+                .entities
+                .spawn_mob_level(
+                    intent.kind,
+                    mob_level,
+                    self.difficulty as u8,
+                    self.mode == super::GameMode::Score,
+                    intent.x,
+                    intent.y,
+                )
+                .expect("validated natural spawn level");
         }
         let depth = level.depth;
         let outcome = level.entities.tick_with_player_difficulty(
@@ -25,6 +40,9 @@ impl World {
             &mut self.random,
             self.difficulty.min(2) as u8,
             depth,
+            self.clock.get().day_tick,
+            level.max_mob_count,
+            self.mode == super::GameMode::Score,
         );
         if player.is_some() {
             self.retrieve_death_chests();
@@ -66,14 +84,14 @@ impl World {
         let stacks = storage.slots().to_vec();
         let tools = storage.tools().to_vec();
         for stack in stacks {
-            let remaining = self.player.inventory.add(stack.item, stack.count);
+            let remaining = self.player.inventory.add_stack(stack);
             let transferred = stack.count - remaining;
             if transferred > 0 {
                 self.levels[self.current_level]
                     .entities
                     .entities_mut_for_storage(id)
                     .expect("chest exists")
-                    .remove(stack.item, transferred);
+                    .remove_slot(0, transferred);
                 self.sound(super::SoundEffect::Pickup);
             }
             if remaining > 0 {

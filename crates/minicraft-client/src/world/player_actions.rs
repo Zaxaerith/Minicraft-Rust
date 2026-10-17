@@ -520,10 +520,25 @@ impl World {
     /// Java's keymap describes Q as one and Shift-Q as the whole stack. Its
     /// Player branch is reversed; keep the documented controls here.
     pub(super) fn drop_active_item(&mut self, whole_stack: bool) {
+        self.normalize_instance_selection();
         let Some(active) = self.player.active_item else {
             return;
         };
         match active {
+            ActiveItem::Slot { index, revision } => {
+                if revision != self.player.inventory.slot_revision() {
+                    self.player.active_item = None;
+                    return;
+                }
+                if let Some(stack) = self.player.inventory.remove_slot(index, 1) {
+                    self.levels[self.current_level].entities.spawn_item(
+                        stack,
+                        self.player.x,
+                        self.player.y,
+                    );
+                }
+                self.player.active_item = None;
+            }
             ActiveItem::Stack(item) => {
                 let Some(stack) = self
                     .player

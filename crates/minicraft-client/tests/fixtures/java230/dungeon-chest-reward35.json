@@ -1,0 +1,82 @@
+{
+  "cases": [
+    {
+      "drops": [],
+      "chestCount": 2,
+      "keys": 0,
+      "action": "no-key",
+      "goldApples": 0,
+      "used": false,
+      "locked": [
+        true,
+        true
+      ]
+    },
+    {
+      "drops": [],
+      "chestCount": 1,
+      "keys": 1,
+      "action": "first-unlock",
+      "goldApples": 0,
+      "used": true,
+      "locked": [
+        false,
+        true
+      ]
+    },
+    {
+      "drops": [],
+      "chestCount": 1,
+      "keys": 1,
+      "action": "repeat-first",
+      "goldApples": 0,
+      "used": true,
+      "locked": [
+        false,
+        true
+      ]
+    },
+    {
+      "drops": [
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1"
+      ],
+      "chestCount": 0,
+      "keys": 0,
+      "action": "last-unlock",
+      "goldApples": 5,
+      "used": true,
+      "locked": [
+        false,
+        false
+      ]
+    },
+    {
+      "drops": [
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1",
+        "Gold Apple_1"
+      ],
+      "chestCount": 0,
+      "keys": 0,
+      "action": "repeat-last",
+      "goldApples": 5,
+      "used": true,
+      "locked": [
+        false,
+        false
+      ]
+    }
+  ],
+  "officialSavedEntities": [
+    "DungeonChest[40:56:Wood_2:true:5]",
+    "DungeonChest[104:56:Gem_3:true:5]"
+  ],
+  "source": "Save.writeEntity -> Load.loadEntity -> DungeonChest.use",
+  "version": "2.3.0-dev2"
+}

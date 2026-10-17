@@ -15,8 +15,8 @@ impl World {
         for (x, y, radius, player_tnt) in outcome.explosions {
             self.apply_explosion(x, y, radius, player_tnt);
         }
-        for mob in outcome.defeated_mobs {
-            self.handle_defeated_mob(mob);
+        for (mob, level) in outcome.defeated_levels {
+            self.handle_defeated_mob_level(mob, level);
         }
         // Level.trySpawn follows entity updates/removals, even with no players.
         super::try_queue_natural_spawn_for_player(

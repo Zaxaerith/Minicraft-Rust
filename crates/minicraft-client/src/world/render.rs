@@ -293,6 +293,10 @@ impl World {
                 );
                 let image = self.player.attack_item.and_then(|active| match active {
                     ActiveItem::Stack(item) => Some(assets.item(item)),
+                    ActiveItem::Slot { .. } => self
+                        .player
+                        .stack_for_active(active)
+                        .map(|s| assets.item_stack(s)),
                     ActiveItem::Tool(index) => self
                         .player
                         .inventory
@@ -525,16 +529,16 @@ impl World {
     ) {
         if self.inventory_open {
             if let Some(chest_id) = self.container_id {
+                let empty = Inventory::new(27);
                 let chest_slots = self.levels[self.current_level]
                     .entities
                     .death_chest_storage(chest_id)
-                    .map(|storage| storage.slots().to_vec())
-                    .unwrap_or_default();
+                    .unwrap_or(&empty);
                 render_container(
                     screen,
                     assets,
                     &self.player,
-                    &chest_slots,
+                    chest_slots,
                     self.inventory_item_selection,
                     self.inventory_selection,
                     self.inventory_pane,

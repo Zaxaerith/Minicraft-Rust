@@ -1,4 +1,30 @@
 //! Versioned natural flora: actual generation, watering/harvest, and saved maps.
+fn water_content(world: &super::World) -> u16 {
+    world
+        .player
+        .inventory
+        .slots()
+        .iter()
+        .find(|s| s.item == super::ItemId::WateringCan)
+        .expect("test can")
+        .watering_content
+        .expect("known test content")
+}
+fn set_water_content(world: &mut super::World, content: u16) {
+    let index = world
+        .player
+        .inventory
+        .slots()
+        .iter()
+        .position(|s| s.item == super::ItemId::WateringCan)
+        .expect("test can");
+    world
+        .player
+        .inventory
+        .slot_mut(index)
+        .unwrap()
+        .watering_content = Some(content);
+}
 use super::*;
 use crate::level::tile::flower::FlowerVariant;
 
@@ -89,17 +115,17 @@ fn java230_flora_watering_is_renewable_deterministic_saved_and_rng_isolated() {
     let water = 8 + 8 * world.width;
     world.levels[0].tiles[water] = Tile::Water;
     world.attack_target_tile(8, 8, water);
-    assert_eq!(world.player.watering_content, 1800);
+    assert_eq!(water_content(&world), 1800);
     let mut resumed = roundtrip(&world);
     let mut expected = JavaRandom::new(0);
     let rng = serde_json::to_value(&world.random).unwrap();
     let mut counts = [0; 19];
     for attempt in 0..12_000 {
-        if world.player.watering_content == 0 {
+        if water_content(&world) == 0 {
             world.attack_target_tile(8, 8, water);
             resumed.attack_target_tile(8, 8, water);
         }
-        let content = world.player.watering_content;
+        let content = water_content(&world);
         let blooms = expected.next_int(60) == 0;
         let variant = if blooms {
             Some(expected.next_int(19) as u16)
@@ -108,7 +134,7 @@ fn java230_flora_watering_is_renewable_deterministic_saved_and_rng_isolated() {
         };
         world.attack_target_tile(9, 8, target);
         resumed.attack_target_tile(9, 8, target);
-        assert_eq!(world.player.watering_content, content - 1);
+        assert_eq!(water_content(&world), content - 1);
         assert_eq!(
             world.levels[0].tiles[target],
             resumed.levels[0].tiles[target]
@@ -156,11 +182,11 @@ fn java230_flora_watering_is_renewable_deterministic_saved_and_rng_isolated() {
         serde_json::to_value(&resumed.flora_random).unwrap()
     );
     // No bloom with empty content, no invalid target replacement.
-    world.player.watering_content = 0;
+    set_water_content(&mut world, 0);
     let before = serde_json::to_value(&world.flora_random).unwrap();
     world.attack_target_tile(9, 8, target);
     assert_eq!(before, serde_json::to_value(&world.flora_random).unwrap());
-    world.player.watering_content = 1;
+    set_water_content(&mut world, 1);
     world.levels[0].tiles[target] = Tile::StairsDown;
     world.attack_target_tile(9, 8, target);
     assert_eq!(world.levels[0].tiles[target], Tile::StairsDown);
@@ -169,7 +195,7 @@ fn java230_flora_watering_is_renewable_deterministic_saved_and_rng_isolated() {
     world.generation_version = GenerationVersion::Legacy224;
     world.flora_random = JavaRandom::new(0);
     world.levels[0].tiles[target] = Tile::Grass;
-    world.player.watering_content = 1800;
+    set_water_content(&mut world, 1800);
     for _ in 0..1800 {
         world.attack_target_tile(9, 8, target);
         if world.levels[0].tiles[target] == Tile::Flower230 {
@@ -483,7 +509,7 @@ fn java230_flora_survival_from_empty_bag_to_natural_dyes_wool_bed_and_restore() 
     let wy = (water / world.width) as i32;
     for _ in 0..30_000 {
         world.player.active_item = Some(ActiveItem::Stack(ItemId::WateringCan));
-        if world.player.watering_content == 0 {
+        if water_content(&world) == 0 {
             world.attack_target_tile(wx, wy, water);
         }
         world.attack_target_tile(gx, gy, grass);

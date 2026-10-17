@@ -1,0 +1,927 @@
+{
+  "statue": {
+    "phase": 0,
+    "phaseAfterTick": 1,
+    "taps": [
+      true,
+      true,
+      true
+    ],
+    "bossHealthAfterAwakening": 1731,
+    "persisted": "KnightStatue[104:120:1731:5]",
+    "bossHealth": 1731
+  },
+  "enemies": [
+    {
+      "difficulty": 0,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 1,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 4,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 9,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 16,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Cloth": 4},
+      "species": "Zombie",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 5,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Cloth": 4},
+      "species": "Zombie",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 20,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Cloth": 4},
+      "species": "Zombie",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 45,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Cloth": 4},
+      "species": "Zombie",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 80,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {
+        "Arrow": 3,
+        "Bone": 3
+      },
+      "species": "Skeleton",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 6,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {
+        "Arrow": 3,
+        "Bone": 3
+      },
+      "species": "Skeleton",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 24,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {
+        "Arrow": 3,
+        "Bone": 3
+      },
+      "species": "Skeleton",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 54,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {
+        "Arrow": 3,
+        "Bone": 3
+      },
+      "species": "Skeleton",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 96,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 10,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 2,
+      "contactDamage": 1,
+      "maxHealth": 40,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 3,
+      "contactDamage": 1,
+      "maxHealth": 90,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 4,
+      "contactDamage": 1,
+      "maxHealth": 160,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 7,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 32,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 72,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 128,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Shard": 3},
+      "species": "Knight",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 9,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Shard": 3},
+      "species": "Knight",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 36,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Shard": 3},
+      "species": "Knight",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 81,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "drops": {"Shard": 3},
+      "species": "Knight",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 144,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 2,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 8,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 18,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Slime": 3},
+      "species": "Slime",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 32,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Cloth": 3},
+      "species": "Zombie",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 10,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Cloth": 3},
+      "species": "Zombie",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 40,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Cloth": 3},
+      "species": "Zombie",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 90,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Cloth": 3},
+      "species": "Zombie",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 160,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {
+        "Arrow": 2,
+        "Bone": 2
+      },
+      "species": "Skeleton",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 12,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {
+        "Arrow": 2,
+        "Bone": 2
+      },
+      "species": "Skeleton",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 48,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {
+        "Arrow": 2,
+        "Bone": 2
+      },
+      "species": "Skeleton",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 108,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {
+        "Arrow": 2,
+        "Bone": 2
+      },
+      "species": "Skeleton",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 192,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 20,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 2,
+      "contactDamage": 1,
+      "maxHealth": 80,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 3,
+      "contactDamage": 1,
+      "maxHealth": 180,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Gunpowder": 3},
+      "species": "Creeper",
+      "level": 4,
+      "contactDamage": 1,
+      "maxHealth": 320,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 1,
+      "contactDamage": 2,
+      "maxHealth": 14,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 2,
+      "contactDamage": 3,
+      "maxHealth": 64,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 3,
+      "contactDamage": 4,
+      "maxHealth": 144,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Scale": 1},
+      "species": "Snake",
+      "level": 4,
+      "contactDamage": 5,
+      "maxHealth": 256,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 18,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 2,
+      "contactDamage": 2,
+      "maxHealth": 72,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 3,
+      "contactDamage": 3,
+      "maxHealth": 162,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 4,
+      "contactDamage": 4,
+      "maxHealth": 288,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Slime": 2},
+      "species": "Slime",
+      "level": 1,
+      "contactDamage": 2,
+      "maxHealth": 4,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Slime": 2},
+      "species": "Slime",
+      "level": 2,
+      "contactDamage": 4,
+      "maxHealth": 16,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Slime": 2},
+      "species": "Slime",
+      "level": 3,
+      "contactDamage": 6,
+      "maxHealth": 36,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Slime": 2},
+      "species": "Slime",
+      "level": 4,
+      "contactDamage": 8,
+      "maxHealth": 64,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Cloth": 2},
+      "species": "Zombie",
+      "level": 1,
+      "contactDamage": 2,
+      "maxHealth": 20,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Cloth": 2},
+      "species": "Zombie",
+      "level": 2,
+      "contactDamage": 4,
+      "maxHealth": 80,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Cloth": 2},
+      "species": "Zombie",
+      "level": 3,
+      "contactDamage": 6,
+      "maxHealth": 180,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Cloth": 2},
+      "species": "Zombie",
+      "level": 4,
+      "contactDamage": 8,
+      "maxHealth": 320,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Arrow": 1,
+        "Bone": 1
+      },
+      "species": "Skeleton",
+      "level": 1,
+      "contactDamage": 2,
+      "maxHealth": 24,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Arrow": 1,
+        "Bone": 1
+      },
+      "species": "Skeleton",
+      "level": 2,
+      "contactDamage": 4,
+      "maxHealth": 96,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Arrow": 1,
+        "Bone": 1
+      },
+      "species": "Skeleton",
+      "level": 3,
+      "contactDamage": 6,
+      "maxHealth": 216,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Arrow": 1,
+        "Bone": 1
+      },
+      "species": "Skeleton",
+      "level": 4,
+      "contactDamage": 8,
+      "maxHealth": 384,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Gunpowder": 2},
+      "species": "Creeper",
+      "level": 1,
+      "contactDamage": 1,
+      "maxHealth": 40,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Gunpowder": 2},
+      "species": "Creeper",
+      "level": 2,
+      "contactDamage": 1,
+      "maxHealth": 160,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Gunpowder": 2},
+      "species": "Creeper",
+      "level": 3,
+      "contactDamage": 1,
+      "maxHealth": 360,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Gunpowder": 2},
+      "species": "Creeper",
+      "level": 4,
+      "contactDamage": 1,
+      "maxHealth": 640,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Scale": 2},
+      "species": "Snake",
+      "level": 1,
+      "contactDamage": 3,
+      "maxHealth": 28,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Scale": 2},
+      "species": "Snake",
+      "level": 2,
+      "contactDamage": 4,
+      "maxHealth": 128,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Key": 1,
+        "Scale": 2
+      },
+      "species": "Snake",
+      "level": 3,
+      "contactDamage": 5,
+      "maxHealth": 288,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Key": 1,
+        "Scale": 2
+      },
+      "species": "Snake",
+      "level": 4,
+      "contactDamage": 6,
+      "maxHealth": 512,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 1,
+      "contactDamage": 2,
+      "maxHealth": 36,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {"Shard": 2},
+      "species": "Knight",
+      "level": 2,
+      "contactDamage": 4,
+      "maxHealth": 144,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Shard": 2,
+        "Key": 1
+      },
+      "species": "Knight",
+      "level": 3,
+      "contactDamage": 6,
+      "maxHealth": 324,
+      "dropsSeed": 1234,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "drops": {
+        "Shard": 2,
+        "Key": 1
+      },
+      "species": "Knight",
+      "level": 4,
+      "contactDamage": 8,
+      "maxHealth": 576,
+      "dropsSeed": 1234,
+      "speed": 1
+    }
+  ],
+  "javaCommit": "4dc00332e24a727b96be7b885d5cbbdd9c85263c",
+  "spawners": [
+    {
+      "spawned": [{
+        "level": 3,
+        "x": 112,
+        "y": 96,
+        "maxHealth": 90
+      }],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "underground",
+      "resetTimer": 396,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "day",
+      "resetTimer": 229,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [{
+        "level": 3,
+        "x": 112,
+        "y": 96,
+        "maxHealth": 90
+      }],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "night",
+      "resetTimer": 396,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "torch",
+      "resetTimer": 229,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "far",
+      "resetTimer": 229,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "full",
+      "resetTimer": 229,
+      "healthAfterHit": 91
+    },
+    {
+      "spawned": [],
+      "healthBeforeHit": 100,
+      "toolDurability": 17,
+      "scenario": "blocked",
+      "resetTimer": 229,
+      "healthAfterHit": 91
+    }
+  ],
+  "passiveMobs": [
+    {
+      "difficulty": 0,
+      "species": "Cow",
+      "initialHealth": 5,
+      "contactDamage": 0,
+      "maxHealth": 5,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "species": "Pig",
+      "initialHealth": 5,
+      "contactDamage": 0,
+      "maxHealth": 5,
+      "speed": 1
+    },
+    {
+      "difficulty": 0,
+      "species": "Sheep",
+      "initialHealth": 5,
+      "contactDamage": 0,
+      "maxHealth": 5,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "species": "Cow",
+      "initialHealth": 10,
+      "contactDamage": 0,
+      "maxHealth": 10,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "species": "Pig",
+      "initialHealth": 8,
+      "contactDamage": 0,
+      "maxHealth": 8,
+      "speed": 1
+    },
+    {
+      "difficulty": 1,
+      "species": "Sheep",
+      "initialHealth": 8,
+      "contactDamage": 0,
+      "maxHealth": 8,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "species": "Cow",
+      "initialHealth": 15,
+      "contactDamage": 0,
+      "maxHealth": 15,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "species": "Pig",
+      "initialHealth": 11,
+      "contactDamage": 0,
+      "maxHealth": 11,
+      "speed": 1
+    },
+    {
+      "difficulty": 2,
+      "species": "Sheep",
+      "initialHealth": 11,
+      "contactDamage": 0,
+      "maxHealth": 11,
+      "speed": 1
+    }
+  ]
+}

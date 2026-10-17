@@ -196,3 +196,6 @@ mod tests {
         assert_eq!(inventory.count(ItemId::Acorn), 1);
     }
 }
+
+#[cfg(test)]
+mod migration_tests35;

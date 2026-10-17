@@ -32,10 +32,10 @@ pub fn tick_fuse(
     if distance < TRIGGER_RADIUS * TRIGGER_RADIUS {
         // Java: BLAST_DAMAGE * lvl * (1/(dist+1)) + difficulty index.
         let dist_diag = (distance as f64).sqrt();
-        let damage = (f64::from(BLAST_DAMAGE) * (1.0 / (dist_diag + 1.0))
+        let damage = (f64::from(BLAST_DAMAGE) * f64::from(mob.level) * (1.0 / (dist_diag + 1.0))
             + f64::from(player_difficulty)) as u8;
         outcome.player_damage = outcome.player_damage.max(damage.max(1));
-        outcome.explosions.push((x, y, 1, false));
+        outcome.explosions.push((x, y, i32::from(mob.level), false));
         return true;
     }
     // No player in blast range: defuse (fuseTime=0, fuseLit=false).

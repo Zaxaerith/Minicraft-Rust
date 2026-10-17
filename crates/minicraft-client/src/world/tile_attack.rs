@@ -7,13 +7,29 @@ use super::{
 impl World {
     /// Java attack path after mob/TNT checks: tool terrain, placement, and tile damage.
     pub(super) fn attack_target_tile(&mut self, tile_x: i32, tile_y: i32, index: usize) {
-        if let Some(ActiveItem::Stack(item)) = self.player.active_item {
+        if let Some(item) = self
+            .player
+            .active_item
+            .and_then(|a| self.player.stack_for_active(a))
+            .map(|s| s.item)
+        {
             let target = self.levels[self.current_level].tiles[index];
             if item == ItemId::WateringCan {
+                let Some((slot, can)) = self.player.active_slot() else {
+                    return;
+                };
                 if target == Tile::Water {
-                    self.player.watering_content = crate::item::WATERING_CAN_CAPACITY;
-                } else if self.player.watering_content > 0 {
-                    self.player.watering_content -= 1;
+                    self.player
+                        .inventory
+                        .slot_mut(slot)
+                        .expect("selected can")
+                        .watering_content = Some(crate::item::WATERING_CAN_CAPACITY);
+                } else if let Some(content) = can.watering_content.filter(|n| *n > 0) {
+                    self.player
+                        .inventory
+                        .slot_mut(slot)
+                        .expect("selected can")
+                        .watering_content = Some(content - 1);
                     if matches!(
                         target,
                         Tile::Wheat
@@ -26,8 +42,6 @@ impl World {
                         let data = self.levels[self.current_level].data[index];
                         self.levels[self.current_level].data[index] =
                             crate::item::watering_can::water_crop_data(data);
-                    } else if target == Tile::Farmland {
-                        self.levels[self.current_level].data[index] = 7;
                     } else if target == Tile::Grass && self.flora_random.next_int(60) == 0 {
                         // Java WateringCanItem: actively watering grass can
                         // grow any of the 19 flowers, including White Lily.
@@ -86,7 +100,10 @@ impl World {
             }
         }
 
-        if matches!(self.player.active_item, Some(ActiveItem::Stack(_))) {
+        if matches!(
+            self.player.active_item,
+            Some(ActiveItem::Stack(_) | ActiveItem::Slot { .. })
+        ) {
             return;
         }
 

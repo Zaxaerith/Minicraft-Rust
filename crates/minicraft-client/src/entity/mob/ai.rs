@@ -123,11 +123,11 @@ pub fn tick_mob(
         outcome.player_damage =
             outcome
                 .player_damage
-                .max(if mob.species == NaturalMob::ObsidianKnight {
-                    2
-                } else {
-                    1
-                });
+                .max(crate::entity::stats::mob_contact_damage(
+                    mob.species,
+                    mob.level,
+                    player_difficulty,
+                ));
     }
 }
 
@@ -172,7 +172,15 @@ fn tick_walk_ai(
             mob.y_move = (random.next_int(3) - 1) * random.next_int(2);
             mob.walk_time = 45;
         }
-    } else if mob.species.hostile() && distance < 80 * 80 && mob.attack_time == 0 {
+    } else if mob.species.hostile()
+        && distance
+            < if matches!(mob.species, NaturalMob::Slime | NaturalMob::Creeper) {
+                50 * 50
+            } else {
+                100 * 100
+            }
+        && mob.attack_time == 0
+    {
         mob.x_move = (player_x - entity_x).signum();
         mob.y_move = (player_y - entity_y).signum();
         mob.walk_time = 20;

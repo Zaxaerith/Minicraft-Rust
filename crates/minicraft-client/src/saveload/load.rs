@@ -372,24 +372,28 @@ fn import_inventory(
             continue;
         }
         match item_from_java(&migrated)? {
-            ImportedItem::Stack(item, count) => {
-                let remainder = inventory.add(item, count);
+            ImportedItem::Stack(stack) => {
+                let item = stack.item;
+                let remainder = inventory.add_stack(stack);
                 if remainder > 0 {
                     world.levels[world.current_level].entities.spawn_item(
-                        crate::item::ItemStack::new(item, remainder),
+                        crate::item::ItemStack {
+                            count: remainder,
+                            ..stack
+                        },
                         world.player.x,
                         world.player.y,
                     );
                 }
                 if index == 0 {
-                    active = Some(ActiveItem::Stack(item));
-                }
-                if item == ItemId::WateringCan {
-                    world.player.watering_content = migrated
-                        .rsplit_once('_')
-                        .and_then(|(_, content)| content.parse().ok())
-                        .unwrap_or(0)
-                        .min(1_800);
+                    active = Some(if item == ItemId::WateringCan {
+                        ActiveItem::Slot {
+                            index: inventory.slots().len() - 1,
+                            revision: inventory.slot_revision(),
+                        }
+                    } else {
+                        ActiveItem::Stack(item)
+                    });
                 }
             }
             ImportedItem::Tool(mut tool) => {
@@ -445,7 +449,31 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
             let sheared = species == spawn::NaturalMob::Sheep
                 && world_ver.at_least(&milestones::v_2_0_7_dev1())
                 && info.get(3).is_some_and(|value| parse_bool(value));
-            level.entities.import_mob(species, x, y, health, sheared);
+            if *world_ver == Version::parse("2.2.4") && !species.hostile() {
+                // Fixed 2.2.4 PassiveMob/Cow constructors use the same
+                // 5 + healthFactor*difficulty rule as dev2. Never cap a valid
+                // saved Cow's 10/15 HP to the historical native base of five.
+                let expected = if species == spawn::NaturalMob::Sheep {
+                    5
+                } else {
+                    4
+                };
+                if info.len() != expected {
+                    return Err("invalid Java 2.2.4 passive mob fields".into());
+                }
+                level.entities.import_mob_level(
+                    species,
+                    1,
+                    u8::try_from(world.difficulty).map_err(|_| "invalid world difficulty")?,
+                    world.mode == GameMode::Score,
+                    x,
+                    y,
+                    parse::<u16>(info[2], "passive mob health")?,
+                    sheared,
+                )?;
+            } else {
+                level.entities.import_mob(species, x, y, health, sheared);
+            }
             continue;
         }
         if compact(name) == "spawner" {
@@ -465,9 +493,7 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
             let mut tools = Vec::new();
             for entry in &info[2..info.len() - 2] {
                 match item_from_java(&sub_old_name(entry, world_ver))? {
-                    ImportedItem::Stack(item, count) => {
-                        stacks.push(crate::item::ItemStack::new(item, count))
-                    }
+                    ImportedItem::Stack(stack) => stacks.push(stack),
                     ImportedItem::Tool(tool) => tools.push(tool),
                 }
             }
@@ -491,7 +517,7 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
                 for entry in info.iter().take(last_content).skip(2) {
                     let migrated = sub_old_name(entry, world_ver);
                     match item_from_java(&migrated) {
-                        Ok(ImportedItem::Stack(item, count)) => contents.push((item, count)),
+                        Ok(ImportedItem::Stack(stack)) => contents.push(stack),
                         Ok(ImportedItem::Tool(tool)) => tools.push(tool),
                         Err(_) => {}
                     }
@@ -783,7 +809,7 @@ fn tile_by_key(key: &str) -> Option<Tile> {
 }
 
 enum ImportedItem {
-    Stack(ItemId, u16),
+    Stack(crate::item::ItemStack),
     Tool(ToolItem),
 }
 
@@ -811,7 +837,18 @@ fn item_from_java(encoded: &str) -> Result<ImportedItem, String> {
     } else {
         value.max(1)
     };
-    Ok(ImportedItem::Stack(item, count))
+    if item == ItemId::WateringCan {
+        if value > crate::item::WATERING_CAN_CAPACITY {
+            return Err(format!("invalid Java Watering Can content {value}"));
+        }
+        Ok(ImportedItem::Stack(crate::item::ItemStack::with_water(
+            value,
+        )))
+    } else {
+        Ok(ImportedItem::Stack(crate::item::ItemStack::new(
+            item, count,
+        )))
+    }
 }
 
 fn item_alias(key: &str) -> Option<ItemId> {
@@ -1267,6 +1304,48 @@ mod java224_fixture_tests {
     }
 
     #[test]
+    fn java224_passive_current_health_is_not_capped_to_old_native_constructor() {
+        // Source-based synthetic regression, not an additional official writer
+        // fixture: fixed 47227a89 PassiveMob/Cow/Pig/Sheep constructors.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/parity/java224")
+            .join(format!("passive-health-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        for (difficulty, cow, pig, sheep) in [(0, 5, 4, 3), (1, 10, 7, 6), (2, 15, 10, 9)] {
+            let mut world = tiny_world();
+            world.difficulty = difficulty;
+            std::fs::write(
+                root.join("Entities.miniplussave"),
+                format!("Cow[104:120:{cow}:0],Pig[136:120:{pig}:0],Sheep[168:120:{sheep}:true:0],"),
+            )
+            .unwrap();
+            import_entities(&root, &mut world, &Version::parse("2.2.4")).unwrap();
+            for (index, health, maximum) in [
+                (0, cow, 5 + 5 * difficulty),
+                (1, pig, 5 + 3 * difficulty),
+                (2, sheep, 5 + 3 * difficulty),
+            ] {
+                let crate::entity::EntityKind::Mob(mob) =
+                    &world.levels[0].entities.entities()[index].kind
+                else {
+                    panic!()
+                };
+                assert_eq!(
+                    (usize::from(mob.health), usize::from(mob.max_health)),
+                    (health, maximum)
+                );
+                assert_eq!(mob.sheared, index == 2);
+            }
+            // Round-trip the actual import result without replacing HP/max HP.
+            let before = serde_json::to_value(&world.levels[0].entities).unwrap();
+            let arena: EntityArena = serde_json::from_value(before.clone()).unwrap();
+            assert_eq!(serde_json::to_value(&arena).unwrap(), before);
+            assert!(arena.validate_states().is_ok());
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn java224_actual_writer_fields_and_progress_survive_native_round_trip() {
         let mut world = tiny_world();
         while world.levels.len() < 6 {
@@ -1306,7 +1385,17 @@ mod java224_fixture_tests {
             .unwrap();
         assert_eq!(world.respawn_tile, Some((2, 3)));
         assert_eq!(world.player.clothing, ItemId::BlueClothes);
-        assert_eq!(world.player.watering_content, 731);
+        assert_eq!(
+            world
+                .player
+                .inventory
+                .slots()
+                .iter()
+                .find(|s| s.item == ItemId::WateringCan)
+                .unwrap()
+                .watering_content,
+            Some(731)
+        );
         assert_eq!(world.player.inventory.count(ItemId::WateringCan), 1);
         assert_eq!(world.player.inventory.count(ItemId::Wood), 9);
         assert_eq!(world.player.inventory.tools()[0].durability, 17);
@@ -1328,6 +1417,7 @@ mod java224_fixture_tests {
         let mut expected = read_save(&directory.join("Inventory.miniplussave")).unwrap();
         expected.sort();
         let mut actual: Vec<_> = save::inventory_fields(&world)
+            .unwrap()
             .into_iter()
             .filter(|entry| !entry.is_empty())
             .collect();

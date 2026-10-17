@@ -379,14 +379,16 @@ mod tests {
             views[43].output,
             RecipeOutput::Stack(ItemStack {
                 item: ItemId::DyeVat,
-                count: 1
+                count: 1,
+                ..
             })
         ));
         assert!(matches!(
             views[44].output,
             RecipeOutput::Stack(ItemStack {
                 item: ItemId::OrnateWood,
-                count: 1
+                count: 1,
+                ..
             })
         ));
         assert_eq!(views[44].costs, &[ItemStack::new(ItemId::Wood, 1)]);
@@ -455,6 +457,7 @@ mod tests {
                     .chain(std::iter::once(ItemStack {
                         item: ItemId::Wood, // tool outputs are not stacks; costs only
                         count: 0,
+                        watering_content: None,
                     }))
             }))
             .collect();

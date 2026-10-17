@@ -1,0 +1,762 @@
+{
+  "inputRenderingAudioTicks": false,
+  "playerTicks": false,
+  "ticksPerVisit": 60,
+  "playerHealth": 10,
+  "rng": "unmodified Entity new Random runtime streams; no cross-JVM trajectory equality claim",
+  "transitions": [
+    {
+      "fromDepth": 0,
+      "toDepth": -1,
+      "x": 71,
+      "y": 66
+    },
+    {
+      "fromDepth": -1,
+      "toDepth": -2,
+      "x": 58,
+      "y": 24
+    },
+    {
+      "fromDepth": -2,
+      "toDepth": -3,
+      "x": 72,
+      "y": 14
+    },
+    {
+      "fromDepth": -3,
+      "toDepth": -4,
+      "x": 93,
+      "y": 52
+    }
+  ],
+  "version": "2.3.0-dev2",
+  "worldSeed": 42,
+  "currentLevel": 5,
+  "headless": true,
+  "visits": [
+    {
+      "depth": 0,
+      "ticks": 60,
+      "entities": {
+        "Chest": 3,
+        "Player": 1,
+        "Sheep": 4,
+        "Cow": 3,
+        "Pig": 5
+      },
+      "fromTick": 0,
+      "playerHealth": 10,
+      "toTick": 60
+    },
+    {
+      "depth": -1,
+      "ticks": 60,
+      "entities": {
+        "Chest": 1,
+        "Player": 1,
+        "Zombie": 16,
+        "Creeper": 3,
+        "Skeleton": 8,
+        "Spawner": 4,
+        "Slime": 21
+      },
+      "fromTick": 60,
+      "playerHealth": 10,
+      "toTick": 120
+    },
+    {
+      "depth": -2,
+      "ticks": 60,
+      "entities": {
+        "Player": 1,
+        "Zombie": 9,
+        "Creeper": 1,
+        "Skeleton": 3,
+        "Slime": 11
+      },
+      "fromTick": 120,
+      "playerHealth": 10,
+      "toTick": 180
+    },
+    {
+      "depth": -3,
+      "ticks": 60,
+      "entities": {
+        "Player": 1,
+        "Zombie": 5,
+        "Creeper": 5,
+        "Skeleton": 2,
+        "Slime": 9
+      },
+      "fromTick": 180,
+      "playerHealth": 10,
+      "toTick": 240
+    },
+    {
+      "depth": -4,
+      "ticks": 60,
+      "entities": {
+        "Player": 1,
+        "Lantern": 1,
+        "Snake": 14,
+        "Knight": 8,
+        "KnightStatue": 1,
+        "DungeonChest": 17,
+        "Spawner": 3
+      },
+      "fromTick": 240,
+      "playerHealth": 10,
+      "toTick": 300
+    }
+  ],
+  "spawn": {
+    "x": 84,
+    "y": 66
+  },
+  "tickCount": 300,
+  "gameTime": 300,
+  "ordinaryEnemies": 115,
+  "size": 128,
+  "positioning": "scripted player positioning at nearest already-generated stairs; real World.changeLevel",
+  "layers": [
+    {
+      "tiles": {
+        "STAIRS DOWN": 1,
+        "STAIRS UP": 4,
+        "LAVA": 7128,
+        "ROCK": 8004,
+        "GEM ORE": 403,
+        "OBSIDIAN": 8,
+        "DIRT": 757,
+        "LAPIS": 63,
+        "OBSIDIAN WALL": 16
+      },
+      "stairsDown": [{
+        "x": 93,
+        "y": 52
+      }],
+      "entityCounts": {
+        "Skeleton": 2,
+        "Slime": 9,
+        "Zombie": 5,
+        "Creeper": 5
+      },
+      "depth": -3,
+      "chestCount": 0,
+      "seed": -6169532649852302182,
+      "entities": [
+        "Creeper[1240:1496:180:3:0]",
+        "Creeper[1271:376:180:3:0]",
+        "Creeper[1448:1672:180:3:0]",
+        "Creeper[840:1672:180:3:0]",
+        "Creeper[840:536:180:3:0]",
+        "Skeleton[1512:840:108:3:0]",
+        "Skeleton[424:360:108:3:0]",
+        "Slime[1371:232:18:3:0]",
+        "Slime[1672:1320:18:3:0]",
+        "Slime[280:1208:18:3:0]",
+        "Slime[344:584:18:3:0]",
+        "Slime[536:344:18:3:0]",
+        "Slime[680:1768:18:3:0]",
+        "Slime[712:452:18:3:0]",
+        "Slime[936:1800:18:3:0]",
+        "Slime[995:312:18:3:0]",
+        "Zombie[1729:1500:90:3:0]",
+        "Zombie[1768:248:90:3:0]",
+        "Zombie[279:839:90:3:0]",
+        "Zombie[328:712:90:3:0]",
+        "Zombie[344:1688:90:3:0]"
+      ],
+      "stairsUp": [
+        {
+          "x": 72,
+          "y": 14
+        },
+        {
+          "x": 92,
+          "y": 18
+        },
+        {
+          "x": 13,
+          "y": 29
+        },
+        {
+          "x": 116,
+          "y": 89
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 28,
+        "edits": {
+          "ROCK:0 -> STAIRS UP:0": 3,
+          "DIRT:0 -> STAIRS UP:0": 1,
+          "ROCK:0 -> DIRT:0": 24
+        },
+        "firstDifference": {
+          "rawTile": "DIRT",
+          "x": 72,
+          "y": 14,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "STAIRS UP"
+        },
+        "rawHash": "2b7f93a86940eb48"
+      },
+      "index": 0,
+      "hash": "1c11a6a8f0f02fd4"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 4,
+        "STAIRS UP": 4,
+        "ROCK": 7681,
+        "DIRT": 515,
+        "LAPIS": 66,
+        "GOLD ORE": 453,
+        "WATER": 7661
+      },
+      "stairsDown": [
+        {
+          "x": 72,
+          "y": 14
+        },
+        {
+          "x": 92,
+          "y": 18
+        },
+        {
+          "x": 13,
+          "y": 29
+        },
+        {
+          "x": 116,
+          "y": 89
+        }
+      ],
+      "entityCounts": {
+        "Skeleton": 3,
+        "Slime": 11,
+        "Zombie": 9,
+        "Creeper": 1
+      },
+      "depth": -2,
+      "chestCount": 0,
+      "seed": 5111195811822994797,
+      "entities": [
+        "Creeper[820:1800:80:2:1]",
+        "Skeleton[1752:536:48:2:1]",
+        "Skeleton[296:424:48:2:1]",
+        "Skeleton[347:1592:48:2:1]",
+        "Slime[1000:1836:8:2:1]",
+        "Slime[1105:1857:8:2:1]",
+        "Slime[1272:1864:8:2:1]",
+        "Slime[1294:536:8:2:1]",
+        "Slime[1545:263:8:2:1]",
+        "Slime[1864:1864:8:2:1]",
+        "Slime[243:1720:8:2:1]",
+        "Slime[276:1343:8:2:1]",
+        "Slime[424:1768:8:2:1]",
+        "Slime[821:1528:8:2:1]",
+        "Slime[955:1604:8:2:1]",
+        "Zombie[1464:1816:40:2:1]",
+        "Zombie[1512:1592:40:2:1]",
+        "Zombie[1640:1224:40:2:1]",
+        "Zombie[1672:1576:40:2:1]",
+        "Zombie[232:1208:40:2:1]",
+        "Zombie[408:1480:40:2:1]",
+        "Zombie[616:1512:40:2:1]",
+        "Zombie[696:1784:40:2:1]",
+        "Zombie[744:1384:40:2:1]"
+      ],
+      "stairsUp": [
+        {
+          "x": 58,
+          "y": 24
+        },
+        {
+          "x": 114,
+          "y": 96
+        },
+        {
+          "x": 52,
+          "y": 113
+        },
+        {
+          "x": 117,
+          "y": 116
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 34,
+        "edits": {
+          "ROCK:0 -> STAIRS UP:0": 3,
+          "WATER:0 -> STAIRS UP:0": 1,
+          "WATER:0 -> DIRT:0": 9,
+          "ROCK:0 -> DIRT:0": 21
+        },
+        "firstDifference": {
+          "rawTile": "WATER",
+          "x": 57,
+          "y": 23,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "DIRT"
+        },
+        "rawHash": "791aeb6ff9e77336"
+      },
+      "index": 1,
+      "hash": "ea6ed050d5a1197a"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 4,
+        "STAIRS UP": 6,
+        "ROCK": 9036,
+        "IRON ORE": 510,
+        "STONE WALL": 168,
+        "DIRT": 6403,
+        "LAPIS": 75,
+        "STONE BRICKS": 182
+      },
+      "stairsDown": [
+        {
+          "x": 58,
+          "y": 24
+        },
+        {
+          "x": 114,
+          "y": 96
+        },
+        {
+          "x": 52,
+          "y": 113
+        },
+        {
+          "x": 117,
+          "y": 116
+        }
+      ],
+      "entityCounts": {
+        "Chest": 1,
+        "Skeleton": 8,
+        "Spawner": 4,
+        "Slime": 21,
+        "Zombie": 16,
+        "Creeper": 3
+      },
+      "depth": -1,
+      "chestCount": 0,
+      "seed": 5694868678511409995,
+      "entities": [
+        "Chest[968:1704:Bread_3:Lapis_2:Glass_2:String_3:Bone_1:Torch_9:Arrow_5:2]",
+        "Creeper[568:1272:20:1:2]",
+        "Creeper[568:280:20:1:2]",
+        "Creeper[920:917:20:1:2]",
+        "Skeleton[1272:1500:12:1:2]",
+        "Skeleton[1304:984:12:1:2]",
+        "Skeleton[1320:856:12:1:2]",
+        "Skeleton[1624:1096:12:1:2]",
+        "Skeleton[296:680:12:1:2]",
+        "Skeleton[504:1672:12:1:2]",
+        "Skeleton[520:1432:12:1:2]",
+        "Skeleton[840:472:12:1:2]",
+        "Slime[1096:1351:2:1:2]",
+        "Slime[1101:557:2:1:2]",
+        "Slime[1112:1752:2:1:2]",
+        "Slime[1156:1240:2:1:2]",
+        "Slime[1436:1668:2:1:2]",
+        "Slime[1511:1416:2:1:2]",
+        "Slime[1640:1527:2:1:2]",
+        "Slime[1656:1400:2:1:2]",
+        "Slime[1675:1245:2:1:2]",
+        "Slime[472:1032:2:1:2]",
+        "Slime[504:520:2:1:2]",
+        "Slime[616:1576:2:1:2]",
+        "Slime[627:1784:2:1:2]",
+        "Slime[680:1384:2:1:2]",
+        "Slime[712:1196:2:1:2]",
+        "Slime[767:950:2:1:2]",
+        "Slime[824:1058:2:1:2]",
+        "Slime[828:772:2:1:2]",
+        "Slime[872:1400:2:1:2]",
+        "Slime[927:1103:2:1:2]",
+        "Slime[978:494:2:1:2]",
+        "Spawner[1128:936:Slime:1:2]",
+        "Spawner[456:1192:Slime:1:2]",
+        "Spawner[680:424:Skeleton:1:2]",
+        "Spawner[984:1720:Slime:1:2]",
+        "Zombie[1016:1576:10:1:2]",
+        "Zombie[1176:680:10:1:2]",
+        "Zombie[1288:648:10:1:2]",
+        "Zombie[1304:1400:10:1:2]",
+        "Zombie[1425:408:10:1:2]",
+        "Zombie[1480:1096:10:1:2]",
+        "Zombie[1496:808:10:1:2]",
+        "Zombie[1640:472:10:1:2]",
+        "Zombie[280:1368:10:1:2]",
+        "Zombie[392:888:10:1:2]",
+        "Zombie[520:888:10:1:2]",
+        "Zombie[632:664:10:1:2]",
+        "Zombie[659:803:10:1:2]",
+        "Zombie[792:1720:10:1:2]",
+        "Zombie[888:1288:10:1:2]",
+        "Zombie[888:1592:10:1:2]"
+      ],
+      "stairsUp": [
+        {
+          "x": 89,
+          "y": 9
+        },
+        {
+          "x": 108,
+          "y": 26
+        },
+        {
+          "x": 71,
+          "y": 66
+        },
+        {
+          "x": 40,
+          "y": 86
+        },
+        {
+          "x": 56,
+          "y": 90
+        },
+        {
+          "x": 94,
+          "y": 102
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 376,
+        "edits": {
+          "DIRT:0 -> STAIRS UP:0": 4,
+          "DIRT:0 -> STONE BRICKS:0": 165,
+          "LAPIS:0 -> STONE WALL:0": 1,
+          "ROCK:0 -> STONE WALL:0": 14,
+          "IRON ORE:0 -> DIRT:0": 1,
+          "IRON ORE:0 -> STONE WALL:0": 1,
+          "ROCK:0 -> STAIRS UP:0": 2,
+          "ROCK:0 -> STONE BRICKS:0": 17,
+          "DIRT:0 -> STONE WALL:0": 152,
+          "ROCK:0 -> DIRT:0": 19
+        },
+        "firstDifference": {
+          "rawTile": "ROCK",
+          "x": 88,
+          "y": 8,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "DIRT"
+        },
+        "rawHash": "6bec9fb45c11d321"
+      },
+      "index": 2,
+      "hash": "c4cc153e528a5003"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 6,
+        "SAND": 1057,
+        "WOOD WALL": 35,
+        "ROCK": 1980,
+        "CACTUS": 13,
+        "HARD ROCK": 16,
+        "WOOD PLANKS": 33,
+        "STAIRS UP": 2,
+        "WOOD DOOR": 4,
+        "GRASS": 2834,
+        "TREE": 2568,
+        "FLOWER": 218,
+        "WATER": 7618
+      },
+      "stairsDown": [
+        {
+          "x": 89,
+          "y": 9
+        },
+        {
+          "x": 108,
+          "y": 26
+        },
+        {
+          "x": 71,
+          "y": 66
+        },
+        {
+          "x": 40,
+          "y": 86
+        },
+        {
+          "x": 56,
+          "y": 90
+        },
+        {
+          "x": 94,
+          "y": 102
+        }
+      ],
+      "entityCounts": {
+        "Chest": 3,
+        "Sheep": 4,
+        "Cow": 3,
+        "Pig": 5
+      },
+      "depth": 0,
+      "chestCount": 0,
+      "seed": -5843495416241995736,
+      "entities": [
+        "Chest[1568:448:Bread_1:3]",
+        "Chest[1616:640:Bread_1:3]",
+        "Chest[1696:608:Torch_2:Wood_1:String_1:3]",
+        "Cow[1784:1832:10:3]",
+        "Cow[1864:1016:10:3]",
+        "Cow[472:1496:10:3]",
+        "Pig[1000:1736:8:3]",
+        "Pig[1336:1736:8:3]",
+        "Pig[1704:1400:8:3]",
+        "Pig[631:1881:8:3]",
+        "Pig[728:1171:8:3]",
+        "Sheep[1063:583:8:false:3]",
+        "Sheep[312:1160:8:false:3]",
+        "Sheep[492:380:8:false:3]",
+        "Sheep[552:754:8:false:3]"
+      ],
+      "stairsUp": [
+        {
+          "x": 66,
+          "y": 86
+        },
+        {
+          "x": 106,
+          "y": 93
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 110,
+        "edits": {
+          "SAND:0 -> WOOD WALL:0": 18,
+          "SAND:0 -> WOOD DOOR:0": 3,
+          "ROCK:0 -> STAIRS UP:0": 1,
+          "ROCK:0 -> WOOD PLANKS:0": 13,
+          "GRASS:0 -> STAIRS UP:0": 1,
+          "GRASS:0 -> WOOD PLANKS:0": 4,
+          "ROCK:0 -> GRASS:0": 8,
+          "SAND:0 -> WOOD PLANKS:0": 16,
+          "GRASS:0 -> HARD ROCK:0": 4,
+          "ROCK:0 -> HARD ROCK:0": 11,
+          "ROCK:0 -> WOOD WALL:0": 12,
+          "GRASS:0 -> WOOD WALL:0": 5,
+          "ROCK:0 -> WOOD DOOR:0": 1,
+          "SAND:0 -> GRASS:0": 12,
+          "TREE:0 -> HARD ROCK:0": 1
+        },
+        "firstDifference": {
+          "rawTile": "SAND",
+          "x": 95,
+          "y": 26,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "WOOD PLANKS"
+        },
+        "rawHash": "05ac4e5135e31b9f"
+      },
+      "index": 3,
+      "hash": "5caffe577102a86f"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 2,
+        "WOOD WALL": 19,
+        "INFINITE FALL": 11060,
+        "CLOUD": 5221,
+        "WOOD DOOR": 1,
+        "CLOUD CACTUS": 66,
+        "WOOD PLANKS": 15
+      },
+      "stairsDown": [
+        {
+          "x": 66,
+          "y": 86
+        },
+        {
+          "x": 106,
+          "y": 93
+        }
+      ],
+      "entityCounts": {
+        "Enchanter": 1,
+        "AirWizard": 1,
+        "Lantern": 1
+      },
+      "depth": 1,
+      "chestCount": 0,
+      "seed": -5025562857975149833,
+      "entities": [
+        "AirWizard[1032:1032:2000:1:4]",
+        "Enchanter[1048:312:4]",
+        "Lantern[1016:312:2:4]"
+      ],
+      "stairsUp": [],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 35,
+        "edits": {
+          "CLOUD:0 -> WOOD WALL:0": 19,
+          "CLOUD:0 -> WOOD DOOR:0": 1,
+          "CLOUD:0 -> WOOD PLANKS:0": 15
+        },
+        "firstDifference": {
+          "rawTile": "CLOUD",
+          "x": 62,
+          "y": 17,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "WOOD WALL"
+        },
+        "rawHash": "37c84ab144561cd9"
+      },
+      "index": 4,
+      "hash": "af3534dfd3a23d79"
+    },
+    {
+      "tiles": {
+        "LAVA": 73,
+        "OBSIDIAN": 3117,
+        "OBSIDIAN BOSS WALL": 28,
+        "DIRT": 6087,
+        "RAW OBSIDIAN": 3044,
+        "OBSIDIAN BOSS DOOR": 4,
+        "STAIRS UP": 1,
+        "OBSIDIAN BOSS FLOOR": 49,
+        "GRASS": 54,
+        "OBSIDIAN DOOR": 40,
+        "FLOWER": 27,
+        "ORNATE OBSIDIAN": 144,
+        "OBSIDIAN WALL": 3716
+      },
+      "stairsDown": [],
+      "entityCounts": {
+        "Lantern": 1,
+        "Player": 1,
+        "Snake": 14,
+        "Knight": 8,
+        "KnightStatue": 1,
+        "DungeonChest": 17,
+        "Spawner": 3
+      },
+      "depth": -4,
+      "chestCount": 14,
+      "seed": -1782466964123969572,
+      "entities": [
+        "DungeonChest[1144:488:Coal_4:Gem_15:Awkward Potion_10:Gold Bow_120:Rock Claymore_88:true:5]",
+        "DungeonChest[1164:1426:Steak_6:Cooked Pork_6:Coal_4:Gold Armor_1:Awkward Potion_10:Speed Potion_2:Light Potion_2:Gold Bow_120:true:5]",
+        "DungeonChest[1164:1426:White Wool_1:Awkward Potion_10:Speed Potion_5:Regen Potion_1:true:5]",
+        "DungeonChest[1176:488:Steak_6:Wood_20:Gem_7:Gold Armor_1:Iron Armor_2:Light Potion_3:Haste Potion_3:true:5]",
+        "DungeonChest[1205:1286:Steak_6:Wood_20:Coal_4:Awkward Potion_10:Speed Potion_2:Shield Potion_1:Gold Sword_208:true:5]",
+        "DungeonChest[1205:1286:Wood_20:Coal_4:Gem_8:Gold Armor_1:Gold Bow_120:Gold Sword_208:Gem Sword_260:true:5]",
+        "DungeonChest[1224:2194:White Wool_1:Gem_7:Gem Armor_1:Awkward Potion_10:Speed Potion_5:Light Potion_3:true:5]",
+        "DungeonChest[1528:424:Steak_6:Wood_20:Gem_8:Gold Armor_1:Awkward Potion_10:Speed Potion_5:Rock Claymore_88:true:5]",
+        "DungeonChest[1528:440:Iron Armor_2:Awkward Potion_10:Speed Potion_5:Light Potion_3:Shield Potion_1:Gold Sword_208:true:5]",
+        "DungeonChest[1896:1096:Steak_6:Gem_7:Gold Armor_1:Awkward Potion_10:Speed Potion_5:Light Potion_2:true:5]",
+        "DungeonChest[1896:1128:Cooked Pork_6:Wood_20:White Wool_1:Coal_4:Awkward Potion_10:Speed Potion_5:Time Potion_1:Rock Claymore_88:true:5]",
+        "DungeonChest[1912:1112:Coal_4:Gem_7:Regen Potion_1:Gem Bow_150:Gold Sword_208:Rock Claymore_88:true:5]",
+        "DungeonChest[1912:1128:Cooked Pork_6:Awkward Potion_10:Speed Potion_5:Light Potion_5:true:5]",
+        "DungeonChest[264:1448:White Wool_1:Coal_4:Speed Potion_2:Light Potion_2:Regen Potion_1:Energy Potion_1:Gold Bow_120:true:5]",
+        "DungeonChest[408:744:Awkward Potion_10:Light Potion_5:Rock Claymore_88:true:5]",
+        "DungeonChest[544:1066:Coal_4:Gem_7:Speed Potion_7:Light Potion_2:Gold Bow_120:true:5]",
+        "DungeonChest[856:936:Cooked Pork_6:Coal_4:Light Potion_5:true:5]",
+        "KnightStatue[1032:1032:5000:5]",
+        "Knight[1480:1352:288:4:5]",
+        "Knight[1592:1102:288:4:5]",
+        "Knight[1704:120:288:4:5]",
+        "Knight[1960:729:288:4:5]",
+        "Knight[285:1105:288:4:5]",
+        "Knight[536:216:288:4:5]",
+        "Knight[664:1384:288:4:5]",
+        "Knight[920:1512:288:4:5]",
+        "Lantern[1480:824:1:5]",
+        "Player[1496:840:10:5]",
+        "Snake[1016:1832:256:4:5]",
+        "Snake[104:1768:256:4:5]",
+        "Snake[1096:200:256:4:5]",
+        "Snake[120:792:256:4:5]",
+        "Snake[1352:1912:256:4:5]",
+        "Snake[1672:1864:256:4:5]",
+        "Snake[184:88:256:4:5]",
+        "Snake[1921:1567:256:4:5]",
+        "Snake[1960:136:256:4:5]",
+        "Snake[1976:440:256:4:5]",
+        "Snake[280:360:256:4:5]",
+        "Snake[430:1913:256:4:5]",
+        "Snake[712:1864:256:4:5]",
+        "Snake[798:590:256:4:5]",
+        "Spawner[1160:504:Snake:2:5]",
+        "Spawner[248:1464:Snake:2:5]",
+        "Spawner[872:952:Knight:2:5]"
+      ],
+      "stairsUp": [{
+        "x": 93,
+        "y": 52
+      }],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 530,
+        "edits": {
+          "DIRT:0 -> OBSIDIAN DOOR:0": 17,
+          "OBSIDIAN WALL:0 -> RAW OBSIDIAN:0": 1,
+          "DIRT:0 -> OBSIDIAN:0": 3,
+          "OBSIDIAN:0 -> OBSIDIAN WALL:0": 40,
+          "LAVA:0 -> OBSIDIAN DOOR:0": 1,
+          "RAW OBSIDIAN:0 -> ORNATE OBSIDIAN:0": 36,
+          "OBSIDIAN WALL:0 -> OBSIDIAN BOSS WALL:0": 4,
+          "RAW OBSIDIAN:0 -> FLOWER:0": 7,
+          "RAW OBSIDIAN:0 -> OBSIDIAN:0": 1,
+          "OBSIDIAN WALL:0 -> STAIRS UP:0": 1,
+          "DIRT:0 -> ORNATE OBSIDIAN:0": 65,
+          "OBSIDIAN:0 -> FLOWER:0": 6,
+          "RAW OBSIDIAN:0 -> GRASS:0": 9,
+          "DIRT:0 -> OBSIDIAN BOSS FLOOR:0": 22,
+          "OBSIDIAN WALL:0 -> OBSIDIAN:0": 3,
+          "OBSIDIAN:0 -> OBSIDIAN BOSS FLOOR:0": 10,
+          "DIRT:0 -> GRASS:0": 23,
+          "DIRT:0 -> FLOWER:0": 11,
+          "OBSIDIAN WALL:0 -> OBSIDIAN DOOR:0": 4,
+          "RAW OBSIDIAN:0 -> OBSIDIAN WALL:0": 42,
+          "OBSIDIAN WALL:0 -> FLOWER:0": 3,
+          "OBSIDIAN:0 -> ORNATE OBSIDIAN:0": 28,
+          "OBSIDIAN:0 -> GRASS:0": 16,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS DOOR:0": 2,
+          "OBSIDIAN:0 -> OBSIDIAN DOOR:0": 7,
+          "DIRT:0 -> OBSIDIAN BOSS WALL:0": 12,
+          "OBSIDIAN:0 -> OBSIDIAN BOSS WALL:0": 7,
+          "DIRT:0 -> OBSIDIAN BOSS DOOR:0": 2,
+          "RAW OBSIDIAN:0 -> OBSIDIAN DOOR:0": 11,
+          "DIRT:0 -> OBSIDIAN WALL:0": 93,
+          "OBSIDIAN WALL:0 -> GRASS:0": 6,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS WALL:0": 5,
+          "OBSIDIAN WALL:0 -> OBSIDIAN BOSS FLOOR:0": 4,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS FLOOR:0": 13,
+          "OBSIDIAN WALL:0 -> ORNATE OBSIDIAN:0": 15
+        },
+        "firstDifference": {
+          "rawTile": "DIRT",
+          "x": 92,
+          "y": 24,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "OBSIDIAN WALL"
+        },
+        "rawHash": "0de0db6d7e75e231"
+      },
+      "index": 5,
+      "hash": "66d9230644af8c31"
+    }
+  ],
+  "totalLevelTicks": 300,
+  "sourcePath": "World.initWorld -> Level.tick(true) + World.changeLevel -> official Save",
+  "player": {
+    "x": 1496,
+    "y": 840
+  }
+}

@@ -66,6 +66,9 @@ impl EntityArena {
             random,
             1,
             0,
+            50_000,
+            300,
+            false,
         )
     }
 
@@ -82,12 +85,18 @@ impl EntityArena {
         random: &mut JavaRandom,
         player_difficulty: u8,
         level_depth: i8,
+        day_tick: u32,
+        max_mob_count: usize,
+        score_mode: bool,
     ) -> TickOutcome {
         let (player_x, player_y) = player.unwrap_or_default();
         let player_passive = player_passive || player.is_none();
         let mut outcome = TickOutcome::default();
+        let mut mob_count = self.mob_count();
+        let lights: Vec<_> = self.light_sources().collect();
         let mut queued_projectiles = Vec::new();
         let mut queued_mobs = Vec::new();
+        let mut queued_statues = Vec::new();
         let mut spilled_stacks = Vec::new();
         let mut spilled_tools = Vec::new();
         let mut projectile_hits = Vec::new();
@@ -179,21 +188,46 @@ impl EntityArena {
                     }
                 }
                 EntityKind::Furniture(kind) => {
+                    if let Some(species) = kind.spawner_mob() {
+                        let state = entity
+                            .spawner
+                            .get_or_insert_with(|| spawner::new_state(1, random));
+                        let lit = spawner_lit(tiles, width, height, entity.x, entity.y, &lights);
+                        if let Some(spawn) = spawner::tick_spawn(
+                            species,
+                            state,
+                            entity.x,
+                            entity.y,
+                            tiles,
+                            data,
+                            width,
+                            height,
+                            player,
+                            level_depth,
+                            day_tick,
+                            mob_count,
+                            max_mob_count,
+                            lit,
+                            random,
+                        ) {
+                            queued_mobs.push(spawn);
+                            mob_count += 1;
+                        }
+                    }
                     tick_furniture(
                         *kind,
                         entity.x,
                         entity.y,
-                        entity.age,
                         &mut entity.state,
-                        tiles,
-                        data,
-                        width,
-                        height,
                         player,
-                        level_depth,
                         &mut outcome,
-                        &mut queued_mobs,
                     );
+                }
+                EntityKind::Mob(mob)
+                    if mob.species == NaturalMob::ObsidianKnight && player.is_none() =>
+                {
+                    queued_statues.push((entity.x, entity.y, mob.health));
+                    entity.removed = true;
                 }
                 EntityKind::Mob(_) => {
                     ai::tick_mob(
@@ -251,12 +285,15 @@ impl EntityArena {
                 })
             );
             if !blocked {
-                self.damage_mob_at(
+                let hit = self.damage_mob_at(
                     target,
                     u16::from(damage),
                     random,
                     &mut outcome.defeated_mobs,
                 );
+                if hit.defeated {
+                    outcome.defeated_levels.push((hit.species, hit.level));
+                }
             }
             self.entities[projectile_index].removed = true;
         }
@@ -277,8 +314,13 @@ impl EntityArena {
                 }
             }
         }
-        for (species, x, y) in queued_mobs {
-            self.spawn_mob(species, x, y);
+        for (species, level, x, y) in queued_mobs {
+            // State was validated at creation/import; corrupted native states fail closed.
+            let _ = self.spawn_mob_level(species, level, player_difficulty, score_mode, x, y);
+            self.spawn_particle(super::particle::ParticleKind::Fire, x, y);
+        }
+        for (x, y, health) in queued_statues {
+            let _ = self.import_statue(x, y, health);
         }
         for (stack, x, y) in spilled_stacks {
             self.spawn_item(stack, x, y);
@@ -369,33 +411,10 @@ fn tick_furniture(
     kind: FurnitureKind,
     x: i32,
     y: i32,
-    age: u32,
     state: &mut u16,
-    tiles: &[Tile],
-    data: &[u16],
-    width: usize,
-    height: usize,
     player: Option<(i32, i32)>,
-    level_depth: i8,
     outcome: &mut TickOutcome,
-    queued_mobs: &mut Vec<(NaturalMob, i32, i32)>,
 ) {
-    if let Some(species) = kind.spawner_mob()
-        && let Some((species, sx, sy)) = spawner::try_spawn(
-            species,
-            x,
-            y,
-            age,
-            tiles,
-            data,
-            width,
-            height,
-            player,
-            level_depth,
-        )
-    {
-        queued_mobs.push((species, sx, sy));
-    }
     if kind == FurnitureKind::Tnt
         && let Some((ex, ey, radius, player_tnt, player_damage)) =
             tnt::tick_fuse(state, x, y, player)
@@ -434,4 +453,26 @@ fn settle_explosion(
             }
         }
     }
+}
+
+/// Java Level.isLight: any torch in the 7x7 tile square, or lantern range.
+fn spawner_lit(
+    tiles: &[Tile],
+    width: usize,
+    height: usize,
+    x: i32,
+    y: i32,
+    lights: &[(i32, i32, i32)],
+) -> bool {
+    let (tx, ty) = (x.div_euclid(16), y.div_euclid(16));
+    for cy in (ty - 3).max(0)..=(ty + 3).min(height as i32 - 1) {
+        for cx in (tx - 3).max(0)..=(tx + 3).min(width as i32 - 1) {
+            if tiles[cx as usize + cy as usize * width] == Tile::Torch {
+                return true;
+            }
+        }
+    }
+    lights.iter().any(|(lx, ly, r)| {
+        squared_distance(lx.div_euclid(16), ly.div_euclid(16), tx, ty) < (r - 1) * (r - 1)
+    })
 }

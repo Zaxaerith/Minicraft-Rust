@@ -1,37 +1,75 @@
 //! Java PlayerInvDisplay / CraftingDisplay / ContainerDisplay compatibility rendering.
 use super::{Assets, CreativeEntry, FurnitureKind, GameMode, Player, Screen, WIDTH, World};
-use crate::item::{ItemId, ItemStack, ToolItem, ToolKind, ToolTier, ordered_recipe_views};
+use crate::item::{
+    Inventory, ItemId, ItemStack, ToolItem, ToolKind, ToolTier, ordered_recipe_views,
+};
+
+fn stack_label(stack: ItemStack) -> String {
+    if stack.item == ItemId::WateringCan {
+        let water = stack.watering_content.map_or_else(
+            || "?".to_owned(),
+            |content| format!("{}%", u32::from(content) * 100 / 1_800),
+        );
+        // Two long names would overlap the adjacent container pane on the
+        // 288-pixel canvas. Its selected-row description retains the full name.
+        format!(" Can {water}")
+    } else {
+        format!(" {} {}", stack.count.min(999), stack.item.display_name())
+    }
+}
+
+fn inventory_entries<'a>(
+    assets: &'a Assets,
+    inventory: &Inventory,
+) -> Vec<(&'a crate::gfx::Image, String)> {
+    let mut entries = inventory
+        .slots()
+        .iter()
+        .map(|stack| (assets.item_stack(*stack), stack_label(*stack)))
+        .collect::<Vec<_>>();
+    entries.extend(
+        inventory
+            .tools()
+            .iter()
+            .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name()))),
+    );
+    entries
+}
+
+// Each container pane has 128 pixels at most on the 288-pixel canvas.
+// Reserve 48 pixels for the frame, sprite and selection markers. Full item
+// names and instance values are displayed below the selected pane.
+fn container_label(label: &str) -> String {
+    const CHARACTERS: usize = 10;
+    if label.chars().count() <= CHARACTERS {
+        label.to_owned()
+    } else {
+        label.chars().take(CHARACTERS - 1).chain(['~']).collect()
+    }
+}
+
+fn container_entries<'a>(
+    assets: &'a Assets,
+    inventory: &Inventory,
+) -> Vec<(&'a crate::gfx::Image, String)> {
+    inventory_entries(assets, inventory)
+        .into_iter()
+        .map(|(image, label)| (image, container_label(&label)))
+        .collect()
+}
 
 /// Java ContainerDisplay: dual player/chest inventory panels with independent selection.
 pub(crate) fn render_container(
     screen: &mut Screen,
     assets: &Assets,
     player: &Player,
-    chest_slots: &[ItemStack],
+    chest: &Inventory,
     player_selection: usize,
     chest_selection: usize,
     focus: usize,
 ) {
-    let player_entries = player
-        .inventory
-        .slots()
-        .iter()
-        .map(|stack| {
-            (
-                assets.item(stack.item),
-                format!(" {} {}", stack.count.min(999), stack.item.display_name()),
-            )
-        })
-        .collect::<Vec<_>>();
-    let chest_entries = chest_slots
-        .iter()
-        .map(|stack| {
-            (
-                assets.item(stack.item),
-                format!(" {} {}", stack.count.min(999), stack.item.display_name()),
-            )
-        })
-        .collect::<Vec<_>>();
+    let player_entries = container_entries(assets, &player.inventory);
+    let chest_entries = container_entries(assets, chest);
     let player_width = inventory_panel_width(&player_entries, "Inventory");
     let chest_width = inventory_panel_width(&chest_entries, "Chest");
     let player_x = 9;
@@ -76,14 +114,32 @@ pub(crate) fn render_container(
             9,
             player_entries.len(),
         );
-        crate::gfx::gui::render_inventory_counter(
-            screen,
-            assets.inventory_counter(),
-            chest_x + chest_width,
-            9,
-            chest_entries.len(),
-            27,
-        );
+        if chest.capacity() == usize::MAX {
+            crate::gfx::gui::render_inventory_counter_minimized(
+                screen,
+                assets.inventory_counter(),
+                chest_x + chest_width,
+                9,
+                chest_entries.len(),
+            );
+        } else {
+            crate::gfx::gui::render_inventory_counter(
+                screen,
+                assets.inventory_counter(),
+                chest_x + chest_width,
+                9,
+                chest_entries.len(),
+                chest.capacity(),
+            );
+        }
+    }
+    let (selected_inventory, selection) = if focus == 0 {
+        (&player.inventory, player_selection)
+    } else {
+        (chest, chest_selection)
+    };
+    if let Some(description) = container_instance_description(selected_inventory, selection) {
+        render_inventory_description(screen, assets, &description, 10, 105);
     }
     screen.text_colored(
         assets.font(),
@@ -123,24 +179,7 @@ pub(crate) fn render_inventory(
         return;
     }
 
-    let mut player_entries = player
-        .inventory
-        .slots()
-        .iter()
-        .map(|stack| {
-            (
-                assets.item(stack.item),
-                format!(" {} {}", stack.count.min(999), stack.item.display_name()),
-            )
-        })
-        .collect::<Vec<_>>();
-    player_entries.extend(
-        player
-            .inventory
-            .tools()
-            .iter()
-            .map(|tool| (assets.tool(*tool), format!(" {}", tool.display_name()))),
-    );
+    let player_entries = inventory_entries(assets, &player.inventory);
 
     let player_width = inventory_panel_width(&player_entries, "Inventory");
     if mode != GameMode::Creative || pane == 0 {
@@ -228,6 +267,9 @@ pub(crate) fn inventory_panel_width(entries: &[(&crate::gfx::Image, String)], ti
 
 pub(crate) fn inventory_description(player: &Player, selection: usize) -> Option<String> {
     if let Some(stack) = player.inventory.slots().get(selection) {
+        if stack.item == ItemId::WateringCan {
+            return container_instance_description(&player.inventory, selection);
+        }
         return Some(stack.item.display_name().to_owned());
     }
     player
@@ -235,6 +277,30 @@ pub(crate) fn inventory_description(player: &Player, selection: usize) -> Option
         .tools()
         .get(selection.saturating_sub(player.inventory.slots().len()))
         .map(|tool| tool.display_name())
+}
+
+fn container_instance_description(inventory: &Inventory, selection: usize) -> Option<String> {
+    if let Some(stack) = inventory.slots().get(selection) {
+        return Some(if stack.item == ItemId::WateringCan {
+            stack.watering_content.map_or_else(
+                || "Watering Can: unknown".to_owned(),
+                |content| format!("Watering Can: {content}/1800"),
+            )
+        } else {
+            stack.item.display_name().to_owned()
+        });
+    }
+    inventory
+        .tools()
+        .get(selection.saturating_sub(inventory.slots().len()))
+        .map(|tool| {
+            format!(
+                "{}: {}/{}",
+                tool.display_name(),
+                tool.durability,
+                tool.max_durability,
+            )
+        })
 }
 
 pub(crate) fn render_inventory_description(
@@ -459,4 +525,65 @@ pub(crate) fn render_menu_title_left(
         y,
         color,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_labels_leave_room_for_both_panes_and_selected_instance_details() {
+        for label in [
+            " Iron Pickaxe",
+            " 999 Obsidian Poppet",
+            " Can 100%",
+            " Can ?",
+        ] {
+            assert!(container_label(label).chars().count() <= 10);
+        }
+        assert_eq!(container_label(" Can 100%"), " Can 100%");
+        let mut inventory = Inventory::new(4);
+        inventory.add_stack(ItemStack::with_water(731));
+        inventory.add_stack(ItemStack {
+            item: ItemId::WateringCan,
+            count: 1,
+            watering_content: None,
+        });
+        inventory.add(ItemId::Wood, 3);
+        let mut tool = ToolItem::new(ToolKind::Pickaxe, ToolTier::Iron);
+        tool.durability = 17;
+        inventory.add_tool(tool);
+        assert_eq!(
+            container_instance_description(&inventory, 0).as_deref(),
+            Some("Watering Can: 731/1800")
+        );
+        assert_eq!(
+            container_instance_description(&inventory, 1).as_deref(),
+            Some("Watering Can: unknown")
+        );
+        assert_eq!(
+            container_instance_description(&inventory, 2).as_deref(),
+            Some("Wood")
+        );
+        assert_eq!(
+            container_instance_description(&inventory, 3),
+            Some(format!("Iron Pickaxe: 17/{}", tool.max_durability))
+        );
+        assert_eq!(container_instance_description(&inventory, 4), None);
+    }
+
+    #[test]
+    fn water_labels_distinguish_each_instance_and_unknown_legacy_contents() {
+        assert_eq!(stack_label(ItemStack::with_water(731)), " Can 40%");
+        assert_eq!(stack_label(ItemStack::with_water(23)), " Can 1%");
+        assert_eq!(stack_label(ItemStack::with_water(0)), " Can 0%");
+        assert_eq!(stack_label(ItemStack::with_water(1_800)), " Can 100%");
+        let unknown = ItemStack {
+            item: ItemId::WateringCan,
+            count: 1,
+            watering_content: None,
+        };
+        assert_eq!(stack_label(unknown), " Can ?");
+        assert_eq!(stack_label(ItemStack::new(ItemId::Wood, 8)), " 8 Wood");
+    }
 }

@@ -1,0 +1,117 @@
+{
+  "sourceMethods": [
+    "WateringCanItem.interactOn",
+    "WateringCanItem.copy",
+    "Inventory.add",
+    "Inventory.remove(int)",
+    "Inventory.removeItems",
+    "Inventory.updateInv",
+    "DeathChest(Player)",
+    "Save.writeInventory"
+  ],
+  "exactTransfer": {
+    "bagContents": [731],
+    "chestContents": [23],
+    "removedSameInstance": true,
+    "noRemainder": true,
+    "addedSameInstance": true
+  },
+  "serialization": {
+    "restoredContents": [
+      731,
+      23
+    ],
+    "writeInventory": [
+      "Watering Can_731",
+      "Watering Can_23",
+      "Iron Pickaxe_17"
+    ],
+    "restoredData": "Watering Can_731:Watering Can_23:Iron Pickaxe_17"
+  },
+  "upstreamCopyAndNameRemoval": {
+    "bulkAddContents": [
+      0,
+      0
+    ],
+    "sameInstance": false,
+    "deathChestCopiedContents": [
+      0,
+      0
+    ],
+    "original": "Watering Can_731",
+    "copied": "Watering Can_0",
+    "bulkAddRemainder": 0,
+    "removeItems23Remaining": [23]
+  },
+  "operations": [
+    {
+      "contents": [
+        731,
+        23
+      ],
+      "cropData": 0,
+      "operation": "initial",
+      "spriteKeys": [
+        "watering_can",
+        "watering_can"
+      ]
+    },
+    {
+      "result": true,
+      "contents": [
+        730,
+        23
+      ],
+      "cropData": 128,
+      "operation": "firstWaterCrop",
+      "spriteKeys": [
+        "watering_can_filled",
+        "watering_can"
+      ]
+    },
+    {
+      "result": true,
+      "contents": [
+        730,
+        22
+      ],
+      "cropData": 256,
+      "operation": "secondWaterCrop",
+      "spriteKeys": [
+        "watering_can_filled",
+        "watering_can_filled"
+      ]
+    },
+    {
+      "result": true,
+      "contents": [
+        730,
+        1800
+      ],
+      "cropData": 256,
+      "operation": "secondRefill",
+      "spriteKeys": [
+        "watering_can_filled",
+        "watering_can_filled"
+      ]
+    }
+  ],
+  "fullInventory": {
+    "returnsOriginalInstance": true,
+    "slots": 27,
+    "sourceContent": 731,
+    "remainder": "Watering Can_731"
+  },
+  "bareFarmland": {
+    "result": true,
+    "contentAfter": 8,
+    "dataAfter": 0
+  },
+  "scope": "Direct official item and inventory methods; no GUI events or random flower outcomes. copy() and copy-based death/container paths lose water in upstream dev2; Rust transfers deliberately preserve it.",
+  "emptyWaterCrop": {
+    "result": false,
+    "content": 0
+  },
+  "javaCommit": "4dc00332e24a727b96be7b885d5cbbdd9c85263c",
+  "capacity": 1800
+}

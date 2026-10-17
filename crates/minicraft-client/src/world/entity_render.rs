@@ -25,7 +25,7 @@ pub(super) fn render_entity(
     match &entity.kind {
         EntityKind::Item(stack) => {
             // Java ItemEntity: LinkedSprite at (x-4, y-4); shadow is color override.
-            let linked = assets.item_linked(stack.item);
+            let linked = assets.item_stack_linked(*stack);
             let Some(motion) = &entity.item_motion else {
                 linked.render(
                     assets.sheets(),
@@ -143,8 +143,9 @@ pub(super) fn render_entity(
                 } else {
                     0
                 };
-                let linked = assets.mob_linked(
+                let linked = assets.mob_linked_level(
                     mob.species,
+                    mob.level,
                     direction,
                     frame,
                     mob.species == spawn::NaturalMob::Sheep && mob.sheared,

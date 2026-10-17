@@ -26,6 +26,14 @@ pub struct ItemMotion {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mob {
     pub species: NaturalMob,
+    /// Java EnemyMob.lvl; absent in historical Rust states means level one.
+    #[serde(default = "default_mob_level")]
+    pub level: u8,
+    /// Difficulty used by the Java species drop table (easy=0, normal=1, hard=2).
+    #[serde(default = "default_mob_level")]
+    pub difficulty: u8,
+    #[serde(default)]
+    pub score_mode: bool,
     pub health: u16,
     pub max_health: u16,
     pub hurt_time: u8,
@@ -37,6 +45,18 @@ pub struct Mob {
     pub phase: u8,
     pub sheared: bool,
     pub(crate) walk_time: u16,
+}
+
+pub(crate) const fn default_mob_level() -> u8 {
+    1
+}
+
+/// Java Spawner constructor state. Java Save omits health and timer; native
+/// saves retain them after the first import instead of restarting each load.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpawnerState {
+    pub level: u8,
+    pub spawn_ticks: u16,
 }
 
 /// Java EntityKind tag: which Java subclass this arena entry models.
@@ -64,6 +84,10 @@ pub struct Entity {
     #[serde(default)]
     pub(crate) death_chest_lifetime: Option<u32>,
     pub kind: EntityKind,
+    #[serde(default)]
+    pub spawner: Option<SpawnerState>,
+    #[serde(default)]
+    pub statue_boss_health: Option<u16>,
     pub state: u16,
     pub health: u16,
     #[serde(default)]
@@ -82,6 +106,7 @@ pub struct Entity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HitResult {
     pub species: NaturalMob,
+    pub level: u8,
     pub defeated: bool,
     pub health: u16,
     pub damage: u16,
@@ -95,4 +120,5 @@ pub struct TickOutcome {
     pub player_damage: u8,
     pub explosions: Vec<(i32, i32, i32, bool)>,
     pub defeated_mobs: Vec<NaturalMob>,
+    pub defeated_levels: Vec<(NaturalMob, u8)>,
 }

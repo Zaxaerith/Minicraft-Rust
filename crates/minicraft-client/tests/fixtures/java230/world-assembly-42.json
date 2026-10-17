@@ -1,0 +1,635 @@
+{
+  "stairConnections": [
+    {
+      "connected": true,
+      "upperDepth": 1,
+      "x": 66,
+      "y": 86,
+      "lowerDepth": 0
+    },
+    {
+      "connected": true,
+      "upperDepth": 1,
+      "x": 106,
+      "y": 93,
+      "lowerDepth": 0
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 89,
+      "y": 9,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 108,
+      "y": 26,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 71,
+      "y": 66,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 40,
+      "y": 86,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 56,
+      "y": 90,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": 0,
+      "x": 94,
+      "y": 102,
+      "lowerDepth": -1
+    },
+    {
+      "connected": true,
+      "upperDepth": -1,
+      "x": 58,
+      "y": 24,
+      "lowerDepth": -2
+    },
+    {
+      "connected": true,
+      "upperDepth": -1,
+      "x": 114,
+      "y": 96,
+      "lowerDepth": -2
+    },
+    {
+      "connected": true,
+      "upperDepth": -1,
+      "x": 52,
+      "y": 113,
+      "lowerDepth": -2
+    },
+    {
+      "connected": true,
+      "upperDepth": -1,
+      "x": 117,
+      "y": 116,
+      "lowerDepth": -2
+    },
+    {
+      "connected": true,
+      "upperDepth": -2,
+      "x": 72,
+      "y": 14,
+      "lowerDepth": -3
+    },
+    {
+      "connected": true,
+      "upperDepth": -2,
+      "x": 92,
+      "y": 18,
+      "lowerDepth": -3
+    },
+    {
+      "connected": true,
+      "upperDepth": -2,
+      "x": 13,
+      "y": 29,
+      "lowerDepth": -3
+    },
+    {
+      "connected": true,
+      "upperDepth": -2,
+      "x": 116,
+      "y": 89,
+      "lowerDepth": -3
+    },
+    {
+      "connected": true,
+      "upperDepth": -3,
+      "x": 93,
+      "y": 52,
+      "lowerDepth": -4
+    }
+  ],
+  "type": "minicraft.settings.type.island",
+  "inventory": [],
+  "version": "2.3.0-dev2",
+  "worldSeed": 42,
+  "network": "offline Unirest transport; no analytics sent",
+  "mode": "minicraft.settings.mode.survival",
+  "difficulty": "minicraft.settings.difficulty.normal",
+  "currentLevel": 3,
+  "headless": true,
+  "spawn": {
+    "x": 84,
+    "y": 66
+  },
+  "tickCount": 0,
+  "gameTime": 0,
+  "size": 128,
+  "layers": [
+    {
+      "tiles": {
+        "STAIRS DOWN": 1,
+        "STAIRS UP": 4,
+        "LAVA": 7128,
+        "ROCK": 8004,
+        "GEM ORE": 403,
+        "OBSIDIAN": 8,
+        "DIRT": 757,
+        "LAPIS": 63,
+        "OBSIDIAN WALL": 16
+      },
+      "stairsDown": [
+        {
+          "x": 93,
+          "y": 52
+        }
+      ],
+      "entityCounts": {},
+      "depth": -3,
+      "chestCount": 0,
+      "seed": -6169532649852302182,
+      "entities": [],
+      "stairsUp": [
+        {
+          "x": 72,
+          "y": 14
+        },
+        {
+          "x": 92,
+          "y": 18
+        },
+        {
+          "x": 13,
+          "y": 29
+        },
+        {
+          "x": 116,
+          "y": 89
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 28,
+        "edits": {
+          "ROCK:0 -> STAIRS UP:0": 3,
+          "DIRT:0 -> STAIRS UP:0": 1,
+          "ROCK:0 -> DIRT:0": 24
+        },
+        "firstDifference": {
+          "rawTile": "DIRT",
+          "x": 72,
+          "y": 14,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "STAIRS UP"
+        },
+        "rawHash": "2b7f93a86940eb48"
+      },
+      "index": 0,
+      "hash": "1c11a6a8f0f02fd4"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 4,
+        "STAIRS UP": 4,
+        "ROCK": 7681,
+        "DIRT": 515,
+        "LAPIS": 66,
+        "GOLD ORE": 453,
+        "WATER": 7661
+      },
+      "stairsDown": [
+        {
+          "x": 72,
+          "y": 14
+        },
+        {
+          "x": 92,
+          "y": 18
+        },
+        {
+          "x": 13,
+          "y": 29
+        },
+        {
+          "x": 116,
+          "y": 89
+        }
+      ],
+      "entityCounts": {},
+      "depth": -2,
+      "chestCount": 0,
+      "seed": 5111195811822994797,
+      "entities": [],
+      "stairsUp": [
+        {
+          "x": 58,
+          "y": 24
+        },
+        {
+          "x": 114,
+          "y": 96
+        },
+        {
+          "x": 52,
+          "y": 113
+        },
+        {
+          "x": 117,
+          "y": 116
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 34,
+        "edits": {
+          "ROCK:0 -> STAIRS UP:0": 3,
+          "WATER:0 -> STAIRS UP:0": 1,
+          "WATER:0 -> DIRT:0": 9,
+          "ROCK:0 -> DIRT:0": 21
+        },
+        "firstDifference": {
+          "rawTile": "WATER",
+          "x": 57,
+          "y": 23,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "DIRT"
+        },
+        "rawHash": "791aeb6ff9e77336"
+      },
+      "index": 1,
+      "hash": "ea6ed050d5a1197a"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 4,
+        "STAIRS UP": 6,
+        "ROCK": 9036,
+        "IRON ORE": 510,
+        "STONE WALL": 168,
+        "DIRT": 6403,
+        "LAPIS": 75,
+        "STONE BRICKS": 182
+      },
+      "stairsDown": [
+        {
+          "x": 58,
+          "y": 24
+        },
+        {
+          "x": 114,
+          "y": 96
+        },
+        {
+          "x": 52,
+          "y": 113
+        },
+        {
+          "x": 117,
+          "y": 116
+        }
+      ],
+      "entityCounts": {
+        "Chest": 1,
+        "Spawner": 4
+      },
+      "depth": -1,
+      "chestCount": 0,
+      "seed": 5694868678511409995,
+      "entities": [
+        "Chest[968:1704:Bread_3:Lapis_2:Glass_2:String_3:Bone_1:Torch_9:Arrow_5:2]",
+        "Spawner[1128:936:Slime:1:2]",
+        "Spawner[456:1192:Slime:1:2]",
+        "Spawner[680:424:Skeleton:1:2]",
+        "Spawner[984:1720:Slime:1:2]"
+      ],
+      "stairsUp": [
+        {
+          "x": 89,
+          "y": 9
+        },
+        {
+          "x": 108,
+          "y": 26
+        },
+        {
+          "x": 71,
+          "y": 66
+        },
+        {
+          "x": 40,
+          "y": 86
+        },
+        {
+          "x": 56,
+          "y": 90
+        },
+        {
+          "x": 94,
+          "y": 102
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 376,
+        "edits": {
+          "DIRT:0 -> STAIRS UP:0": 4,
+          "DIRT:0 -> STONE BRICKS:0": 165,
+          "LAPIS:0 -> STONE WALL:0": 1,
+          "ROCK:0 -> STONE WALL:0": 14,
+          "IRON ORE:0 -> DIRT:0": 1,
+          "IRON ORE:0 -> STONE WALL:0": 1,
+          "ROCK:0 -> STAIRS UP:0": 2,
+          "ROCK:0 -> STONE BRICKS:0": 17,
+          "DIRT:0 -> STONE WALL:0": 152,
+          "ROCK:0 -> DIRT:0": 19
+        },
+        "firstDifference": {
+          "rawTile": "ROCK",
+          "x": 88,
+          "y": 8,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "DIRT"
+        },
+        "rawHash": "6bec9fb45c11d321"
+      },
+      "index": 2,
+      "hash": "c4cc153e528a5003"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 6,
+        "SAND": 1057,
+        "WOOD WALL": 35,
+        "ROCK": 1980,
+        "CACTUS": 13,
+        "HARD ROCK": 16,
+        "WOOD PLANKS": 33,
+        "STAIRS UP": 2,
+        "WOOD DOOR": 4,
+        "GRASS": 2834,
+        "TREE": 2568,
+        "FLOWER": 218,
+        "WATER": 7618
+      },
+      "stairsDown": [
+        {
+          "x": 89,
+          "y": 9
+        },
+        {
+          "x": 108,
+          "y": 26
+        },
+        {
+          "x": 71,
+          "y": 66
+        },
+        {
+          "x": 40,
+          "y": 86
+        },
+        {
+          "x": 56,
+          "y": 90
+        },
+        {
+          "x": 94,
+          "y": 102
+        }
+      ],
+      "entityCounts": {
+        "Chest": 3,
+        "Player": 1
+      },
+      "depth": 0,
+      "chestCount": 0,
+      "seed": -5843495416241995736,
+      "entities": [
+        "Chest[1568:448:Bread_1:3]",
+        "Chest[1616:640:Bread_1:3]",
+        "Chest[1696:608:Torch_2:Wood_1:String_1:3]",
+        "Player[1352:1064:10:3]"
+      ],
+      "stairsUp": [
+        {
+          "x": 66,
+          "y": 86
+        },
+        {
+          "x": 106,
+          "y": 93
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 110,
+        "edits": {
+          "SAND:0 -> WOOD WALL:0": 18,
+          "SAND:0 -> WOOD DOOR:0": 3,
+          "ROCK:0 -> STAIRS UP:0": 1,
+          "ROCK:0 -> WOOD PLANKS:0": 13,
+          "GRASS:0 -> STAIRS UP:0": 1,
+          "GRASS:0 -> WOOD PLANKS:0": 4,
+          "ROCK:0 -> GRASS:0": 8,
+          "SAND:0 -> WOOD PLANKS:0": 16,
+          "GRASS:0 -> HARD ROCK:0": 4,
+          "ROCK:0 -> HARD ROCK:0": 11,
+          "ROCK:0 -> WOOD WALL:0": 12,
+          "GRASS:0 -> WOOD WALL:0": 5,
+          "ROCK:0 -> WOOD DOOR:0": 1,
+          "SAND:0 -> GRASS:0": 12,
+          "TREE:0 -> HARD ROCK:0": 1
+        },
+        "firstDifference": {
+          "rawTile": "SAND",
+          "x": 95,
+          "y": 26,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "WOOD PLANKS"
+        },
+        "rawHash": "05ac4e5135e31b9f"
+      },
+      "index": 3,
+      "hash": "5caffe577102a86f"
+    },
+    {
+      "tiles": {
+        "STAIRS DOWN": 2,
+        "WOOD WALL": 19,
+        "INFINITE FALL": 11060,
+        "CLOUD": 5221,
+        "WOOD DOOR": 1,
+        "CLOUD CACTUS": 66,
+        "WOOD PLANKS": 15
+      },
+      "stairsDown": [
+        {
+          "x": 66,
+          "y": 86
+        },
+        {
+          "x": 106,
+          "y": 93
+        }
+      ],
+      "entityCounts": {
+        "Enchanter": 1,
+        "AirWizard": 1,
+        "Lantern": 1
+      },
+      "depth": 1,
+      "chestCount": 0,
+      "seed": -5025562857975149833,
+      "entities": [
+        "AirWizard[1032:1032:2000:1:4]",
+        "Enchanter[1048:312:4]",
+        "Lantern[1016:312:2:4]"
+      ],
+      "stairsUp": [],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 35,
+        "edits": {
+          "CLOUD:0 -> WOOD WALL:0": 19,
+          "CLOUD:0 -> WOOD DOOR:0": 1,
+          "CLOUD:0 -> WOOD PLANKS:0": 15
+        },
+        "firstDifference": {
+          "rawTile": "CLOUD",
+          "x": 62,
+          "y": 17,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "WOOD WALL"
+        },
+        "rawHash": "37c84ab144561cd9"
+      },
+      "index": 4,
+      "hash": "af3534dfd3a23d79"
+    },
+    {
+      "tiles": {
+        "LAVA": 73,
+        "OBSIDIAN": 3117,
+        "OBSIDIAN BOSS WALL": 28,
+        "DIRT": 6087,
+        "RAW OBSIDIAN": 3044,
+        "OBSIDIAN BOSS DOOR": 4,
+        "STAIRS UP": 1,
+        "OBSIDIAN BOSS FLOOR": 49,
+        "GRASS": 54,
+        "OBSIDIAN DOOR": 40,
+        "FLOWER": 27,
+        "ORNATE OBSIDIAN": 144,
+        "OBSIDIAN WALL": 3716
+      },
+      "stairsDown": [],
+      "entityCounts": {
+        "KnightStatue": 1,
+        "DungeonChest": 17,
+        "Lantern": 1,
+        "Spawner": 3
+      },
+      "depth": -4,
+      "chestCount": 14,
+      "seed": -1782466964123969572,
+      "entities": [
+        "DungeonChest[1144:488:Coal_4:Gem_15:Awkward Potion_10:Gold Bow_120:Rock Claymore_88:true:5]",
+        "DungeonChest[1164:1426:Steak_6:Cooked Pork_6:Coal_4:Gold Armor_1:Awkward Potion_10:Speed Potion_2:Light Potion_2:Gold Bow_120:true:5]",
+        "DungeonChest[1164:1426:White Wool_1:Awkward Potion_10:Speed Potion_5:Regen Potion_1:true:5]",
+        "DungeonChest[1176:488:Steak_6:Wood_20:Gem_7:Gold Armor_1:Iron Armor_2:Light Potion_3:Haste Potion_3:true:5]",
+        "DungeonChest[1205:1286:Steak_6:Wood_20:Coal_4:Awkward Potion_10:Speed Potion_2:Shield Potion_1:Gold Sword_208:true:5]",
+        "DungeonChest[1205:1286:Wood_20:Coal_4:Gem_8:Gold Armor_1:Gold Bow_120:Gold Sword_208:Gem Sword_260:true:5]",
+        "DungeonChest[1224:2194:White Wool_1:Gem_7:Gem Armor_1:Awkward Potion_10:Speed Potion_5:Light Potion_3:true:5]",
+        "DungeonChest[1528:424:Steak_6:Wood_20:Gem_8:Gold Armor_1:Awkward Potion_10:Speed Potion_5:Rock Claymore_88:true:5]",
+        "DungeonChest[1528:440:Iron Armor_2:Awkward Potion_10:Speed Potion_5:Light Potion_3:Shield Potion_1:Gold Sword_208:true:5]",
+        "DungeonChest[1896:1096:Steak_6:Gem_7:Gold Armor_1:Awkward Potion_10:Speed Potion_5:Light Potion_2:true:5]",
+        "DungeonChest[1896:1128:Cooked Pork_6:Wood_20:White Wool_1:Coal_4:Awkward Potion_10:Speed Potion_5:Time Potion_1:Rock Claymore_88:true:5]",
+        "DungeonChest[1912:1112:Coal_4:Gem_7:Regen Potion_1:Gem Bow_150:Gold Sword_208:Rock Claymore_88:true:5]",
+        "DungeonChest[1912:1128:Cooked Pork_6:Awkward Potion_10:Speed Potion_5:Light Potion_5:true:5]",
+        "DungeonChest[264:1448:White Wool_1:Coal_4:Speed Potion_2:Light Potion_2:Regen Potion_1:Energy Potion_1:Gold Bow_120:true:5]",
+        "DungeonChest[408:744:Awkward Potion_10:Light Potion_5:Rock Claymore_88:true:5]",
+        "DungeonChest[544:1066:Coal_4:Gem_7:Speed Potion_7:Light Potion_2:Gold Bow_120:true:5]",
+        "DungeonChest[856:936:Cooked Pork_6:Coal_4:Light Potion_5:true:5]",
+        "KnightStatue[1032:1032:5000:5]",
+        "Lantern[1480:824:1:5]",
+        "Spawner[1160:504:Snake:2:5]",
+        "Spawner[248:1464:Snake:2:5]",
+        "Spawner[872:952:Knight:2:5]"
+      ],
+      "stairsUp": [
+        {
+          "x": 93,
+          "y": 52
+        }
+      ],
+      "assemblyDeltaFromSameSeedRawMap": {
+        "changedCells": 530,
+        "edits": {
+          "DIRT:0 -> OBSIDIAN DOOR:0": 17,
+          "OBSIDIAN WALL:0 -> RAW OBSIDIAN:0": 1,
+          "DIRT:0 -> OBSIDIAN:0": 3,
+          "OBSIDIAN:0 -> OBSIDIAN WALL:0": 40,
+          "LAVA:0 -> OBSIDIAN DOOR:0": 1,
+          "RAW OBSIDIAN:0 -> ORNATE OBSIDIAN:0": 36,
+          "OBSIDIAN WALL:0 -> OBSIDIAN BOSS WALL:0": 4,
+          "RAW OBSIDIAN:0 -> FLOWER:0": 7,
+          "RAW OBSIDIAN:0 -> OBSIDIAN:0": 1,
+          "OBSIDIAN WALL:0 -> STAIRS UP:0": 1,
+          "DIRT:0 -> ORNATE OBSIDIAN:0": 65,
+          "OBSIDIAN:0 -> FLOWER:0": 6,
+          "RAW OBSIDIAN:0 -> GRASS:0": 9,
+          "DIRT:0 -> OBSIDIAN BOSS FLOOR:0": 22,
+          "OBSIDIAN WALL:0 -> OBSIDIAN:0": 3,
+          "OBSIDIAN:0 -> OBSIDIAN BOSS FLOOR:0": 10,
+          "DIRT:0 -> GRASS:0": 23,
+          "DIRT:0 -> FLOWER:0": 11,
+          "OBSIDIAN WALL:0 -> OBSIDIAN DOOR:0": 4,
+          "RAW OBSIDIAN:0 -> OBSIDIAN WALL:0": 42,
+          "OBSIDIAN WALL:0 -> FLOWER:0": 3,
+          "OBSIDIAN:0 -> ORNATE OBSIDIAN:0": 28,
+          "OBSIDIAN:0 -> GRASS:0": 16,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS DOOR:0": 2,
+          "OBSIDIAN:0 -> OBSIDIAN DOOR:0": 7,
+          "DIRT:0 -> OBSIDIAN BOSS WALL:0": 12,
+          "OBSIDIAN:0 -> OBSIDIAN BOSS WALL:0": 7,
+          "DIRT:0 -> OBSIDIAN BOSS DOOR:0": 2,
+          "RAW OBSIDIAN:0 -> OBSIDIAN DOOR:0": 11,
+          "DIRT:0 -> OBSIDIAN WALL:0": 93,
+          "OBSIDIAN WALL:0 -> GRASS:0": 6,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS WALL:0": 5,
+          "OBSIDIAN WALL:0 -> OBSIDIAN BOSS FLOOR:0": 4,
+          "RAW OBSIDIAN:0 -> OBSIDIAN BOSS FLOOR:0": 13,
+          "OBSIDIAN WALL:0 -> ORNATE OBSIDIAN:0": 15
+        },
+        "firstDifference": {
+          "rawTile": "DIRT",
+          "x": 92,
+          "y": 24,
+          "worldData": 0,
+          "rawData": 0,
+          "worldTile": "OBSIDIAN WALL"
+        },
+        "rawHash": "0de0db6d7e75e231"
+      },
+      "index": 5,
+      "hash": "66d9230644af8c31"
+    }
+  ],
+  "theme": "minicraft.settings.theme.normal",
+  "sourcePath": "World.initWorld -> new Level(makeWorld=true) -> official Save",
+  "player": {
+    "x": 1352,
+    "y": 1064
+  }
+}

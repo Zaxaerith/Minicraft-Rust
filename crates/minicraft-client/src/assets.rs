@@ -141,6 +141,11 @@ impl Assets {
                 item_image(item.asset_name())?,
             );
         }
+        assets.sheets.set(
+            SpriteType::Item,
+            "watering_can_filled",
+            item_image("watering_can_filled")?,
+        );
         for kind in ToolKind::ALL {
             for tier in ToolTier::ALL {
                 let key = kind.asset_name(tier);
@@ -319,6 +324,15 @@ impl Assets {
                     &mut assets.warnings,
                 );
             }
+            override_image(
+                pack,
+                "assets/textures/item/watering_can_filled.png",
+                assets
+                    .sheets
+                    .sheet_mut(SpriteType::Item, "watering_can_filled")
+                    .expect("loaded filled can"),
+                &mut assets.warnings,
+            );
             for item in ItemId::ALL {
                 override_image(
                     pack,
@@ -498,6 +512,25 @@ impl Assets {
             .expect("loaded item sheet")
     }
 
+    pub fn item_stack(&self, stack: crate::item::ItemStack) -> &Image {
+        if stack.item == ItemId::WateringCan && stack.watering_content.is_some_and(|n| n > 0) {
+            self.sheets
+                .sheet(SpriteType::Item, "watering_can_filled")
+                .expect("loaded filled can")
+        } else {
+            self.item(stack.item)
+        }
+    }
+    pub fn item_stack_linked(&self, stack: crate::item::ItemStack) -> LinkedSprite {
+        let key =
+            if stack.item == ItemId::WateringCan && stack.watering_content.is_some_and(|n| n > 0) {
+                "watering_can_filled"
+            } else {
+                stack.item.asset_name()
+            };
+        LinkedSprite::new(SpriteType::Item, key)
+    }
+
     pub fn tool(&self, tool: ToolItem) -> &Image {
         self.sheets
             .sheet(SpriteType::Item, tool.kind.asset_name(tool.tier))
@@ -538,12 +571,22 @@ impl Assets {
         frame: usize,
         sheared: bool,
     ) -> LinkedSprite {
+        self.mob_linked_level(mob, 1, direction, frame, sheared)
+    }
+    pub fn mob_linked_level(
+        &self,
+        mob: NaturalMob,
+        level: u8,
+        direction: u8,
+        frame: usize,
+        sheared: bool,
+    ) -> LinkedSprite {
         let key = mob.asset_name();
         // Java Sheep cutSprites: compileMobSpriteAnimations(0, 2, "sheep") → sheetY=2 cells.
         let sheet_y = if sheared && mob == NaturalMob::Sheep {
             2
         } else {
-            0
+            usize::from(level.saturating_sub(1)) * 2
         };
         let frame = frame & 1;
         // Java compileSpriteList: setMirror(mirror).setFlip(mirror). Down/up
@@ -1258,6 +1301,7 @@ fn item_image(name: &str) -> Result<Image, String> {
         "gold_fishing_rod" => bytes!("gold_fishing_rod.png"),
         "gem_fishing_rod" => bytes!("gem_fishing_rod.png"),
         "watering_can" => bytes!("watering_can.png"),
+        "watering_can_filled" => bytes!("watering_can_filled.png"),
         "seed" => bytes!("seed.png"),
         "carrot" => bytes!("carrot.png"),
         "tomato" => bytes!("tomato.png"),

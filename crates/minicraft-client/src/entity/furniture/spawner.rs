@@ -1,63 +1,87 @@
-//! Java Spawner: timed mob spawn near player with light/day/hostile skips.
-use crate::entity::helpers::{can_stand, squared_distance};
+//! Java dev2 Spawner countdown, population pressure, light/day and player gates.
+use crate::entity::helpers::squared_distance;
 use crate::entity::mob::NaturalMob;
+use crate::entity::types::SpawnerState;
+use crate::level::noise::JavaRandom;
 use crate::level::tile::Tile;
 
-/// Java Spawner random interval base (200–500 via age%301).
 pub const INTERVAL_BASE: u32 = 200;
 pub const INTERVAL_SPAN: u32 = 301;
-/// Java: only spawn when player within 128 entity-pixels.
 pub const PLAYER_RANGE: i32 = 128;
 
-/// Candidate offsets tried around the spawner before falling back.
-pub const SPAWN_OFFSETS: [(i32, i32); 6] =
-    [(16, 0), (-16, 0), (0, 16), (0, -16), (16, 16), (-16, -16)];
+pub fn new_state(level: u8, random: &mut JavaRandom) -> SpawnerState {
+    SpawnerState {
+        level,
+        spawn_ticks: (200 + random.next_int(301)) as u16,
+    }
+}
 
-/// Java Spawner.trySpawn: returns (species, x, y) when a spawn should occur.
 #[allow(clippy::too_many_arguments)]
-pub fn try_spawn(
+pub fn tick_spawn(
     species: NaturalMob,
+    state: &mut SpawnerState,
     x: i32,
     y: i32,
-    age: u32,
     tiles: &[Tile],
     data: &[u16],
     width: usize,
     height: usize,
     player: Option<(i32, i32)>,
-    level_depth: i8,
-) -> Option<(NaturalMob, i32, i32)> {
-    let interval = INTERVAL_BASE + (age % INTERVAL_SPAN);
-    if !age.is_multiple_of(interval) {
+    depth: i8,
+    day_tick: u32,
+    mob_count: usize,
+    max_mob_count: usize,
+    lit: bool,
+    random: &mut JavaRandom,
+) -> Option<(NaturalMob, u8, i32, i32)> {
+    state.spawn_ticks = state.spawn_ticks.saturating_sub(1);
+    if state.spawn_ticks != 0 {
         return None;
     }
-    let hostile = species.hostile();
-    let lit = {
-        let tx = x.div_euclid(16);
-        let ty = y.div_euclid(16);
-        if tx < 0 || ty < 0 || tx >= width as i32 || ty >= height as i32 {
-            false
-        } else {
-            tiles[tx as usize + ty as usize * width].light_radius() > 0
-        }
-    };
-    // Java Spawner.trySpawn: surface/day skip + light skip for hostiles.
-    let surface_day = level_depth >= 0 && hostile && lit;
-    let near_player = player
-        .is_some_and(|(px, py)| squared_distance(x, y, px, py) <= PLAYER_RANGE * PLAYER_RANGE);
-    if !near_player || (hostile && lit) || (hostile && surface_day) {
+    // Java resets the 200..500 timer on every attempt, including failed gates.
+    state.spawn_ticks = (200 + random.next_int(301)) as u16;
+    if max_mob_count == 0 || mob_count >= max_mob_count {
         return None;
     }
-    let mut spawn_x = x + 16;
-    let mut spawn_y = y;
-    for (dx, dy) in SPAWN_OFFSETS {
-        let candidate_x = x + dx;
-        let candidate_y = y + dy;
-        if can_stand(tiles, data, width, height, candidate_x, candidate_y) {
-            spawn_x = candidate_x;
-            spawn_y = candidate_y;
-            break;
+    let chance = 10usize.saturating_mul(mob_count.saturating_mul(mob_count))
+        / max_mob_count.saturating_mul(max_mob_count);
+    if chance > 0 && random.next_int(chance.min(i32::MAX as usize) as i32) != 0 {
+        return None;
+    }
+    if species.hostile() && ((depth >= 0 && day_tick > 8100 && day_tick < 40500) || lit) {
+        return None;
+    }
+    let (px, py) = player?;
+    if squared_distance(x, y, px, py) > PLAYER_RANGE * PLAYER_RANGE {
+        return None;
+    }
+    // getAreaTilePositions: y-major inclusive square, one uniformly chosen tile.
+    let (tx, ty) = (x.div_euclid(16), y.div_euclid(16));
+    let mut valid = Vec::with_capacity(9);
+    for cy in ty - 1..=ty + 1 {
+        for cx in tx - 1..=tx + 1 {
+            if cx < 0 || cy < 0 || cx >= width as i32 || cy >= height as i32 {
+                continue;
+            }
+            let index = cx as usize + cy as usize * width;
+            let tile = tiles[index];
+            if tile.solid(data[index])
+                || matches!(
+                    tile,
+                    Tile::Water | Tile::Lava | Tile::Hole | Tile::InfiniteFall
+                )
+            {
+                continue;
+            }
+            if species.hostile() && tile.light_radius() > 0 {
+                continue;
+            }
+            valid.push((cx * 16, cy * 16));
         }
     }
-    Some((species, spawn_x, spawn_y))
+    if valid.is_empty() {
+        return None;
+    }
+    let (sx, sy) = valid[random.next_int(valid.len() as i32) as usize];
+    Some((species, state.level, sx, sy))
 }

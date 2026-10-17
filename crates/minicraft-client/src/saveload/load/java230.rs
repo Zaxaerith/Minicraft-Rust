@@ -252,15 +252,13 @@ fn item(encoded: &str) -> Result<ImportedItem, String> {
     };
     let parsed = item_from_java(encoded)?;
     match &parsed {
-        ImportedItem::Stack(id, _) => {
-            if *id == ItemId::WateringCan {
-                return Err("dev2 Watering Can instance state is not representable by the current shared player field; import refused".into());
-            }
-            if amount == 0 {
+        ImportedItem::Stack(stack) => {
+            let id = stack.item;
+            if amount == 0 && id != ItemId::WateringCan {
                 return Err(format!("invalid zero-count item {encoded}"));
             }
             if !name.eq_ignore_ascii_case(id.display_name())
-                && !(name.eq_ignore_ascii_case("White Wool") && *id == ItemId::Wool)
+                && !(name.eq_ignore_ascii_case("White Wool") && id == ItemId::Wool)
             {
                 return Err(format!("unsupported dev2 item alias {name:?}"));
             }
@@ -280,9 +278,9 @@ fn inventory(entries: &[String], capacity: usize) -> Result<Inventory, String> {
     let mut inv = Inventory::new(capacity);
     for entry in entries {
         match item(entry)? {
-            ImportedItem::Stack(id, count) => {
-                if u32::from(inv.count(id)) + u32::from(count) > u32::from(u16::MAX)
-                    || inv.add(id, count) > 0
+            ImportedItem::Stack(stack) => {
+                if u32::from(inv.count(stack.item)) + u32::from(stack.count) > u32::from(u16::MAX)
+                    || inv.add_stack(stack) > 0
                 {
                     return Err(format!("dev2 inventory does not fit losslessly: {entry}"));
                 }
@@ -410,7 +408,18 @@ fn inspect_entities(
 
 pub(super) fn import_entities(directory: &Path, world: &mut World) -> Result<(), String> {
     inspect_entities(directory, |name, x, y, level, fields| {
-        if x < 0 || y < 0 || x >= world.width as i32 * 16 || y >= world.height as i32 * 16 {
+        let within_map =
+            x >= 0 && y >= 0 && x < world.width as i32 * 16 && y < world.height as i32 * 16;
+        // Official dev2 Level.checkChestCount uses 20/23 and 21/24 pixel
+        // multipliers instead of 16. Preserve its saved, unreachable dungeon
+        // chests, within those exact algorithm bounds, without moving them.
+        let legacy_chest_position = name == "DungeonChest"
+            && world.levels[level].depth == -4
+            && x >= -16
+            && y >= -16
+            && x <= 23 * (world.width as i32 - 1) - 14
+            && y <= 24 * (world.height as i32 - 1) - 14;
+        if !within_map && !legacy_chest_position {
             return Err(format!("invalid entity position {name} {x},{y}"));
         }
         if name == "Player" {
@@ -434,41 +443,63 @@ pub(super) fn import_entities(directory: &Path, world: &mut World) -> Result<(),
             return Ok(());
         }
         if let Some(species) = mob_from_java(name) {
-            let boss = matches!(
-                species,
-                spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
-            );
-            if species.hostile() && !boss {
-                return Err(format!(
-                    "dev2 hostile {name}: level/scaled stats not represented; import refused"
-                ));
-            }
-            if boss && fields.get(3).map(String::as_str) != Some("1") {
-                return Err("unsupported boss level".into());
-            }
+            let hostile = species.hostile();
             exact(
                 fields,
-                if species == spawn::NaturalMob::Sheep || boss {
+                if hostile || species == spawn::NaturalMob::Sheep {
                     5
                 } else {
                     4
                 },
-                "passive mob",
+                "mob",
             )?;
-            let health = parse::<u16>(&fields[2], "mob health")?;
-            if health > crate::entity::stats::mob_health(species) {
-                return Err("unrepresentable mob health".into());
-            }
+            let mob_level = if hostile {
+                parse::<u8>(&fields[3], "mob level")?
+            } else {
+                1
+            };
             if species == spawn::NaturalMob::Sheep {
                 boolean(&fields[3])?;
             }
-            world.levels[level].entities.import_mob(
+            let health = parse::<u16>(&fields[2], "mob health")?;
+            world.levels[level].entities.import_mob_level(
                 species,
+                mob_level,
+                world.difficulty as u8,
+                world.mode == GameMode::Score,
                 x,
                 y,
-                Some(health),
+                health,
                 species == spawn::NaturalMob::Sheep && fields[3] == "true",
+            )?;
+            return Ok(());
+        }
+        if name == "Spawner" {
+            exact(fields, 5, "Spawner")?;
+            let species = mob_from_java(&fields[2]).ok_or("unsupported Spawner mob")?;
+            if matches!(
+                species,
+                spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
+            ) {
+                return Err("unsupported boss Spawner configuration".into());
+            }
+            let kind = spawner_for(species);
+            let mob_level = parse::<u8>(&fields[3], "Spawner level")?;
+            let mut restart_rng = crate::level::noise::JavaRandom::new(
+                world.seed ^ i64::from(x) ^ (i64::from(y) << 32),
             );
+            world.levels[level]
+                .entities
+                .import_spawner(kind, x, y, mob_level, &mut restart_rng)?;
+            return Ok(());
+        }
+        if name == "KnightStatue" {
+            exact(fields, 4, "KnightStatue")?;
+            world.levels[level].entities.import_statue(
+                x,
+                y,
+                parse::<u16>(&fields[2], "statue bossHealth")?,
+            )?;
             return Ok(());
         }
         let key = compact(name);

@@ -18,7 +18,7 @@ pub fn may_pass() -> bool {
 
 /// Java `WallTile.tick` — decay stored damage.
 pub fn tick_decay(data: u16) -> Option<u16> {
-    (data > 0).then_some(data - 1)
+    data.checked_sub(1)
 }
 
 /// Java `WallTile.hurt` drop count: `3 - material.ordinal()`.
@@ -43,6 +43,13 @@ pub fn obsidian_locked(depth: i8, material: Material, air_wizard_beaten: bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn undamaged_wall_does_not_decay_and_positive_damage_decays_once() {
+        assert_eq!(tick_decay(0), None);
+        assert_eq!(tick_decay(1), Some(0));
+        assert_eq!(tick_decay(u16::MAX), Some(u16::MAX - 1));
+    }
 
     #[test]
     fn wall_connects_across_materials() {

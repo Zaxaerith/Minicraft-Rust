@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 40
     env:
       CARGO_TERM_COLOR: always
+      # The full two-day CPU simulation keeps its 15s budget. Limit contention
+      # with map/import tests; default parallelism exceeded it in Phase3.
+      RUST_TEST_THREADS: "4"
       MINICRAFT_PARITY_RENDER_OUTPUT: ${{ github.workspace }}/target/parity/render-frame/rust
     steps:
       - uses: actions/checkout@v7

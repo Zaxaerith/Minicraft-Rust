@@ -36,6 +36,73 @@ pub(crate) const COLORS: &[u8] =
     include_bytes!("../../../tests/fixtures/java230/migration-colors.zip");
 
 #[test]
+fn java35_instance_corruption_is_transactionally_rejected() {
+    for (old, new, reason) in [
+        (
+            "Watering Can_23",
+            "Watering Can_1801",
+            "Watering Can content",
+        ),
+        (
+            "Zombie[528:400:88:3:2]",
+            "Zombie[528:400:0:3:2]",
+            "mob health",
+        ),
+        (
+            "Zombie[528:400:88:3:2]",
+            "Zombie[528:400:91:3:2]",
+            "mob health",
+        ),
+        (
+            "Spawner[280:248:Zombie:3:2]",
+            "Spawner[280:248:Zombie:5:2]",
+            "Spawner mob level",
+        ),
+        (
+            "Spawner[280:248:Zombie:3:2]",
+            "Spawner[280:248:AirWizard:1:2]",
+            "boss Spawner",
+        ),
+        (
+            "KnightStatue[400:400:1731:5]",
+            "KnightStatue[400:400:0:5]",
+            "KnightStatue bossHealth",
+        ),
+        (
+            "KnightStatue[400:400:1731:5]",
+            "KnightStatue[400:400:5001:5]",
+            "KnightStatue bossHealth",
+        ),
+        (
+            "Spawner[280:248:Zombie:3:2]",
+            "Spawner[280:248:Zombie:3:unknown:2]",
+            "Spawner",
+        ),
+        (
+            "Spawner[280:248:Zombie:3:2]",
+            "Spawner[280:2194:Zombie:3:2]",
+            "entity position",
+        ),
+    ] {
+        let root = fixture(include_bytes!(
+            "../../../tests/fixtures/java230/migration-entities35.zip"
+        ));
+        let source = root.0.join("source");
+        let entities = source.join("Entities.miniplussave");
+        let text = fs::read_to_string(&entities).unwrap();
+        assert!(text.contains(old), "{old}");
+        fs::write(entities, text.replacen(old, new, 1)).unwrap();
+        let before = snapshot(&source).unwrap();
+        let target = root.0.join("saves/Rejected");
+        let error = import_to(&source, &target, None).unwrap_err();
+        assert!(error.contains(reason), "{old}: {error}");
+        assert_eq!(snapshot(&source).unwrap(), before);
+        assert!(!target.exists());
+        assert_eq!(fs::read_dir(root.0.join("saves")).unwrap().count(), 0);
+    }
+}
+
+#[test]
 fn java230_migration_official_save_to_native_is_read_only_atomic_and_repeatable() {
     for bytes in [BASE, COLORS] {
         let root = fixture(bytes);
@@ -130,7 +197,7 @@ fn java230_migration_bad_inputs_leave_no_world_and_preserve_source() {
         (
             "Entities.miniplussave",
             "Cow[248:136:2:3]",
-            "Zombie[248:136:2:3:3]",
+            "Zombie[248:136:2:99:3]",
         ),
         (
             "Entities.miniplussave",
@@ -168,9 +235,18 @@ fn java230_migration_bad_inputs_leave_no_world_and_preserve_source() {
     let root = fixture(include_bytes!(
         "../../../tests/fixtures/java230/migration-instances.zip"
     ));
+    let inventory = root.0.join("source/Inventory.miniplussave");
+    let original = fs::read_to_string(&inventory).unwrap();
+    assert!(original.contains("Watering Can_731"));
+    fs::write(
+        &inventory,
+        original.replace("Watering Can_731", "Watering Can_1801"),
+    )
+    .unwrap();
     let error =
         import_to(&root.0.join("source"), &root.0.join("saves/Rejected"), None).unwrap_err();
-    assert!(error.contains("Watering Can instance"), "{error}");
+    assert!(error.contains("Watering Can content"), "{error}");
+    assert!(!root.0.join("saves/Rejected").exists());
 }
 
 #[test]

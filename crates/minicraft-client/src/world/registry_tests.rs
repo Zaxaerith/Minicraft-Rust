@@ -65,6 +65,7 @@ pub(crate) fn tiny_world() -> World {
             fishing_level: None,
             fishing_ticks: 0,
             watering_content: 0,
+            item_instance_version: 1,
             clothing: ItemId::RegularClothes,
             imported_shirt_color: None,
             inventory: Inventory::new(27),
