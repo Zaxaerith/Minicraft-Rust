@@ -114,7 +114,7 @@ Java `KnightStatue.java` 保存bossHealth，touches不保存；源加载从0次�
 
 ## 5. 相关玩法与实际修复
 
-箱内工具GUI已补齐：两面行数包括stack+tools，显示耐久，移动精确实例；原容器工具虽然在磁盘但不可选问题解决。真实World.tick的craft开箱→方向选第二把Pickaxe11→select放入→full bag取回拒绝→扩容取回→exit→存读，确保另一把17未变、活动引用正确清理、水壶不变。普通容量/最后耐久/材料扣除测试继续保留。
+箱内工具GUI已补齐：两面行数包括stack+tools，显示耐久，移动精确实例；原容器工具虽然在磁盘但不可选问题解决。高HP Boss头顶百分比原用u16饱和乘100，满血2000会显示32%，与实际生命不符；现改u32中间值，显示100%，不修改生命本身。真实World.tick的craft开箱→方向选第二把Pickaxe11→select放入→full bag取回拒绝→扩容取回→exit→存读，确保另一把17未变、活动引用正确清理、水壶不变。普通容量/最后耐久/材料扣除测试继续保留。
 
 最后地牢锁箱5 GoldApple已接入菜单和旧交互两个入口的共享解锁逻辑：实际消耗钥匙并首次从锁定变为解锁，且本层无剩余锁箱时，地面掉落五个独立苹果；无钥匙/非最后箱/重复打开不额外奖励。官方 `Save.writeEntity → Load.loadEntity → DungeonChest.use` 五步Oracle保存在 `dungeon-chest-reward35.json`，并用其真实实体字符串做受控导入菜单与每步磁盘恢复回归。这不是对正常世界样本删数据或修改其初始chestCount14；原始完整世界与runtime样本保持原样。按照官方Load从锁态恢复计数，不复刻新建世界漏计counter缺陷。
 
@@ -126,7 +126,7 @@ Java `KnightStatue.java` 保存bossHealth，touches不保存；源加载从0次�
 
 只使用已有target。Java两个run.ps1都重新核验固定源码/资源Git blob并编译，dependency jar只供第三方类；230正常World独立JVM避免WorldSelectDisplay静态worldsDir被先前Fixture污染。开发时遇到该驱动静态缓存问题和未初始化InputHandler导致官方进度保存失败，修正驱动后重放；没有改固定源逻辑。记录的确定性JSON和所有migration官方Save文件与真实重放比较，runtime只与自己的实际source快照比较。
 
-局部已实际执行：水壶World回归（含最后复核增加的快捷交互）、普通属性/Spawner/Statue运行测试、真实World combat一项、完整normal+runtime迁移一项、assembly三项、wall三项、旧230局部38项及224动物回归；不以局测代替最终Workspace。最终复核还补齐了ActiveItem::Slot水壶快捷箱子交互，否则会被原Stack-only分支误当空手；新增真实Input回归保证转移所选23壶，满箱时731壶不变。真实失败及其修复证据保留：旧Cow上限拒绝、官方越界地牢箱拒绝、零损伤墙下溢；新增runtime测试曾误以为玩家携带工具，改为实际取出官方箱内工具11再测试，未添加虚构装备。
+局部已实际执行：水壶World回归11项（含最后复核增加的快捷交互）、普通属性/Spawner/Statue运行测试、真实World combat一项、完整normal+runtime迁移一项、assembly三项、wall三项、旧230局部38项及224动物回归；不以局测代替最终Workspace。最终复核还补齐了ActiveItem::Slot水壶快捷箱子交互，否则会被原Stack-only分支误当空手；新增真实Input回归保证转移所选23壶，满箱时731壶不变。真实失败及其修复证据保留：旧Cow上限拒绝、官方越界地牢箱拒绝、零损伤墙下溢；新增runtime测试曾误以为玩家携带工具，改为实际取出官方箱内工具11再测试，未添加虚构装备。
 
 最终全部代码/文档提交后的HEAD执行：
 
@@ -142,11 +142,15 @@ cargo build --release --workspace --locked
 
 15秒测试未删除、未改阈值/计算断言：`registry_tests::save_resume_is_deterministic_and_two_day_soak_stays_bounded` 用Instant包住完整两日CPU模拟，无音频/渲染/磁盘。Phase3默认并行失败、单独7.85秒及4线程全量通过，说明墙钟预算与地图/迁移CPU测试争用相关。CI设置RUST_TEST_THREADS=4降低争用，仍完整运行两日。Phase3.5默认并行的补充实测结果也单独记录，不隐瞒失败，不把4线程结果当默认稳定证据。
 
+实际统一门禁已通过：Release Workspace **623项（603+7+6+7），0失败、0忽略**，格式、严格Clippy、Release构建与EXE自检通过；旧224地图/噪声、230地表八场景及24张raw全层对照通过。默认并行的额外一次全量也通过（11.20秒，client8.61秒），不代表未来任意CPU负载恒稳，CI仍保留4线程。原两日15秒断言原样保留。128/256/512实际生成单次86/142/155毫秒、花166/652/3296，均磁盘恢复成功；不是统计性能基准或RSS测量。
+
+实际Release CLI对instances、entities35、正常初始及正常runtime四份官方世界均成功；对每个源mob的species/位置/HP/lvl及独立水壶再次比较，成功前后源SHA256不变，重复目标拒绝且目标哈希不变。1801非法水量CLI非零失败、源不变、无可见半成品。官方重放与24份确定性JSON/Save样本比较通过；非确定runtime仅与自己的真实snapshot比较。最终文档/百分比修正提交后继续在最终HEAD重跑四项门禁，精确结果在忽略记录，不把前一HEAD的结果冒称最终。
+
 Windows是唯一实际运行平台。Linux/macOS **NOT RUN**；三平台GitHub Actions **NOT RUN**，工作流存在不代表远程验证。无图形headless动作不等于真人GUI，未重复要求音频/窗口/按键/资源包旧验收。
 
 ## 7. Git与Windows人工验收
 
-分支 `feat/java230-migration-parity`，父基线 `dbf430bf0dd2f79ced9f3789c8ca35af6f822f2c`。本轮本地提交、最终完整SHA与干净状态见最终门禁记录/交付；不为在本文记录自身SHA循环提交。无Push、Tag、Release、merge main、历史重写或玩家真实存档改动。
+分支 `feat/java230-migration-parity`，父基线 `dbf430bf0dd2f79ced9f3789c8ca35af6f822f2c`。功能检查点 `d0b0a40d9d61a1743f403fa72f273b3622b39ac1`；本轮本地提交、最终完整SHA与干净状态见最终门禁记录/交付；不为在本文记录自身SHA循环提交。无Push、Tag、Release、merge main、历史重写或玩家真实存档改动。
 
 1. 优先用已生成官方样本 `target/parity/java230/output/migration/saves/migration-entities35`（实际目录见输出）或固定dev2游戏的**完整副本**，关闭Java后保留源。不能用Infdev档，不在原世界目录转换。
 2. 创建独立测试根 `target/parity/java230/manual35/saves`。运行 `target/release/minicraft-parity.exe java230-import "源目录绝对路径" "manual35/saves/JavaCopy绝对路径"`；目标必须不存在。全局进度可加明确的Unlocks.json路径。不把fixture ZIP直接传CLI。

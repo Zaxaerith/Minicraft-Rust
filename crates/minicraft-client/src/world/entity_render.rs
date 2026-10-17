@@ -191,7 +191,7 @@ pub(super) fn render_entity(
                 mob.species,
                 spawn::NaturalMob::AirWizard | spawn::NaturalMob::ObsidianKnight
             ) {
-                let percent = (mob.health.saturating_mul(100) / mob.max_health).max(1);
+                let percent = (u32::from(mob.health) * 100 / u32::from(mob.max_health)).max(1);
                 screen.text(
                     assets.font(),
                     &format!("{percent}%"),
