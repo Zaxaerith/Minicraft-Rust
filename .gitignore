@@ -1,4 +1,5 @@
-/target/
+# Cargo outputs and generated previews, including crate-local test output
+target/
 /.reference/
 /*.zip
 *.log
