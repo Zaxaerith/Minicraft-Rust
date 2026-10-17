@@ -133,6 +133,10 @@ cargo build --release --workspace --locked
 
 首次全量Release发现3个历史目录长度断言仍期待70方块/44工作台配方（其他561项通过），按已执行Java OrnateWood证据更新为71/45，并新增末尾产物/成本及旧索引不变断言。未删除测试或更新旧黄金地图。首轮失败日志保留，修正后在新的最终HEAD重跑门禁。
 
+实测最终代码验收：Release Workspace **584项通过、0失败、0忽略**（client564/common7/server6/双客户端e2e7），fmt、严格Clippy、Release workspace build与真实EXE自检通过。默认并行度曾使既有两日模拟触发15秒预算（563项功能通过）；相同测试单独7.85秒通过，再以 `RUST_TEST_THREADS=4` 完整运行14.68秒通过，未放宽预算或跳过断言。首次失败和隔离证据均保留。最终门禁沿用4线程以降低资源竞争。
+
+Release实际Java对照：224六层地图/噪声double位模式、230原有地表八场景、新24张raw全层逐格比较均通过；所有已提交dev2 JSON/四份官方Save ZIP内容与实际Java重放一致，107张扩展图片与固定源及SHA256一致。128/256/512真实Rust World单次生成分别87/142/153毫秒，花166/652/3296，均磁盘保存恢复通过；不是统计基准或RSS。实际Release CLI接受colors世界、拒绝双水壶样本、拒绝重复目标，接受/拒绝源文件哈希及已存在目标哈希均保持不变。最终文档提交不改变上述代码，仍在该提交HEAD重跑四项门禁，精确结果见最终记录。
+
 本机为Windows x64 MSVC/Rust2024，现有target复用，无第二套构建目录。最终EXE通过隐藏Start-Process取得真实退出码；自检savedir和生成产物限于target。全量测试渲染输出指定忽略target路径，避免修改原跟踪图片。Linux/macOS运行 **NOT RUN**；三平台GitHub Actions **NOT RUN**，工作流存在不等于远程通过。CI定义保留，未发现需为本轮修改的明确流程错误；新增平台独占发布函数仅Windows有实测。
 
 ## 7. Git与验收
