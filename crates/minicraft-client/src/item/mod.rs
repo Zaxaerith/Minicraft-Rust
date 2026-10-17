@@ -284,6 +284,7 @@ item_registry! {
     WhiteLily => ("white_lily", "White Lily"),
     Poppy => ("poppy", "Poppy"),
     Violet => ("violet", "Violet"),
+    OrnateWood => ("plank", "Ornate Wood"),
 }
 
 impl ItemId {
@@ -398,7 +399,7 @@ mod tests {
     fn item_registry_preserves_legacy_entries_and_has_no_duplicate_displays() {
         // Java non-tool identities plus the recipe-only Arcane Fertilizer and the
         // Power Glove placeholder retained by the port inventory tables.
-        assert_eq!(ItemId::ALL.len(), 202);
+        assert_eq!(ItemId::ALL.len(), 203);
         assert_eq!(ItemId::ALL[0], ItemId::PowerGlove);
         assert_eq!(ItemId::ALL[141], ItemId::AntidiousBook);
         assert_eq!(ItemId::ALL[142], ItemId::BlackDye);

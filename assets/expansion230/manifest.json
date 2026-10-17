@@ -531,6 +531,11 @@
       "path": "assets/expansion230/textures/tile/violet.png",
       "source": "src/client/resources/assets/textures/tile/violet.png",
       "sha256": "6e7d43f0a62f9a91ef1401133dbd6b99d3ab2de82f0dbd5fc33389cc143a310f"
+    },
+    {
+      "path": "assets/expansion230/textures/tile/ornate_wood.png",
+      "source": "src/client/resources/assets/textures/tile/ornate_wood.png",
+      "sha256": "1519030200b9a081f13dac75bf74eb79a69f25b1f636875be5c681ab46807b42"
     }
   ]
 }

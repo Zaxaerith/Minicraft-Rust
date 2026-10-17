@@ -8,6 +8,7 @@ import org.json.*;
 import minicraft.core.Game;
 import minicraft.core.io.Settings;
 import minicraft.entity.furniture.DeathChest;
+import minicraft.entity.furniture.DungeonChest;
 import minicraft.entity.mob.Player;
 import minicraft.item.*;
 import minicraft.level.tile.Tiles;
@@ -60,6 +61,13 @@ public final class Oracle {
         fixtureChest.time = 123;
         fixtureLevel.add(fixtureChest, 104, 120);
         write(out, "Entities.miniplussave", Save.writeEntity(fixtureChest, true) + ",");
+        DungeonChest lockedChest = new DungeonChest(null, false);
+        lockedChest.x = 104; lockedChest.y = 120; fixtureLevel.add(lockedChest);
+        lockedChest.getInventory().add(Items.get("Wood_9"));
+        DungeonChest unlockedChest = new DungeonChest(null, true);
+        unlockedChest.x = 136; unlockedChest.y = 120; fixtureLevel.add(unlockedChest);
+        write(out, "dungeon-chests.txt", Save.writeEntity(lockedChest, true) + "," + Save.writeEntity(unlockedChest, true) + ",");
+
 
         JSONObject progress = new JSONObject().put("Version", "2.2.4")
             .put("CurrentOngoingTutorial", "minicraft.tutorial.getting_rocks")

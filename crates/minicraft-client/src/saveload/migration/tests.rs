@@ -271,3 +271,23 @@ fn java230_migration_interruption_and_destination_race_never_replace_a_world() {
     );
     assert_eq!(crate::worlds::load(&root.0).unwrap().len(), 1);
 }
+
+#[test]
+fn java230_migration_official_score60_and_missing_optional_progress_are_preserved() {
+    let root = fixture(include_bytes!(
+        "../../../tests/fixtures/java230/migration-score60.zip"
+    ));
+    let source = root.0.join("source");
+    // Missing optional files is a separate compatibility mutation, not Java output.
+    fs::remove_file(source.join("advancements.json")).unwrap();
+    fs::remove_file(source.join("signs.json")).unwrap();
+    import_to(&source, &root.0.join("saves/Score60"), None).unwrap();
+    let record = crate::worlds::load(&root.0).unwrap().pop().unwrap();
+    let world = crate::worlds::load_state(&record).unwrap().unwrap();
+    assert_eq!(world.mode, crate::world::GameMode::Score);
+    assert_eq!(world.score_minutes, 60);
+    assert_eq!(world.score_ticks, 12345);
+    crate::worlds::save_state(&record, &world).unwrap();
+    let world = crate::worlds::load_state(&record).unwrap().unwrap();
+    assert_eq!((world.score_minutes, world.score_ticks), (60, 12345));
+}

@@ -875,6 +875,7 @@ fn expansion230_bytes(kind: SpriteType, name: &str) -> Option<&'static [u8]> {
         };
     }
     let bytes: &[u8] = match (kind, name) {
+        (SpriteType::Tile, "ornate_wood") => bytes!("tile", "ornate_wood"),
         (SpriteType::Item, "black_dye") => bytes!("item", "black_dye"),
         (SpriteType::Item, "red_dye") => bytes!("item", "red_dye"),
         (SpriteType::Item, "green_dye") => bytes!("item", "green_dye"),

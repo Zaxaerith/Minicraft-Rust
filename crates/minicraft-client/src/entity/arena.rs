@@ -123,19 +123,26 @@ impl EntityArena {
         state: u16,
         contents: &[(ItemId, u16)],
         tools: &[ToolItem],
-    ) {
+    ) -> Result<(), String> {
         let id = self.spawn_furniture(kind, x, y);
         if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == id) {
             entity.state = state;
             if let Some(storage) = &mut entity.storage {
+                // Import replaces the official saved contents, not generated loot.
+                *storage = Inventory::new(storage.capacity());
                 for (item, count) in contents {
-                    storage.add(*item, *count);
+                    if storage.add(*item, *count) != 0 {
+                        return Err("Java container exceeds native capacity".into());
+                    }
                 }
                 for tool in tools {
-                    let _ = storage.add_tool(*tool);
+                    storage
+                        .add_tool(*tool)
+                        .ok_or("Java container exceeds native tool capacity")?;
                 }
             }
         }
+        Ok(())
     }
 
     /// Java Player.die: DeathChest holds inventory copies plus active/armor;

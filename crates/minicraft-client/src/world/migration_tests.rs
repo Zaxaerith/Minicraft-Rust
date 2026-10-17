@@ -117,6 +117,62 @@ fn java230_migration_all_saved_cells_player_progress_actions_and_disk_resume() {
     assert_eq!(death.storage.as_ref().unwrap().count(ItemId::WhiteLily), 2);
     assert_eq!(death.storage.as_ref().unwrap().tools()[0].durability, 7);
     assert!(arena.entities().iter().any(|e|matches!(&e.kind,entity::EntityKind::Mob(m) if m.species==spawn::NaturalMob::Sheep && m.sheared && m.health==4)));
+    // Official Save writes isLocked; native state zero means locked, the inverse.
+    let locked = world.levels[3]
+        .entities
+        .entities()
+        .iter()
+        .find(|e| {
+            e.x == 280
+                && matches!(
+                    e.kind,
+                    entity::EntityKind::Furniture(FurnitureKind::DungeonChest)
+                )
+        })
+        .unwrap();
+    assert_eq!(locked.state, 0);
+    assert_eq!(locked.storage.as_ref().unwrap().count(ItemId::Gem), 2);
+    let unlocked = world.levels[3]
+        .entities
+        .entities()
+        .iter()
+        .find(|e| {
+            e.x == 312
+                && matches!(
+                    e.kind,
+                    entity::EntityKind::Furniture(FurnitureKind::DungeonChest)
+                )
+        })
+        .unwrap();
+    assert_eq!(unlocked.state, 1);
+    assert_eq!(
+        unlocked.storage.as_ref().unwrap().count(ItemId::GoldIngot),
+        3
+    );
+    let mut no_key = crate::item::Inventory::new(27);
+    assert_eq!(
+        world.levels[3]
+            .entities
+            .use_container_near(280, 136, &mut no_key, None)
+            .as_deref(),
+        Some("A KEY IS REQUIRED")
+    );
+    world.player.x = 280;
+    world.player.y = 120;
+    world.player.direction = Direction::Down;
+    assert_eq!(world.player.inventory.count(ItemId::Key), 1);
+    assert!(world.use_furniture_front());
+    assert_eq!(world.player.inventory.count(ItemId::Key), 0);
+    let id = world.container_id.unwrap();
+    assert!(world.transfer_chest_to_player(id, 0, true));
+    world.close_container();
+    assert_eq!(world.player.inventory.count(ItemId::Gem), 2);
+    world.player.x = 312;
+    assert!(world.use_furniture_front());
+    let id = world.container_id.unwrap();
+    assert!(world.transfer_chest_to_player(id, 0, true));
+    world.close_container();
+    assert_eq!(world.player.inventory.count(ItemId::GoldIngot), 3);
     // Harvest the actual Java Violet, then use the actual Java Dye Vat menu.
     world.player.active_item = None;
     world.player.direction = Direction::Right;

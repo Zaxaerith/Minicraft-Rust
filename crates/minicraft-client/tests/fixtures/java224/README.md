@@ -9,3 +9,10 @@ GPL-3.0-only，来源 MinicraftPlus/minicraft-plus-revived。
 Player/Inventory/Entities 文件由真实 Java `Save` writer 生成。Advancements 的部分完成状态经真实 Java load/save 输出，保留原始时间，不要求通过实际 GUI 玩到该状态。reference.json 的期限、耐久与合成结果来自真实 Java 对象调用。tiles.json 来自 59 个注册方块和黑曜石上火把的 Level 数据。generation.json 是实际 Java 六层原始 LevelGen 数组的 FNV-1a 哈希（每格 ID 一字节、data 小端两字节），Seed 42/256、128×128、默认 Island/Normal；不是 Rust 自己生成的预期值。
 
 原始逐格数组及噪声位模式仅保存在忽略的 `target/parity/java224/output`。JSON 样本可按对象比较重新生成结果（JSON 键顺序不属于语义）。仅七个小样本进入 Git。
+
+
+Phase3 adds `dungeon-chests.txt`, emitted by pinned224 `Save.writeEntity` from a
+locked chest containing exactly Wood9 and an unlocked empty chest (no random
+loot population). It regresses Java isLocked -> inverse native unlocked-state
+mapping and exact replacement, rather than addition, of saved container loot.
+The27/28-tool capacity cases in Rust are separately labelled synthetic bounds.

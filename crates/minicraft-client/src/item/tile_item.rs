@@ -75,6 +75,9 @@ pub fn tile_placement(item: ItemId, target: Tile) -> Option<(Tile, u16)> {
         {
             (Tile::OrnateStone, 0)
         }
+        ItemId::OrnateWood if matches!(target, Tile::Hole | Tile::Water | Tile::Cloud) => {
+            (Tile::OrnateWood, 0)
+        }
         ItemId::StoneWall if target == Tile::StoneFloor => (Tile::StoneWall, 0),
         ItemId::StoneDoor if target == Tile::StoneFloor => (Tile::StoneDoor, 0),
         ItemId::StoneFence if floor_target => (Tile::StoneFence, target.id() as u16),
@@ -160,6 +163,7 @@ pub fn invalid_placement_note(item: ItemId) -> Option<&'static str> {
         ItemId::Plank
         | ItemId::StoneBrick
         | ItemId::OrnateStone
+        | ItemId::OrnateWood
         | ItemId::ObsidianBrick
         | ItemId::OrnateObsidian
         | ItemId::Stone => Some("minicraft.notification.dig_hole"),

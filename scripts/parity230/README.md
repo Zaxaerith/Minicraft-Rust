@@ -89,3 +89,31 @@ buffer allocation (not process RSS). The preview camera centers on an actual
 natural flower patch. It does not place flowers or alter terrain for a picture.
 Java230Flora ports the pinned surface flower rules; other depths/structures
 retain Rust's established 2.2.4 path. It is not a complete Java230 LevelGen port.
+
+
+## Phase 3: saved-world migration and all raw depths
+
+`Migration230.java`, compiled by the same `run.ps1`, calls the official
+`new Save(worldname)` on controlled worlds containing six actual raw LevelGen
+maps. It writes `migration-{base,colors,instances,score60}.zip`, actual registry,
+inventory-load/global-unlocks JSON, `ornate-wood.json`, and
+`generated-depths.json`. ZIP is only compact fixture packaging; the importer
+accepts a real directory, never user archives. The controlled maps do not run
+all `Level` structure construction. See `AUDIT_JAVA230_PHASE3.md` for strict
+supported/refused data and exact gameplay validation boundaries.
+
+```powershell
+./scripts/parity230/run.ps1
+cargo run --release --locked -p minicraft-parity -- java230-depths target/parity/java230/output
+cargo test --release --locked -p minicraft-client --lib migration
+# SOURCE is read-only; NEW_DESTINATION must not exist and its parent must exist.
+./target/release/minicraft-parity.exe java230-import SOURCE NEW_DESTINATION
+# Optional fourth argument: explicitly selected global Java Unlocks.json.
+```
+
+`java230-depths` compares every Tile/data cell of 24 maps, stopping at the first
+coordinate mismatch: all six depths at128 seeds42/256,256 seed42,512 seed42.
+The old surface-eight and all224 goldens remain independent. Raw map equivalence
+does not establish full World.initWorld, per-layer seed derivation, structure,
+loot, boss layout, or entity AI equivalence. No generation version was renamed.
+Ornate Wood oracle invokes real placement/mining and reads real Recipe objects.

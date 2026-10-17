@@ -3568,5 +3568,33 @@
         ]
       }
     }
+  },
+  "minicraft.advancements.recipes.ornate_wood": {
+    "requirements": [
+      [
+        "has_wood"
+      ]
+    ],
+    "criteria": {
+      "has_wood": {
+        "trigger": "inventory_changed",
+        "conditions": {
+          "items": [
+            {
+              "items": [
+                "Wood"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "rewards": {
+      "recipes": {
+        "Ornate Wood_1": [
+          "Wood_1"
+        ]
+      }
+    }
   }
 }

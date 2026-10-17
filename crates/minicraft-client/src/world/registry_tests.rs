@@ -2878,3 +2878,37 @@ fn java224_actual_tool_and_rejected_craft_reference() {
         reference["woodAfterRejectedCraft"].as_u64().unwrap()
     );
 }
+
+#[test]
+fn dungeon_chest_menu_requires_one_key_and_keeps_unlocked_state_after_save() {
+    let mut world = tiny_world();
+    let id = world.levels[0].entities.spawn_furniture(
+        FurnitureKind::DungeonChest,
+        9 * 16 + 8,
+        8 * 16 + 8,
+    );
+    world.player.direction = Direction::Right;
+    assert!(world.use_furniture_front());
+    assert_eq!(world.container_id, None);
+    assert_eq!(
+        world.levels[0]
+            .entities
+            .entities()
+            .iter()
+            .find(|e| e.id == id)
+            .unwrap()
+            .state,
+        0
+    );
+    world.player.inventory.add(ItemId::Key, 1);
+    world.player.active_item = Some(ActiveItem::Stack(ItemId::Key));
+    assert!(world.use_furniture_front());
+    assert_eq!(world.container_id, Some(id));
+    assert_eq!(world.player.inventory.count(ItemId::Key), 0);
+    assert_eq!(world.player.active_item, None);
+    world.close_container();
+    let mut world = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+    assert!(world.use_furniture_front());
+    assert_eq!(world.container_id, Some(id));
+    assert_eq!(world.player.inventory.count(ItemId::Key), 0);
+}

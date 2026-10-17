@@ -330,4 +330,6 @@ pub const DYE_VAT_RECIPES: [Recipe; 35] = [
     recipe!(MagentaDye, 4; PinkDye, 1, RedDye, 1, BlueDye, 1),
 ];
 
+pub const ORNATE_WOOD_WORKBENCH_RECIPE: Recipe = recipe!(OrnateWood, 1; Wood, 1);
+
 pub const DYE_VAT_WORKBENCH_RECIPE: Recipe = recipe!(DyeVat, 1; Stone, 10, IronIngot, 5);

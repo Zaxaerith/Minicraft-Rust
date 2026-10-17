@@ -306,3 +306,105 @@ fn java230_actual_java_flower_placement_ordinals_and_punch_harvest_match() {
         assert_eq!(actual_drops(&world), java_drops(&reference["drops"]));
     }
 }
+
+#[test]
+fn java230_actual_ornate_wood_recipe_placement_mining_and_save_match() {
+    let reference: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/java230/ornate-wood.json"
+    ))
+    .unwrap();
+    assert_eq!(reference["javaTileId"], 59);
+    assert_eq!(Tile::OrnateWood.id(), 70); // Append-only native registry.
+    assert_eq!(
+        ItemId::OrnateWood.asset_name(),
+        reference["itemSprite"].as_str().unwrap()
+    );
+    let recipe = recipe_views(Some(FurnitureKind::Workbench))
+        .into_iter()
+        .find(
+            |r| matches!(r.output, RecipeOutput::Stack(stack) if stack.item == ItemId::OrnateWood),
+        )
+        .unwrap();
+    assert_eq!(rust_recipe(recipe), java_recipe(&reference["recipe"]));
+    let assets = Assets::load(&[]).unwrap();
+    assert_ne!(
+        assets.tile(Tile::OrnateWood, 0),
+        assets.tile(Tile::WoodFloor, 0)
+    );
+    for case in reference["placement"].as_array().unwrap() {
+        let mut world = tiny_world();
+        let base = match case["base"].as_str().unwrap() {
+            "Hole" => Tile::Hole,
+            "Water" => Tile::Water,
+            "Cloud" => Tile::Cloud,
+            "Lava" => Tile::Lava,
+            _ => unreachable!(),
+        };
+        world.levels[0].tiles[TARGET] = base;
+        world.player.inventory.add(ItemId::OrnateWood, 2);
+        world.player.active_item = Some(ActiveItem::Stack(ItemId::OrnateWood));
+        world.attack();
+        assert_eq!(
+            canonical(world.levels[0].tiles[TARGET].asset_name()),
+            canonical(case["after"].as_str().unwrap())
+        );
+        assert_eq!(
+            u64::from(world.player.inventory.count(ItemId::OrnateWood)),
+            case["remaining"].as_u64().unwrap()
+        );
+        let restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        assert_eq!(
+            restored.levels[0].tiles[TARGET],
+            world.levels[0].tiles[TARGET]
+        );
+        assert_eq!(
+            restored.player.inventory.count(ItemId::OrnateWood),
+            world.player.inventory.count(ItemId::OrnateWood)
+        );
+    }
+    for case in reference["mining"].as_array().unwrap() {
+        let mut world = tiny_world();
+        world.levels[0].depth = case["depth"].as_i64().unwrap() as i8;
+        world.levels[0].tiles[TARGET] = Tile::OrnateWood;
+        let kind = if case["tool"] == "Iron Axe" {
+            ToolKind::Axe
+        } else {
+            ToolKind::Pickaxe
+        };
+        let mut tool = ToolItem::new(kind, ToolTier::Iron);
+        tool.durability = 1;
+        world.player.inventory.add_tool(tool).unwrap();
+        world.player.active_item = Some(ActiveItem::Tool(0));
+        world.attack();
+        assert_eq!(
+            canonical(world.levels[0].tiles[TARGET].asset_name()),
+            canonical(case["after"].as_str().unwrap())
+        );
+        assert_eq!(
+            u64::from(world.player.stamina),
+            case["stamina"].as_u64().unwrap()
+        );
+        assert_eq!(
+            u64::from(
+                world
+                    .player
+                    .inventory
+                    .tools()
+                    .first()
+                    .map_or(0, |t| t.durability)
+            ),
+            case["durability"].as_u64().unwrap()
+        );
+        assert_eq!(actual_drops(&world), java_drops(&case["drops"]));
+        assert_eq!(
+            world.player.inventory.tools().is_empty(),
+            kind == ToolKind::Axe
+        );
+        let restored = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+        assert_eq!(actual_drops(&restored), actual_drops(&world));
+        assert_eq!(
+            restored.levels[0].tiles[TARGET],
+            world.levels[0].tiles[TARGET]
+        );
+    }
+}

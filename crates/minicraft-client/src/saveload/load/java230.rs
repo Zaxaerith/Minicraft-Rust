@@ -199,6 +199,7 @@ fn java_id(id: u16) -> Result<Tile, String> {
         56 => Ok(Tile::ObsidianFence),
         57 => Ok(Tile::Torch),
         58 => Ok(Tile::Sign),
+        59 => Ok(Tile::OrnateWood),
         60 => Ok(Tile::BrownWool),
         61 => Ok(Tile::PurpleWool),
         62 => Ok(Tile::CyanWool),
@@ -306,7 +307,7 @@ pub(super) fn validate(directory: &Path) -> Result<(), String> {
             return Err("invalid dev2 Score mode".into());
         }
         parse::<i32>(mode[1], "score ticks")?;
-        if !["10", "20", "40", "120"].contains(&mode[2]) {
+        if !["10", "20", "40", "60", "120"].contains(&mode[2]) {
             return Err("invalid dev2 Score initial time".into());
         }
     } else if mode.len() != 1 {
@@ -514,7 +515,7 @@ pub(super) fn import_entities(directory: &Path, world: &mut World) -> Result<(),
                         .iter_mut()
                         .find(|e| e.id == id)
                         .unwrap()
-                        .state = u16::from(fields[end] == "true");
+                        .state = u16::from(fields[end] == "false"); // Native 0 means locked.
                 }
                 id
             };
@@ -540,7 +541,7 @@ pub(super) fn import_entities(directory: &Path, world: &mut World) -> Result<(),
         };
         world.levels[level]
             .entities
-            .import_furniture(kind, x, y, state, &[], &[]);
+            .import_furniture(kind, x, y, state, &[], &[])?;
         Ok(())
     })
 }

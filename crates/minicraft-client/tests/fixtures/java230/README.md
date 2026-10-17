@@ -45,3 +45,14 @@ The strict transactional import profile accepts exactly dev2, rejects unsupporte
 instances/entities/aliases rather than deleting them, and publishes into a new
 native directory. The source directory is snapshotted read-only. See the root
 Phase3 audit for current restrictions, replay and command-line instructions.
+
+
+Phase3 additionally includes `migration-score60.zip`, written by official Save
+with the legitimate Score60 setting and12345 remaining ticks. The color fixture
+includes actual locked/unlocked DungeonChests with exact saved contents, one
+Key, Ornate Wood tile/item, and the prior colored gameplay samples.
+`ornate-wood.json` runs real placement on Hole/Water/Cloud/Lava and Iron Axe /
+Iron Pickaxe mining at surface/sky depth, including one remaining durability,
+stamina and drops. It also reads the upstream workbench Recipe and sprite key.
+The isolated224 driver now writes `dungeon-chests.txt` through Save.writeEntity
+for regression of the identical legacy chest encoding (see224 fixture README).

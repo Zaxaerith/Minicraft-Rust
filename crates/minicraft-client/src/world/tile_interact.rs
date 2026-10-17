@@ -69,6 +69,13 @@ impl World {
             | Tile::GemOre
             | Tile::LapisOre => Tile::Dirt,
             Tile::CloudOre => Tile::Cloud,
+            Tile::OrnateWood => {
+                if self.levels[self.current_level].depth == 1 {
+                    Tile::Cloud
+                } else {
+                    Tile::Hole
+                }
+            }
             Tile::Wheat
             | Tile::Potato
             | Tile::Tomato

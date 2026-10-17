@@ -1710,8 +1710,23 @@ impl World {
                     return false;
                 }
                 if kind == FurnitureKind::DungeonChest && state == 0 {
-                    // Java DungeonChest.use still opens the display; unlock is interact.
-                    // Keep open even when locked so the player can see the key requirement.
+                    // Java DungeonChest.use consumes a key before opening its inventory.
+                    if !self.player.inventory.remove(ItemId::Key, 1) {
+                        self.add_notification("A KEY IS REQUIRED");
+                        return true;
+                    }
+                    self.levels[self.current_level]
+                        .entities
+                        .entities
+                        .iter_mut()
+                        .find(|entity| entity.id == id)
+                        .expect("queried dungeon chest")
+                        .state = 1;
+                    if self.player.active_item == Some(ActiveItem::Stack(ItemId::Key))
+                        && self.player.inventory.count(ItemId::Key) == 0
+                    {
+                        self.player.active_item = None;
+                    }
                 }
                 self.open_container(id);
                 self.sound(SoundEffect::Confirm);

@@ -178,10 +178,11 @@ pub enum Tile {
     OrangeWool = 68,
     // Old Flower encodes two shapes plus mirror bits; this uses Java 2.3 ordinals.
     Flower230 = 69,
+    OrnateWood = 70,
 }
 
 impl Tile {
-    pub const ALL: [Self; 70] = [
+    pub const ALL: [Self; 71] = [
         Self::Grass,
         Self::Dirt,
         Self::Flower,
@@ -252,6 +253,7 @@ impl Tile {
         Self::MagentaWool,
         Self::OrangeWool,
         Self::Flower230,
+        Self::OrnateWood,
     ];
 
     pub fn id(self) -> u8 {
@@ -324,7 +326,7 @@ impl Tile {
     }
 
     pub fn asset_name(self) -> &'static str {
-        const ASSETS: [&str; 70] = [
+        const ASSETS: [&str; 71] = [
             "grass",
             "dirt",
             "flower_shape0",
@@ -395,6 +397,7 @@ impl Tile {
             "magenta_wool",
             "orange_wool",
             "oxeye_daisy",
+            "ornate_wood",
         ];
         ASSETS[self.id() as usize]
     }
@@ -435,7 +438,7 @@ impl Tile {
             Self::Path => path::MAY_SPAWN,
             Self::WoodFloor | Self::StoneFloor | Self::ObsidianFloor => floor::MAY_SPAWN,
             Self::RawStone | Self::RawObsidian => material::MAY_SPAWN,
-            Self::OrnateStone | Self::OrnateObsidian => decor::MAY_SPAWN,
+            Self::OrnateStone | Self::OrnateObsidian | Self::OrnateWood => decor::MAY_SPAWN,
             _ => false,
         }
     }

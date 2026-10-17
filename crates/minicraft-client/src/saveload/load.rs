@@ -452,7 +452,7 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
             if let Some(mob) = info.get(2).and_then(|value| mob_from_java(value)) {
                 level
                     .entities
-                    .import_furniture(spawner_for(mob), x, y, 0, &[], &[]);
+                    .import_furniture(spawner_for(mob), x, y, 0, &[], &[])?;
             }
             continue;
         }
@@ -483,7 +483,7 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
                 let last_content = if kind == FurnitureKind::DungeonChest {
                     state = info
                         .get(info.len().saturating_sub(2))
-                        .is_some_and(|value| parse_bool(value)) as u16;
+                        .is_some_and(|value| !parse_bool(value)) as u16;
                     info.len().saturating_sub(2)
                 } else {
                     info.len().saturating_sub(1)
@@ -506,7 +506,7 @@ fn import_entities(directory: &Path, world: &mut World, world_ver: &Version) -> 
             }
             level
                 .entities
-                .import_furniture(kind, x, y, state, &contents, &tools);
+                .import_furniture(kind, x, y, state, &contents, &tools)?;
         }
     }
     Ok(())
@@ -1176,6 +1176,94 @@ mod java224_fixture_tests {
             tile_from_java("Torch Wood Planks", 0, &version, 0).unwrap(),
             (Tile::Torch, Tile::WoodFloor.id() as u16)
         );
+    }
+
+    #[test]
+    fn java224_official_dungeon_chests_keep_locks_exact_contents_and_no_default_loot() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/parity/java224")
+            .join(format!("chests-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("Entities.miniplussave"),
+            include_str!("../../tests/fixtures/java224/dungeon-chests.txt"),
+        )
+        .unwrap();
+        let make_world = || {
+            let mut world = tiny_world();
+            while world.levels.len() < 6 {
+                world.levels.push(crate::world::Level {
+                    depth: 0,
+                    tiles: vec![Tile::Grass; 256],
+                    data: vec![0; 256],
+                    max_mob_count: 0,
+                    pending_spawns: vec![],
+                    entities: EntityArena::default(),
+                });
+            }
+            world
+        };
+        let mut world = make_world();
+        import_entities(&root, &mut world, &Version::parse("2.2.4")).unwrap();
+        let arena = &mut world.levels[3].entities;
+        let entities = arena.entities();
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].state, 0);
+        assert_eq!(
+            entities[0].storage.as_ref().unwrap().slots(),
+            &[crate::item::ItemStack::new(ItemId::Wood, 9)]
+        );
+        assert_eq!(entities[1].state, 1);
+        assert!(entities[1].storage.as_ref().unwrap().slots().is_empty());
+        let mut bag = crate::item::Inventory::new(27);
+        assert_eq!(
+            arena
+                .use_container_near(104, 120, &mut bag, None)
+                .as_deref(),
+            Some("A KEY IS REQUIRED")
+        );
+        bag.add(ItemId::Key, 1);
+        assert_eq!(
+            arena
+                .use_container_near(104, 120, &mut bag, None)
+                .as_deref(),
+            Some("DUNGEON CHEST UNLOCKED")
+        );
+        assert_eq!(bag.count(ItemId::Key), 0);
+        arena.use_container_near(104, 120, &mut bag, None);
+        assert_eq!(bag.count(ItemId::Wood), 9);
+        // Synthetic boundary case is separate from the genuine writer fixture.
+        let tools = (1..=27)
+            .map(|n| format!("Iron Pickaxe_{n}"))
+            .collect::<Vec<_>>()
+            .join(":");
+        std::fs::write(
+            root.join("Entities.miniplussave"),
+            format!("DungeonChest[104:120:{tools}:true:3],"),
+        )
+        .unwrap();
+        let mut world = make_world();
+        import_entities(&root, &mut world, &Version::parse("2.2.4")).unwrap();
+        assert_eq!(
+            world.levels[3].entities.entities()[0]
+                .storage
+                .as_ref()
+                .unwrap()
+                .tools()
+                .len(),
+            27
+        );
+        std::fs::write(
+            root.join("Entities.miniplussave"),
+            format!("DungeonChest[104:120:{tools}:Iron Pickaxe_28:true:3],"),
+        )
+        .unwrap();
+        assert!(
+            import_entities(&root, &mut make_world(), &Version::parse("2.2.4"))
+                .unwrap_err()
+                .contains("capacity")
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

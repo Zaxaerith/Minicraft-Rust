@@ -4,7 +4,8 @@ use crate::entity::furniture::FurnitureKind;
 
 use super::recipe::{
     ANVIL_RECIPES, ANVIL_TOOL_RECIPES, DYE_VAT_RECIPES, DYE_VAT_WORKBENCH_RECIPE,
-    ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES, LOOM_RECIPES, OVEN_RECIPES,
+    ENCHANTER_RECIPES, FURNACE_RECIPES, HAND_RECIPES, LOOM_RECIPES, ORNATE_WOOD_WORKBENCH_RECIPE,
+    OVEN_RECIPES,
 };
 use super::{
     Inventory, ItemStack, Recipe, ToolItem, ToolKind, ToolRecipe, ToolTier,
@@ -70,6 +71,7 @@ pub fn recipe_views(station: Option<FurnitureKind>) -> Vec<RecipeView> {
             .chain(WORKBENCH_TOOL_RECIPES.iter().map(tool))
             .chain(WORKBENCH_STATION_RECIPES[28..].iter().map(stack))
             .chain(std::iter::once(stack(&DYE_VAT_WORKBENCH_RECIPE)))
+            .chain(std::iter::once(stack(&ORNATE_WOOD_WORKBENCH_RECIPE)))
             .collect(),
         Some(FurnitureKind::Oven) => OVEN_RECIPES.iter().map(stack).collect(),
         Some(FurnitureKind::Furnace) => FURNACE_RECIPES.iter().map(stack).collect(),

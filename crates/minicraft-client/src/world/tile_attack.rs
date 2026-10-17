@@ -161,6 +161,41 @@ impl World {
             self.sound(SoundEffect::MonsterHurt);
             return;
         }
+        if target == Tile::OrnateWood {
+            // Java DecorTile.interact pays once and does not draw random damage.
+            let Some(ActiveItem::Tool(tool_index)) = self.player.active_item else {
+                return;
+            };
+            let Some(tool) = self.active_tool() else {
+                return;
+            };
+            if tool.kind != ToolKind::Axe
+                || tool.is_depleted()
+                || !self.pay_stamina(4_u8.saturating_sub(tool.tier.level()))
+                || !self.player.inventory.tools_mut()[tool_index].pay_durability()
+            {
+                return;
+            }
+            self.player.attack_time = 5;
+            self.levels[self.current_level].tiles[index] =
+                if self.levels[self.current_level].depth == 1 {
+                    Tile::Cloud
+                } else {
+                    Tile::Hole
+                };
+            self.levels[self.current_level].data[index] = 0;
+            self.levels[self.current_level].entities.spawn_item(
+                ItemStack::new(ItemId::OrnateWood, 1),
+                tile_x * TILE_SIZE + 8,
+                tile_y * TILE_SIZE + 8,
+            );
+            self.update_progress(ProgressEvent::ItemUsedOnTile {
+                item: format!("{} axe", tool.tier.display_name()),
+                tile: tile_progress_name(target),
+            });
+            self.sound(SoundEffect::MonsterHurt);
+            return;
+        }
         if let Some(item) = crate::item::wool::item_for_tile(target) {
             if self.pay_tool_terrain_damage(ToolKind::Shears, 3).is_none() {
                 return;

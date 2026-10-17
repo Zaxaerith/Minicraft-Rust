@@ -226,3 +226,44 @@ fn java230_old_earned_costs_are_preserved_and_reimport_replaces_unlocks() {
             .all(|recipe| !progress.recipe_is_unlocked(recipe))
     );
 }
+
+#[test]
+fn java230_ornate_wood_real_unlock_menu_materials_and_full_bag_are_transactional() {
+    let mut world = tiny_world();
+    world.progress.begin_new_world();
+    world.crafting_station = Some(FurnitureKind::Workbench);
+    world.player.inventory = Inventory::new(1);
+    world.player.inventory.add(ItemId::Wood, 2);
+    select(&mut world, ItemId::OrnateWood, ItemId::Wood);
+    world.craft_selected_recipe();
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 2);
+    assert_eq!(world.player.inventory.count(ItemId::OrnateWood), 0);
+    world.player.inventory.set_capacity(27);
+    world.craft_selected_recipe();
+    assert_eq!(world.player.inventory.count(ItemId::Wood), 1);
+    assert_eq!(world.player.inventory.count(ItemId::OrnateWood), 1);
+    world.player.inventory.remove(ItemId::Wood, 1);
+    world.craft_selected_recipe();
+    assert_eq!(world.player.inventory.count(ItemId::OrnateWood), 1);
+    let world = World::from_save_string(&world.to_save_string().unwrap()).unwrap();
+    assert_eq!(world.player.inventory.count(ItemId::OrnateWood), 1);
+    // Phase1/2 persisted catalog1, including dye rules but no Ornate Wood.
+    let mut phase2_world = tiny_world();
+    phase2_world.progress.begin_new_world();
+    phase2_world.crafting_station = Some(FurnitureKind::Workbench);
+    phase2_world.player.inventory = Inventory::new(27);
+    // No Wood event or Ornate Wood completion/unlock has ever occurred.
+    let mut phase2: serde_json::Value =
+        serde_json::from_str(&phase2_world.to_save_string().unwrap()).unwrap();
+    phase2["world"]["progress"]["recipe_catalog_version"] = serde_json::json!(1);
+    phase2["world"]["progress"]["recipe_elements"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|element| element["key"] != "java230:minicraft.advancements.recipes.ornate_wood");
+    let mut restored = World::from_save_string(&phase2.to_string()).unwrap();
+    restored.player.inventory.add(ItemId::Wood, 1);
+    select(&mut restored, ItemId::OrnateWood, ItemId::Wood);
+    restored.craft_selected_recipe();
+    assert_eq!(restored.player.inventory.count(ItemId::OrnateWood), 1);
+    assert_eq!(restored.player.inventory.count(ItemId::Wood), 0);
+}

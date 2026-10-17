@@ -18,7 +18,29 @@ import minicraft.screen.*;
 import minicraft.util.AdvancementElement;
 
 public final class Migration230 {
+    static void ornate(Path out) throws Exception {
+        Settings.set("mode","minicraft.settings.mode.survival");
+        Player p=Game.player; JSONArray cases=new JSONArray();
+        for(String base:new String[]{"Hole","Water","Cloud","Lava"}) {
+            Level level=new Level(16,16,42L,0,null,false);
+            level.setTile(2,2,Tiles.get(base));Item item=Items.get("Ornate Wood_2");
+            boolean placed=item.interactOn(level.getTile(2,2),level,2,2,p,Direction.NONE);
+            cases.put(new JSONObject().put("base",base).put("placed",placed).put("after",level.getTile(2,2).name).put("remaining",Items.getCount(item)));
+        }
+        JSONArray mining=new JSONArray();
+        for(int depth:new int[]{0,1})for(String name:new String[]{"Iron Axe","Iron Pickaxe"}) {
+            Level level=new Level(16,16,42L,depth,null,false);level.setTile(2,2,Tiles.get("Ornate Wood"));
+            ToolItem tool=(ToolItem)Items.get(name);tool.dur=1;p.stamina=10;
+            boolean success=level.getTile(2,2).interact(level,2,2,p,tool,Direction.NONE);
+            mining.put(new JSONObject().put("depth",depth).put("tool",name).put("success",success).put("after",level.getTile(2,2).name)
+                .put("durability",tool.dur).put("stamina",p.stamina).put("drops",Oracle230.drops(level)));
+        }
+        Recipe recipe=Recipes.workbenchRecipes.stream().filter(r->r.getProduct().getName().equals("Ornate Wood")).findFirst().get();
+        Oracle230.write(out,"ornate-wood.json",new JSONObject().put("placement",cases).put("mining",mining)
+            .put("recipe",Oracle230.recipe(recipe)).put("itemSprite",Oracle230.key(Items.get("Ornate Wood").sprite)).put("javaTileId",Tiles.get("Ornate Wood").id));
+    }
     static void run(Path out) throws Exception {
+        ornate(out);
         Path root=out.resolve("migration");Files.createDirectories(root);
         Game.gameDir=root.toString();Settings.set("size",128);
         Settings.set("mode","minicraft.settings.mode.survival");
@@ -43,6 +65,11 @@ public final class Migration230 {
         Game.levels[4].checkAirWizard();
         new Save("migration-base");
         zip(root.resolve("saves/migration-base"),out.resolve("migration-base.zip"));
+        Settings.set("mode","minicraft.settings.mode.score");Settings.set("scoretime",60);Updater.scoreTime=12345;
+        new Save("migration-score60");
+        zip(root.resolve("saves/migration-score60"),out.resolve("migration-score60.zip"));
+        Settings.set("mode","minicraft.settings.mode.survival");
+
 
         // All official registry entries, without relying on Java integer IDs as Rust IDs.
         JSONArray registry=new JSONArray();
@@ -57,6 +84,7 @@ public final class Migration230 {
         player.getInventory().add(Items.get("Wood_999"));player.getInventory().add(Items.get("Wood_9"));
         player.getInventory().add(Items.get("Cyan Wool_4"));player.getInventory().add(Items.get("White Lily_2"));
         player.getInventory().add(Items.get("Red Dye_3"));
+        player.getInventory().add(Items.get("Key_1"));
         CraftingDisplay.loadUnlockedRecipes(Arrays.asList(new Recipe("Red Dye_1","Rose_1"),new Recipe("Cyan Wool_1","White Wool_1","Cyan Dye_1")));
         JSONObject progress=new JSONObject().put("Version",Game.VERSION.toString()).put("CurrentOngoingTutorial","minicraft.tutorial.getting_rocks")
             .put("minicraft.tutorial.start_getting_wood",new JSONObject().put("done",true).put("criteria",new JSONObject().put("has_wood","2024-06-01T12:34:56")));
@@ -68,12 +96,16 @@ public final class Migration230 {
         surface.setTile(11,8,Tiles.get("Torch"),Tiles.get("Cyan Wool").id);
         surface.setTile(12,8,Tiles.get("Wood Door"),1);
         surface.setTile(13,8,Tiles.get("Sign"));
+        surface.setTile(15,8,Tiles.get("Ornate Wood"));
+        player.getInventory().add(Items.get("Ornate Wood_2"));
         surface.setTile(14,8,Tiles.get("Stairs Down"));Game.levels[2].setTile(14,8,Tiles.get("Stairs Up"));
         SignDisplay.loadSignTexts(Collections.singletonMap(new AbstractMap.SimpleImmutableEntry<>(0,new minicraft.gfx.Point(13,8)),Arrays.asList("Java230","keep","all","lines")));
         surface.add(new Bed(DyeItem.DyeColor.CYAN),104,136);
         surface.add(new Crafter(Crafter.Type.DyeVat),136,136);
         Chest chest=new Chest();chest.getInventory().add(Items.get("Cyan Wool_4"));chest.getInventory().add(Items.get("Iron Pickaxe_11"));surface.add(chest,168,136);
         DeathChest death=new DeathChest();death.time=123;death.getInventory().add(Items.get("White Lily_2"));death.getInventory().add(Items.get("Iron Sword_7"));surface.add(death,200,136);
+        DungeonChest locked=new DungeonChest(null,false);locked.getInventory().add(Items.get("Gem_2"));surface.add(locked,280,136);
+        DungeonChest unlocked=new DungeonChest(null,true);unlocked.getInventory().add(Items.get("Gold_3"));surface.add(unlocked,312,136);
         Sheep sheep=new Sheep();sheep.cut=true;sheep.health=4;surface.add(sheep,232,136);
         Cow cow=new Cow();cow.health=2;surface.add(cow,248,136);
         new Save("migration-colors");

@@ -1,0 +1,73 @@
+{
+  "javaTileId": 59,
+  "recipe": {
+    "costs": {"WOOD": 1},
+    "product": "Ornate Wood",
+    "amount": 1
+  },
+  "itemSprite": "plank",
+  "placement": [
+    {
+      "placed": true,
+      "after": "ORNATE WOOD",
+      "remaining": 1,
+      "base": "Hole"
+    },
+    {
+      "placed": true,
+      "after": "ORNATE WOOD",
+      "remaining": 1,
+      "base": "Water"
+    },
+    {
+      "placed": true,
+      "after": "ORNATE WOOD",
+      "remaining": 1,
+      "base": "Cloud"
+    },
+    {
+      "placed": false,
+      "after": "LAVA",
+      "remaining": 2,
+      "base": "Lava"
+    }
+  ],
+  "mining": [
+    {
+      "drops": ["Ornate Wood_1"],
+      "depth": 0,
+      "success": true,
+      "durability": 0,
+      "stamina": 8,
+      "after": "HOLE",
+      "tool": "Iron Axe"
+    },
+    {
+      "drops": [],
+      "depth": 0,
+      "success": false,
+      "durability": 1,
+      "stamina": 10,
+      "after": "ORNATE WOOD",
+      "tool": "Iron Pickaxe"
+    },
+    {
+      "drops": ["Ornate Wood_1"],
+      "depth": 1,
+      "success": true,
+      "durability": 0,
+      "stamina": 8,
+      "after": "CLOUD",
+      "tool": "Iron Axe"
+    },
+    {
+      "drops": [],
+      "depth": 1,
+      "success": false,
+      "durability": 1,
+      "stamina": 10,
+      "after": "ORNATE WOOD",
+      "tool": "Iron Pickaxe"
+    }
+  ]
+}

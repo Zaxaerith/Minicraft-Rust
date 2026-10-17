@@ -424,7 +424,7 @@ impl ProgressState {
             unlocking_times: Default::default(),
             imported_recipe_unlocks: false,
             recipe_variants: HashMap::new(),
-            recipe_catalog_version: 1,
+            recipe_catalog_version: 2,
         })
     }
 
@@ -443,13 +443,13 @@ impl ProgressState {
         tutorials_enabled: bool,
         quests_enabled: bool,
     ) -> ProgressUpdate {
-        if self.recipe_catalog_version == 0 || self.recipe_elements.is_empty() {
+        if self.recipe_catalog_version < 2 || self.recipe_elements.is_empty() {
             self.remember_unlocked_recipes();
             // Definitions are static metadata, not earned state; preserve all
             // recorded completions/timestamps and add the new catalog once.
             if let Ok(elements) = recipe_elements() {
                 self.recipe_elements = elements;
-                self.recipe_catalog_version = 1;
+                self.recipe_catalog_version = 2;
             }
         }
         for element in &self.recipe_elements {

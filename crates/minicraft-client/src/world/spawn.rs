@@ -87,6 +87,7 @@ fn hostile_tile_allowed(depth: i8, tile: Tile) -> bool {
                 | Tile::RawStone
                 | Tile::RawObsidian
                 | Tile::OrnateStone
+                | Tile::OrnateWood
                 | Tile::OrnateObsidian
                 | Tile::BossFloor
         )
