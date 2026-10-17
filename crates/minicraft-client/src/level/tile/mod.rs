@@ -603,7 +603,9 @@ mod tests {
 
     #[test]
     fn registry_ids_match_java_tiles_init() {
-        assert_eq!(Tile::ALL.len(), 70);
+        assert_eq!(Tile::ALL.len(), 71);
+        assert_eq!(Tile::ALL[69], Tile::Flower230);
+        assert_eq!(Tile::ALL[70], Tile::OrnateWood);
         assert_eq!(Tile::ALL[58], Tile::Sign);
         assert_eq!(Tile::ALL[59], Tile::BrownWool);
         assert_eq!(Tile::Flower.id(), 2);

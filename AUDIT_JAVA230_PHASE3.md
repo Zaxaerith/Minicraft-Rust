@@ -131,6 +131,8 @@ cargo build --release --workspace --locked
 # 实际java230-import成功/拒绝/重复目标；128/256/512真实生成与磁盘恢复Smoke。
 ```
 
+首次全量Release发现3个历史目录长度断言仍期待70方块/44工作台配方（其他561项通过），按已执行Java OrnateWood证据更新为71/45，并新增末尾产物/成本及旧索引不变断言。未删除测试或更新旧黄金地图。首轮失败日志保留，修正后在新的最终HEAD重跑门禁。
+
 本机为Windows x64 MSVC/Rust2024，现有target复用，无第二套构建目录。最终EXE通过隐藏Start-Process取得真实退出码；自检savedir和生成产物限于target。全量测试渲染输出指定忽略target路径，避免修改原跟踪图片。Linux/macOS运行 **NOT RUN**；三平台GitHub Actions **NOT RUN**，工作流存在不等于远程通过。CI定义保留，未发现需为本轮修改的明确流程错误；新增平台独占发布函数仅Windows有实测。
 
 ## 7. Git与验收

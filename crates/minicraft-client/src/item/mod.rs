@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn workbench_list_interleaves_items_tools_and_tail() {
         let views = recipe_views(Some(crate::entity::furniture::FurnitureKind::Workbench));
-        assert_eq!(views.len(), 44);
+        assert_eq!(views.len(), 45);
         assert!(matches!(
             views[43].output,
             RecipeOutput::Stack(ItemStack {
@@ -382,6 +382,14 @@ mod tests {
                 count: 1
             })
         ));
+        assert!(matches!(
+            views[44].output,
+            RecipeOutput::Stack(ItemStack {
+                item: ItemId::OrnateWood,
+                count: 1
+            })
+        ));
+        assert_eq!(views[44].costs, &[ItemStack::new(ItemId::Wood, 1)]);
         assert!(matches!(views[0].output, RecipeOutput::Stack(_)));
         assert!(matches!(views[28].output, RecipeOutput::Tool(_)));
         assert!(matches!(views[40].output, RecipeOutput::Stack(_)));
@@ -539,8 +547,8 @@ mod tests {
         assert_eq!(ANVIL_RECIPES.len(), 7);
         assert_eq!(ANVIL_TOOL_RECIPES.len(), 22);
         assert_eq!(ENCHANTER_RECIPES.len(), 14);
-        // Legacy 28 items + 12 tools + 3 tail stay ordered; Dye Vat is appended.
+        // Legacy 28 items + 12 tools + 3 tail stay ordered; Dye Vat and Ornate Wood append.
         let views = recipe_views(Some(crate::entity::furniture::FurnitureKind::Workbench));
-        assert_eq!(views.len(), 28 + 12 + 3 + 1);
+        assert_eq!(views.len(), 28 + 12 + 3 + 2);
     }
 }
