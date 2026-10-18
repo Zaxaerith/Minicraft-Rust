@@ -135,7 +135,9 @@ pwsh -NoProfile -File .\scripts\package-windows-rc.ps1
 脚本使用现有 Release 产物，输出
 `target\rc\java230-dev2\Minicraft-Rust-java230-dev2-windows-x64-rc.zip`、SHA-256 和文件清单，
 不自动构建、上传或发布。RC 不包含测试存档、Oracle、Java 参考源码或构建缓存。
-历史 `scripts/package.py` 不是当前 Windows RC 打包入口。
+工程记录见 [文档索引](docs/README.md)。日常完整验证可运行
+`pwsh -NoProfile -File scripts/validate-windows.ps1`；加 `-JavaOracle` 可重新执行固定源码 Oracle。
+验证日志复用 `target/validation/current/`，不再按开发阶段累积重复目录。
 
 ## 来源、署名与许可证
 

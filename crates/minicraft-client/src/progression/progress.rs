@@ -808,9 +808,12 @@ impl ProgressState {
         inventory: &HashMap<String, u16>,
     ) -> bool {
         criterion.matches(event, inventory)
-            || self
-                .criterion_hits
-                .contains(&format!("{owner}:{}", criterion.name))
+            // New/empty inventories can fail hundreds of recipe criteria each
+            // tick. An empty history cannot match; avoid allocating every key.
+            || (!self.criterion_hits.is_empty()
+                && self
+                    .criterion_hits
+                    .contains(&format!("{owner}:{}", criterion.name)))
     }
 
     /// Java `AdvancementElement.checkIsCompleted` with optional requirement sets.

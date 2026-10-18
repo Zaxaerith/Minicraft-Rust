@@ -5,7 +5,10 @@ target/
 *.log
 
 # Codex progress / scratch files (not part of the project)
-/docs/
+/docs/*
+!/docs/history/
+!/docs/maintenance.md
+!/docs/README.md
 /scripts/audit_official.py
 
 # Local verification and private migration working notes

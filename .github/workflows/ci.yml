@@ -36,9 +36,10 @@ jobs:
       # used by build.rs. No physical audio device is needed for self-check.
       - run: cargo fmt --all -- --check
       - run: cargo build --workspace --locked
-      - run: cargo test --workspace --locked
+      # The 15s two-day simulation budget measures the shipped optimized game.
+      # The first real Windows run took 123s in debug and failed that budget;
+      # run the entire suite in release instead of weakening/skipping the test.
+      - run: cargo test --release --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Check optimized item consumption
-        run: cargo test --release -p minicraft-client --lib release_regression --locked
       - name: Embedded resource and PCM smoke check
         run: cargo run --locked -p minicraft-rust -- --self-check --savedir test-data/ci-smoke

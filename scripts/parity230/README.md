@@ -99,7 +99,7 @@ maps. It writes `migration-{base,colors,instances,score60}.zip`, actual registry
 inventory-load/global-unlocks JSON, `ornate-wood.json`, and
 `generated-depths.json`. ZIP is only compact fixture packaging; the importer
 accepts a real directory, never user archives. The controlled maps do not run
-all `Level` structure construction. See `AUDIT_JAVA230_PHASE3.md` for strict
+all `Level` structure construction. See [Phase 3](../../docs/history/AUDIT_JAVA230_PHASE3.md) for strict
 supported/refused data and exact gameplay validation boundaries.
 
 ```powershell
@@ -156,7 +156,7 @@ initializes white exactly as Java Load does, rather than inventing past color.
 The new native generation marker is `Java230World`. Normal new-world creation
 uses it after this matrix passes; missing markers and historical Java230Flora
 retain their old behavior. This does not establish whole-game AI, all themes,
-all seeds, transient RNG, or GUI parity. See `AUDIT_JAVA230_PHASE36.md` for the
+all seeds, transient RNG, or GUI parity. See [Phase 3.6](../../docs/history/AUDIT_JAVA230_PHASE36.md) for the
 explicit arena player-edit protection and remaining advanced Spawner limit.
 
 Both source runners now share batched, unfiltered Git blob verification in

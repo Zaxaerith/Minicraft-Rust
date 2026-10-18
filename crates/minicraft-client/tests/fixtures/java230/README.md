@@ -76,5 +76,5 @@ observes original Level.trySpawn and reads its own RNG state without replacing
 it. `boss-room36.json` invokes real statue activation and boss update on player
 removal, including all81 rebuilt Tile/data cells and preserved chest contents.
 Run `scripts/parity230/run-world36.ps1` to regenerate; see the script README
-and root Phase3.6 audit for boundaries. All harnesses and upstream-derived
+and `docs/history/AUDIT_JAVA230_PHASE36.md` for boundaries. All harnesses and upstream-derived
 fixtures retain the project/upstream GPL-3.0 attribution.
