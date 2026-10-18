@@ -50,11 +50,24 @@ const RSQUARED_4D: f32 = 0.6;
 #[derive(Debug, Clone)]
 pub struct Simplex {
     seed: i64,
+    infdev_gradients: bool,
 }
 
 impl Simplex {
     pub fn new(seed: i64) -> Self {
-        Self { seed }
+        Self {
+            seed,
+            infdev_gradients: false,
+        }
+    }
+
+    /// Original Infdev3 48-vector 3D gradient cycle. The historical Rust
+    /// constructor retains its 56-vector cycle so old generation never changes.
+    pub fn infdev(seed: i64) -> Self {
+        Self {
+            seed,
+            infdev_gradients: true,
+        }
     }
 
     pub fn set_seed(&mut self, seed: i64) {
@@ -442,7 +455,11 @@ impl Simplex {
         hash = hash.wrapping_mul(HASH_MULTIPLIER);
         hash ^= hash >> (64 - N_GRADS_3D_EXPONENT + 2);
         let gi = (hash as i32) & ((N_GRADS_3D - 1) << 2);
-        let grads = gradients_3d();
+        let grads = if self.infdev_gradients {
+            infdev_gradients_3d()
+        } else {
+            gradients_3d()
+        };
         grads[gi as usize] * dx + grads[gi as usize + 1] * dy + grads[gi as usize + 2] * dz
     }
 
@@ -795,6 +812,29 @@ fn gradients_3d() -> &'static [f32] {
             j += 1;
         }
         out
+    })
+}
+
+fn infdev_gradients_3d() -> &'static [f32] {
+    static INFDEV: OnceLock<Vec<f32>> = OnceLock::new();
+    INFDEV.get_or_init(|| {
+        // Source 42ba9192 Simplex.java: the first 46 normalized vectors are
+        // identical; its final two vectors and cycle length differ from the
+        // historical Rust table. Share the common prefix, keep both contracts.
+        let mut cycle = gradients_3d()[..184].to_vec();
+        cycle.extend([
+            (1.1721513422464978_f32 as f64 / NORMALIZER_3D) as f32,
+            0.,
+            (3.0862664687972017_f32 as f64 / NORMALIZER_3D) as f32,
+            0.,
+            (3.0862664687972017_f32 as f64 / NORMALIZER_3D) as f32,
+            0.,
+            (1.1721513422464978_f32 as f64 / NORMALIZER_3D) as f32,
+            0.,
+        ]);
+        (0..N_GRADS_3D as usize * 4)
+            .map(|i| cycle[i % cycle.len()])
+            .collect()
     })
 }
 

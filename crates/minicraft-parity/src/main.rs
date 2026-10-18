@@ -1,6 +1,7 @@
 use std::{env, fs, path::Path};
 
 use minicraft_common::parity::ParityTrace;
+mod infdev_console;
 
 fn main() {
     if let Err(error) = run() {
@@ -14,6 +15,9 @@ fn run() -> Result<(), String> {
     let backend = arguments
         .next()
         .ok_or_else(|| "usage: minicraft-parity rust <trace.json>".to_owned())?;
+    if backend == "infdev-create" || backend == "infdev-open" {
+        return infdev_console::run(&backend, arguments.collect());
+    }
     let trace_path = arguments
         .next()
         .ok_or_else(|| "usage: minicraft-parity rust <trace.json>".to_owned())?;

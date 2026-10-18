@@ -9,6 +9,7 @@ target/
 !/docs/history/
 !/docs/maintenance.md
 !/docs/README.md
+!/docs/infdev4a.md
 /scripts/audit_official.py
 
 # Local verification and private migration working notes

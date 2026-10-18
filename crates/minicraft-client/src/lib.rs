@@ -6,6 +6,8 @@ pub mod assets;
 pub mod audio;
 pub mod core;
 pub mod entity;
+/// Opt-in prototypes with their own storage contracts; never fixed-world saves.
+pub mod experimental;
 pub mod gfx;
 pub mod input_full;
 pub mod io;
