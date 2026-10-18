@@ -1,6 +1,7 @@
 //! Independent finite-memory, sparse-disk Infdev experiment. Coordinates follow
 //! upstream 64x64 floorDiv/floorMod; terrain and storage are explicitly versioned
 //! Rust prototypes. No fixed World/Level/GenerationVersion interpretation changes.
+pub mod explorer;
 mod generation;
 pub mod paged;
 mod store;

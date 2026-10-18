@@ -18,6 +18,17 @@ fn run() -> Result<(), String> {
     if backend == "infdev-terrain-check" {
         return infdev_console::compare(arguments.collect());
     }
+    if backend == "infdev-storage-measure" {
+        let output = arguments
+            .next()
+            .ok_or("usage: infdev-storage-measure OUTPUT_DIRECTORY")?;
+        if arguments.next().is_some() {
+            return Err("unexpected storage measurement arguments".into());
+        }
+        return minicraft_client::experimental::infdev::paged::diagnostics::measure_storage(
+            Path::new(&output),
+        );
+    }
     if matches!(
         backend.as_str(),
         "infdev-create" | "infdev-open" | "infdev-surface-create" | "infdev-upgrade"

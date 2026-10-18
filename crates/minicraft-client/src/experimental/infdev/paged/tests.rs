@@ -396,6 +396,36 @@ fn interrupted_publication_missing_objects_and_gc_preflight_never_drop_live_data
 }
 
 #[test]
+fn collection_revalidates_distinct_backup_data_before_removing_any_object() {
+    let root = Owned::new();
+    let mut w = root.world(2);
+    let initial = w.find(w.saved.root, Key { x: 0, y: 0 }).unwrap().unwrap();
+    w.set_cell(0, 0, edited(12)).unwrap();
+    w.checkpoint().unwrap();
+    // First successful GC validates both roots. A later GC must not reuse
+    // that validation after the backup-only data has become corrupt.
+    w.collect_garbage().unwrap();
+    let orphan = objects::write(
+        &w.directory,
+        objects::Domain::Chunks,
+        b"owned unreferenced collection probe",
+    )
+    .unwrap();
+    let orphan_path = objects::path(&w.directory, objects::Domain::Chunks, orphan);
+    fs::write(
+        objects::path(&w.directory, objects::Domain::Chunks, initial),
+        b"corrupt backup-only chunk",
+    )
+    .unwrap();
+    let before = files(&w.directory.join("chunks"));
+    assert!(w.collect_garbage().is_err());
+    assert!(orphan_path.is_file());
+    assert_eq!(files(&w.directory.join("chunks")), before);
+    assert!(w.directory.join("gc-recovery.hold").is_file());
+    assert_eq!(w.cell(0, 0).unwrap(), edited(12));
+}
+
+#[test]
 fn paged_index_exceeds_old_8192_limit_without_manifest_growth_and_keeps_lru_bounded() {
     let root = Owned::new();
     let mut w = root.world(2);

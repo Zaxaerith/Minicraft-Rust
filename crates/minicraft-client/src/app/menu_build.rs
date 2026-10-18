@@ -16,6 +16,7 @@ use crate::{
 pub(super) use crate::screen::title_display::TITLE_KEYS;
 
 /// Java TitleDisplay menu: checking line + blank + 6 selects, spacing 2, CENTER @ h*3/5.
+#[cfg(test)]
 pub(super) fn build_title_menu(
     localization: &Localization,
     world_count: usize,

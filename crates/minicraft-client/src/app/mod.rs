@@ -7,6 +7,8 @@ use std::{
 use crate::core::{display_stack::DisplayStack, game_loop::GameLoopClock};
 
 mod display_navigation;
+mod infdev_ui;
+mod infdev_window_smoke;
 mod menu_build;
 mod menu_render;
 use display_navigation::navigate as navigate_display;
@@ -112,7 +114,15 @@ pub fn self_check(arguments: &[String]) -> Result<(), String> {
 
 /// CLI dispatch for the compatibility client binary.
 pub fn run_cli(arguments: &[String]) -> Result<(), String> {
-    if arguments.iter().any(|value| value == "--import-java") {
+    if let Some(i) = arguments.iter().position(|s| s == "--infdev-window-smoke") {
+        let mode = arguments
+            .get(i + 1)
+            .ok_or("window smoke requires create|reopen ROOT")?;
+        let root = arguments
+            .get(i + 2)
+            .ok_or("window smoke requires an isolated ROOT")?;
+        infdev_window_smoke::run(mode, std::path::PathBuf::from(root))
+    } else if arguments.iter().any(|value| value == "--import-java") {
         let argument = |flag: &str| {
             arguments
                 .iter()
@@ -196,6 +206,12 @@ impl State {
 }
 
 enum State {
+    InfdevMenu {
+        browser: Box<infdev_ui::Browser>,
+    },
+    InfdevPlaying {
+        explorer: Box<crate::experimental::infdev::explorer::Explorer>,
+    },
     Title {
         menu: crate::screen::menu::Menu,
         ticks: u64,
@@ -271,6 +287,8 @@ struct WorldPopup {
 
 enum Transition {
     None,
+    Infdev,
+    InfdevPlay(Box<crate::experimental::infdev::explorer::Explorer>),
     Title,
     PlayMenu,
     NewWorld(bool),
@@ -304,6 +322,16 @@ enum Transition {
 
 pub fn run(arguments: &[String]) -> Result<(), String> {
     let mut config = Config::load(arguments)?;
+    let infdev_root = if let Some(i) = arguments.iter().position(|s| s == "--infdev-root") {
+        std::path::PathBuf::from(
+            arguments
+                .get(i + 1)
+                .filter(|s| !s.starts_with("--"))
+                .ok_or("--infdev-root requires an experimental root directory")?,
+        )
+    } else {
+        config.game_dir.join("experiments")
+    };
     let (mut packs, discovery_warnings) = discover(&config.game_dir);
     order_packs_for_menu(&mut packs, &config.settings.resource_packs);
     if prune_missing_enabled_packs(&mut config.settings.resource_packs, &packs) {
@@ -365,7 +393,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
     let mut displays = DisplayStack::default();
     let mut game = crate::core::game::Game::default();
     displays.open(State::Title {
-        menu: build_title_menu(&localization, world_records.len(), 0),
+        menu: infdev_ui::runtime_title(&localization, world_records.len(), 0),
         ticks: 0,
         splash: crate::screen::title_display::random_splash(),
     });
@@ -421,6 +449,9 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
         for _ in 0..updates {
             display_navigation::begin_game_tick(&mut displays, &mut game, focused);
             if !focused {
+                if let Some(State::InfdevPlaying { explorer }) = displays.current_mut() {
+                    explorer.tick(&Input::default());
+                }
                 if let Some(State::Playing { world, record }) = displays.current_mut() {
                     world.tick_with_autosave(
                         false,
@@ -436,6 +467,19 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             let mut settings_changed = false;
             let mut menu_events = Vec::new();
             let transition = match displays.current_mut().expect("application screen") {
+                State::InfdevMenu { browser } => match browser.tick(&input) {
+                    infdev_ui::Action::None => Transition::None,
+                    infdev_ui::Action::Title => Transition::Title,
+                    infdev_ui::Action::Start(explorer) => Transition::InfdevPlay(explorer),
+                },
+                State::InfdevPlaying { explorer } => {
+                    explorer.tick(&input);
+                    if explorer.has_finished() {
+                        Transition::Infdev
+                    } else {
+                        Transition::None
+                    }
+                }
                 State::Title { menu, ticks, .. } => {
                     let (transition, event) = tick_title_menu_event(
                         menu,
@@ -705,11 +749,20 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             }
             match transition {
                 Transition::None => {}
+                Transition::Infdev => navigate_display(
+                    &mut displays,
+                    State::InfdevMenu {
+                        browser: Box::new(infdev_ui::Browser::new(infdev_root.clone())),
+                    },
+                ),
+                Transition::InfdevPlay(explorer) => {
+                    navigate_display(&mut displays, State::InfdevPlaying { explorer })
+                }
                 Transition::Title => {
                     navigate_display(
                         &mut displays,
                         State::Title {
-                            menu: build_title_menu(&localization, world_records.len(), 0),
+                            menu: infdev_ui::runtime_title(&localization, world_records.len(), 0),
                             ticks: 0,
                             splash: crate::screen::title_display::random_splash(),
                         },
@@ -987,7 +1040,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     navigate_display(
                         &mut displays,
                         State::Title {
-                            menu: build_title_menu(&localization, world_records.len(), 4),
+                            menu: infdev_ui::runtime_title(&localization, world_records.len(), 4),
                             ticks: 0,
                             splash: crate::screen::title_display::random_splash(),
                         },
@@ -1000,7 +1053,7 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
                     navigate_display(
                         &mut displays,
                         State::Title {
-                            menu: build_title_menu(&localization, world_records.len(), 4),
+                            menu: infdev_ui::runtime_title(&localization, world_records.len(), 4),
                             ticks: 0,
                             splash: crate::screen::title_display::random_splash(),
                         },
@@ -1107,6 +1160,8 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
 
         screen.clear(0);
         match displays.current_mut().expect("application screen") {
+            State::InfdevMenu { browser } => browser.render(&mut screen, &assets),
+            State::InfdevPlaying { explorer } => explorer.render(&mut screen, &assets),
             State::Title {
                 menu,
                 ticks,
@@ -1228,19 +1283,37 @@ pub fn run(arguments: &[String]) -> Result<(), String> {
             };
             render_focus_nagger(&mut screen, &assets, focus_ticks);
         }
-        presenter.present(&mut window, screen.pixels())?;
+        if let Err(error) = presenter.present(&mut window, screen.pixels()) {
+            finish_infdev(&mut displays)?;
+            return Err(error);
+        }
         // Java SCREENSHOT (F2) and FULLSCREEN (F11) after render.
         if want_screenshot {
             let path = config.game_dir.join("screenshot.png");
-            screen
-                .save_png(&path)
-                .map_err(|error| format!("screenshot failed: {error}"))?;
+            if let Err(error) = screen.save_png(&path) {
+                finish_infdev(&mut displays)?;
+                return Err(format!("screenshot failed: {error}"));
+            }
         }
         // F11 FULLSCREEN is bound; minifb 0.27 has no portable fullscreen API.
         let _ = want_fullscreen;
     }
     if let Some(State::Playing { world, record, .. }) = displays.requested() {
         save_state(record, world)?;
+    }
+    finish_infdev(&mut displays)?;
+    Ok(())
+}
+
+fn finish_infdev(displays: &mut DisplayStack<State>) -> Result<(), String> {
+    if let Some(State::InfdevPlaying { explorer }) = displays.requested_mut() {
+        loop {
+            match explorer.finish() {
+                Ok(()) => break,
+                Err(error) if infdev_ui::retry_save_dialog(&error) => continue,
+                Err(error) => return Err(error),
+            }
+        }
     }
     Ok(())
 }
@@ -1588,6 +1661,9 @@ fn tick_title_menu_event(
         .unwrap_or(MenuEvent::None);
     if event != MenuEvent::Activated {
         return (Transition::None, event);
+    }
+    if menu.entries.len() == 9 && menu.selection == 7 {
+        return (Transition::Infdev, event);
     }
     // Entries 0–1 are non-selectable; first selectable is Play at index 2.
     let transition = match crate::screen::title_display::action_for_menu_selection(menu.selection) {

@@ -461,6 +461,10 @@ impl World {
         let primary = self.directory.join("checkpoint.json");
         let mut snapshots = Vec::new();
         let mut live = HashSet::new();
+        // Immutable references need one complete validation per collection,
+        // not once for primary, again for an identical backup and again for
+        // RAM. Keep this cache local: later GC calls MUST re-read the data.
+        let mut validated_roots = HashSet::new();
         for p in [&primary, &crate::saveload::backup_path(&primary)] {
             if !p.try_exists().map_err(|e| e.to_string())? {
                 if p == &primary {
@@ -475,19 +479,20 @@ impl World {
                 if saved.seed != self.seed() || saved.generator != self.generator() {
                     return Err("checkpoint identity mismatch".into());
                 }
-                let marks = self.validate_root(saved.root)?;
+                if validated_roots.insert(saved.root) {
+                    live.extend(self.validate_root(saved.root)?);
+                }
                 if self
                     .find(saved.root, Key::at(saved.position.0, saved.position.1))?
                     .is_none()
                 {
                     return Err("checkpoint explorer missing".into());
                 }
-                Ok((text, marks))
+                Ok(text)
             })();
             match validation {
-                Ok((text, marks)) => {
+                Ok(text) => {
                     snapshots.push((p.clone(), text));
-                    live.extend(marks);
                 }
                 Err(e) => {
                     hold_recovery(&self.directory)?;
@@ -496,7 +501,9 @@ impl World {
             }
         }
         // Also retain the live in-memory root, including publication-error state.
-        live.extend(self.validate_root(self.saved.root)?);
+        if validated_roots.insert(self.saved.root) {
+            live.extend(self.validate_root(self.saved.root)?);
+        }
         let mut candidates = Vec::new();
         let mut report = Collection {
             retained_objects: live.len() as u64,

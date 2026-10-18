@@ -42,7 +42,10 @@ impl Display for State {
         match self {
             // Playing is a compatibility host, not a Java Display. Detaching
             // prevents menus from retaining a world or returning into an old game.
-            State::Title { .. } | State::Playing { .. } => ParentPolicy::Root,
+            State::Title { .. }
+            | State::Playing { .. }
+            | State::InfdevMenu { .. }
+            | State::InfdevPlaying { .. } => ParentPolicy::Root,
             _ => ParentPolicy::Inherit,
         }
     }

@@ -1,11 +1,35 @@
 # Infdev 实验引擎（Windows x64）
 
-当前提供命令行探索游标：Seed → 按需生成64×64区块 → 跨边界移动 → 保存、卸载、重启恢复。
-尚未接入GUI、Survival、实体、地下层、船只或多人。普通游戏仍使用固定世界，
+当前提供独立图形化飞行探索：Seed → 按需生成64×64区块 → 跨边界移动 → 保存、卸载、重启恢复。
+尚未接入Survival、实体、地下层、船只或多人。普通游戏仍使用固定世界，
 `Legacy224`、`Java230Flora`、`Java230World`及既有存档不切换规则。
 Phase 4A历史说明见[归档记录](history/infdev4a.md)。
 
-## 运行
+## 窗口试玩
+
+```powershell
+cargo build --release --workspace --locked
+./target/release/minicraft-rust.exe --savedir target/infdev-play
+```
+
+主菜单选择 **Infdev (Experimental)** → **New Experimental World**，填写名称与有符号64位Seed，
+选择Create。新建不改变普通游戏的模式、世界列表或默认`Java230World`。
+默认实验根目录为`SAVEDIR/experiments`，GUI列表只扫描其中的`infdev-v2`。
+使用已有4B世界时，可通过`--infdev-root target/experiments`指定其根目录；不要传单个世界目录。
+原4A世界须先用下述CLI复制升级。已有目标绝不覆盖，损坏世界会显示错误而非重新生成。
+
+使用现有移动按键（默认WASD/方向键）探索，角色可飞越树木、水域和岩石，摄像机跟随。
+顶部显示Tile坐标，跨越0、±64、±128可检查正负区块。尚未加载的视野显示占位网格。
+面朝自然草地或Oxeye Daisy，按攻击键（默认C/空格）切换前方一格草地/雏菊；其余地形拒绝编辑。
+`Esc`执行 **Save & Quit**，等待保存完成后返回实验世界列表。重新选中世界会恢复位置与修改。
+关闭窗口也会等待保存；失败保持会话供重试，关闭窗口后的失败有Windows Retry/Cancel提示。
+加载/保存错误有多行提示；Cancel明确放弃本次尚未保存的修改，仅保留上次检查点。
+
+打开校验、地形生成、保存与GC都在单个后台worker；GUI只读快照，不执行地形采样或磁盘IO。
+命令和快照队列各容量1，视野快照最多4区块，存储LRU为16区块；每轮worker至多加载/生成1区块。
+初次加载或大型GC期间窗口继续响应，但移动可能等待后台操作。退出时等待是有意的数据保护。
+
+## 命令行诊断
 
 在仓库根目录使用PowerShell。实验根目录必须独立于玩家存档；名称已存在时明确拒绝。
 
@@ -78,6 +102,7 @@ Oracle保留Java实际结果，严格比较群系、data和确定性Tile；时�
 
 每128次实际持久提交按保存序号自动GC，跨重启继续计数；空操作不推进提交序号。
 GC先验证当前checkpoint、备份及内存根，保护全部可达索引页和区块，再删除已识别的不可达对象。
+同一次GC内相同根只完整验证一次；不同根、每份元数据/位置仍检查，下次GC重新读取验证。
 未知文件保留；验证或删除失败会停止并报告，自动GC失败不撤销已经成功保存的检查点。
 备份恢复或发现歧义会创建`gc-recovery.hold`，阻止后续回收；不要直接删除该标记来清空间。
 应先保留完整目录副本并调查损坏。已登记对象损坏时尝试完整备份，否则拒绝，绝不重新生成代替。
@@ -85,11 +110,29 @@ GC先验证当前checkpoint、备份及内存根，保护全部可达索引页�
 
 ## 验证与下次入口
 
+Windows本机测量（Release、同次原生权限运行、未清OS缓存；非硬性预算）：
+
+| 数据集 | 区块数 | 打开完整校验 | GC | 引擎进程采样峰值Working Set |
+|---|---:|---:|---:|---:|
+| 互异编辑区块 | 1 | 0.81 ms | 0.99 ms | 4.95 MiB |
+| 互异编辑区块 | 256 | 44.84 ms | 56.46 ms | 5.10 MiB |
+| 互异编辑区块 | 2048 | 325.96 ms | 354.92 ms | 5.62 MiB |
+| 互异编辑区块 | 8205 | 1190.61 ms | 1524.50 ms | 7.02 MiB |
+| 自然Java地表 | 64 | 10.89 ms | 15.21 ms | 5.20 MiB |
+
+内存值为独立CLI存储引擎进程，包含进程基线，不是完整游戏/GUI内存承诺。
+较早沙箱初测8205区块为2359/5555 ms，权限与文件调用环境不同，不将全部前后差值归功于优化。
+`python scripts/infdev4a/measure-storage.py`可复测，10ms采样Working Set/Private Bytes，结果复用当前CSV。
+
 `pwsh -File scripts/infdev4a/run-terrain.ps1`编译并核验固定原版源码，复用`target/parity/infdev4a/`。
 随后运行`./target/release/minicraft-parity.exe infdev-terrain-check target/parity/infdev4a`。
 现有观察包含15个正负区块、61,440格、七群系，并覆盖signed-i32两端区块；另有50条原版噪声位模式样本。
 i64极限属于Rust边界/恢复测试，不能当作Java完整极限坐标Oracle。
 `cargo test --release --locked -p minicraft-client experimental::infdev`运行局部回归。
 真实进程测试使用`python scripts/infdev4a/smoke.py --release`，复用Release parity；仅清理本次独占测试目录。
+`python scripts/infdev4a/window-smoke.py`运行两个真实窗口进程，用同一菜单/探索器和编程Input验证
+自然生成、正负区块、编辑、Save & Quit及重开。它不是人类键盘试玩；PNG为真实软件渲染输出。
+完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，原651项基线全部保留。
 最终结果复用`target/validation/current/infdev-final-validation.md`及同目录日志，不另建阶段日志树。
-下次优先评估打开校验/GC规模成本，再设计地下层、楼梯连接和GUI接线；不重解释已有生成器版本。
+下次优先评估更大世界的分批校验/GC及交互体验，再设计地下层、楼梯连接或独立Survival接线；
+不重解释已有生成器版本，不将飞行探索模式当作已完成无限世界游戏。
