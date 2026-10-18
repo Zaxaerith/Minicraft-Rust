@@ -15,3 +15,14 @@ Prototype material thresholds are a separate Rust extension without Java goldens
 
 GPL-3.0 upstream/project attribution applies; original Simplex credits K.jpg's
 OpenSimplex2. No large Java sources, classes, resources or worlds are committed.
+
+`terrain-observation.zip` adds 15 actual complete stage3 surface chunks from
+the original LevelGen/ChunkManager and all seven naturally selected biomes.
+Run `scripts/infdev4a/run-terrain.ps1`; `TerrainOracle` holds the original noise
+reference before stage3 releases it, without changing generation. All Tile/data,
+biome ordinals and time-RNG eligibility are retained (five bytes per cell).
+Time-eligible rock/stair choices vary between JVM runs: comparisons report
+actual differences and validate the original allowed domain; they are never
+claimed bit-exact. All other fields/cells compare exactly.
+The terrain cases include the first/last signed-i32 tile chunks. Outside that
+Java coordinate domain, Rust's signed-i64 address extension is tested separately.

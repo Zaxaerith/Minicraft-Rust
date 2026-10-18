@@ -33,7 +33,7 @@ struct Manifest {
     chunks: Vec<Reference>,
 }
 
-fn real_path(path: &Path, directory: bool) -> Result<(), String> {
+pub(super) fn real_path(path: &Path, directory: bool) -> Result<(), String> {
     let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     #[cfg(windows)]
     let reparse = {
@@ -52,13 +52,21 @@ fn real_path(path: &Path, directory: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn lock(directory: &Path) -> Result<File, String> {
+pub(super) fn lock(directory: &Path) -> Result<File, String> {
+    lock_mode(directory, true)
+}
+
+fn lock_mode(directory: &Path, create: bool) -> Result<File, String> {
     let path = directory.join("session.lock");
     if path.try_exists().map_err(|e| e.to_string())? {
         real_path(&path, false)?;
     }
     let mut options = fs::OpenOptions::new();
-    options.create(true).truncate(false).read(true).write(true);
+    options
+        .create(create)
+        .truncate(false)
+        .read(true)
+        .write(true);
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -201,6 +209,14 @@ impl InfdevWorld {
     }
 
     pub fn open(directory: &Path, capacity: usize) -> Result<Self, String> {
+        Self::open_mode(directory, capacity, true)
+    }
+
+    pub(super) fn open_snapshot(directory: &Path) -> Result<Self, String> {
+        Self::open_mode(directory, 1, false)
+    }
+
+    fn open_mode(directory: &Path, capacity: usize, restore: bool) -> Result<Self, String> {
         if !(1..=64).contains(&capacity) {
             return Err("resident capacity must be 1..64".into());
         }
@@ -218,7 +234,8 @@ impl InfdevWorld {
             return Err("fixed-world saves cannot be opened as Infdev4A".into());
         }
         real_path(&directory.join("chunks"), true)?;
-        let _lock = lock(directory)?;
+        // A copy upgrade must never create a file in its read-only source.
+        let _lock = lock_mode(directory, restore)?;
         let path = directory.join("manifest.json");
         for candidate in [&path, &crate::saveload::backup_path(&path)] {
             if fs::symlink_metadata(candidate).is_ok() {
@@ -260,7 +277,7 @@ impl InfdevWorld {
                     let recovered = candidate != path;
                     // Restore only an entirely validated checkpoint. Never rotate
                     // a corrupt primary over the validated backup.
-                    if recovered {
+                    if recovered && restore {
                         restore_primary(&path, text.as_bytes())?;
                     }
                     return Ok(Self {
@@ -336,6 +353,14 @@ impl InfdevWorld {
                             if existing != chunk.cells {
                                 return Err("chunk checksum collision; refusing replacement".into());
                             }
+                            // Reuse can follow a failed sync from an earlier
+                            // attempt; require durable bytes before publication.
+                            fs::OpenOptions::new()
+                                .read(true)
+                                .write(true)
+                                .open(&path)
+                                .and_then(|f| f.sync_all())
+                                .map_err(|e| e.to_string())?;
                             written = Some(object);
                             break;
                         }

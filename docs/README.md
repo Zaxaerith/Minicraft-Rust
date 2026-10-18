@@ -2,7 +2,7 @@
 
 玩家与 Windows 构建说明见根目录 [README](../README.md)。
 
-- [Infdev Phase 4A 实验](infdev4a.md)：独立区块存储和命令行探索入口，尚未接入普通 Survival。
+- [Infdev 实验引擎](infdev.md)：当前功能、生成/存储版本、验证和下次开发入口；[4A 历史](history/infdev4a.md)。
 
 - [维护与输出约定](maintenance.md)：目录、清理边界和验证入口。
 - [2.2.4 审计](history/AUDIT_PARITY_224.md) / [最终修复](history/AUDIT_PARITY_224_FOLLOWUP.md)。

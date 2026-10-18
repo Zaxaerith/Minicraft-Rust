@@ -210,7 +210,7 @@ fn import_with_hook(
 // std::fs::rename on Unix may replace an existing EMPTY directory. Use an
 // exclusive OS operation instead; unsupported filesystems fail safely.
 #[cfg(windows)]
-fn publish_exclusive(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn publish_exclusive(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();

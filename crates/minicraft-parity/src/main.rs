@@ -15,7 +15,13 @@ fn run() -> Result<(), String> {
     let backend = arguments
         .next()
         .ok_or_else(|| "usage: minicraft-parity rust <trace.json>".to_owned())?;
-    if backend == "infdev-create" || backend == "infdev-open" {
+    if backend == "infdev-terrain-check" {
+        return infdev_console::compare(arguments.collect());
+    }
+    if matches!(
+        backend.as_str(),
+        "infdev-create" | "infdev-open" | "infdev-surface-create" | "infdev-upgrade"
+    ) {
         return infdev_console::run(&backend, arguments.collect());
     }
     let trace_path = arguments

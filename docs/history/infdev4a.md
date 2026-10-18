@@ -3,7 +3,7 @@
 2026-10-18，Windows x64。分支 `feat/infdev-world` 基于已推送的干净 main
 `38705c4e54e59ffd11b0fb5f353c84553481cd88`。本分支只本地提交，不 Push/合并/打包。
 main 对应 [Windows CI 39100566881](https://github.com/Zaxaerith/Minicraft-Rust/actions/runs/39100566881)
-已实际全部通过；此前 Debug 性能预算失败及修正见 [维护记录](maintenance.md)。
+已实际全部通过；此前 Debug 性能预算失败及修正见 [维护记录](../maintenance.md)。
 
 ## 上游证据与范围
 

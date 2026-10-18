@@ -2,7 +2,9 @@
 //! upstream 64x64 floorDiv/floorMod; terrain and storage are explicitly versioned
 //! Rust prototypes. No fixed World/Level/GenerationVersion interpretation changes.
 mod generation;
+pub mod paged;
 mod store;
+pub mod terrain;
 #[cfg(test)]
 mod tests;
 
@@ -45,6 +47,10 @@ pub enum Ground {
     Water,
     Sand,
     Rock,
+    Tree,
+    Flower,
+    Cactus,
+    StairsDown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +148,9 @@ impl InfdevWorld {
     }
 
     pub fn set_cell(&mut self, x: i32, y: i32, cell: Cell) -> Result<(), String> {
+        if cell.ground as u8 > 3 {
+            return Err("legacy Phase4A supports only its original four ground IDs".into());
+        }
         let coord = ChunkCoord::at(x, y);
         self.ensure(coord)?;
         let chunk = self.resident.get_mut(&coord).expect("loaded chunk");
