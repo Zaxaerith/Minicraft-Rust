@@ -9,8 +9,17 @@ use std::{
         Arc,
         mpsc::{Receiver, SyncSender, TrySendError},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+pub(super) fn advance_survival_deadline(next: &mut Instant, now: Instant) {
+    // Retain fractional deadlines: Windows timeout rounding must not turn
+    // a nominal 60 Hz loop into 30 Hz while the player waits for stamina.
+    if now.saturating_duration_since(*next) > Duration::from_millis(100) {
+        *next = now; // Bound catch-up after slow IO or a suspended process.
+    }
+    *next += Duration::from_nanos(1_000_000_000 / 60);
+}
 
 #[cfg(test)]
 pub(super) fn needed(position: (i64, i64)) -> BTreeSet<Key> {
@@ -48,9 +57,12 @@ fn open(start: Start) -> Result<World, String> {
             name,
             seed,
             layered,
+            survival,
         } => {
             std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-            if layered {
+            if survival {
+                World::create_survival(&root, &name, seed, 16)
+            } else if layered {
                 World::create_layers(&root, &name, seed, 16)
             } else {
                 World::create(&root, &name, seed, 16)
@@ -72,6 +84,7 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                 position: world.position(),
                 depth: world.depth(),
                 layered: world.is_layered(),
+                survival: world.survival().cloned(),
                 status: status.into(),
                 ..Snapshot::default()
             };
@@ -87,6 +100,7 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
     };
     let mut pending = Some(state.clone());
     let mut failed_load = false;
+    let mut next_survival_tick = Instant::now();
     loop {
         if let Some(update) = pending.take() {
             match send.try_send(update) {
@@ -141,7 +155,9 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             }
             Some(command) => {
                 if let Some(world) = world.as_mut() {
+                    state.action_serial = state.action_serial.wrapping_add(1);
                     let result = match command {
+                        Command::Survival(action) => world.survival_action(action),
                         Command::Move(dx, dy) => world.step(dx, dy),
                         Command::Stairs => crate::experimental::infdev::stairs::travel(world),
                         Command::Edit(dx, dy) => {
@@ -199,14 +215,33 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                         }
                         Command::Quit(_) => unreachable!("quit handled above"),
                     };
+                    if matches!(
+                        command,
+                        Command::Survival(crate::experimental::infdev::survival::Action::Attack)
+                    ) {
+                        state.chunks.clear();
+                    }
+                    state.survival = world.survival().cloned();
                     if world.depth() != state.depth {
                         state.chunks.clear();
                     }
                     state.position = world.position();
                     state.depth = world.depth();
-                    state.save_failed = false;
+                    let passive = matches!(
+                        command,
+                        Command::Survival(crate::experimental::infdev::survival::Action::Tick)
+                    );
+                    if !passive {
+                        state.save_failed = false;
+                    }
                     state.status = match result {
-                        Ok(()) => "FLIGHT EXPLORER / NOT SURVIVAL".into(),
+                        Ok(()) if passive => state.status.clone(),
+                        Ok(()) => if world.is_survival() {
+                            "EXPERIMENTAL SURVIVAL"
+                        } else {
+                            "FLIGHT EXPLORER / NOT SURVIVAL"
+                        }
+                        .into(),
                         Err(error) => format!("ACTION FAILED: {error}"),
                     };
                     failed_load = false;
@@ -216,6 +251,14 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             None => (),
         }
         if let Some(world) = world.as_mut() {
+            if world.is_survival() && Instant::now() >= next_survival_tick {
+                advance_survival_deadline(&mut next_survival_tick, Instant::now());
+                match world.survival_action(crate::experimental::infdev::survival::Action::Tick) {
+                    Ok(()) => state.survival = world.survival().cloned(),
+                    Err(e) => state.status = format!("SURVIVAL TICK FAILED: {e}"),
+                }
+                changed = true;
+            }
             let keys = needed_at(state.depth, state.position);
             state.chunks.retain(|key, _| keys.contains(key));
             if !touched_chunk

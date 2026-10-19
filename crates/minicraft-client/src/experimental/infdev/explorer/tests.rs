@@ -308,6 +308,107 @@ fn bounded_view_and_render_use_real_resources_across_i64_chunk_edges() {
     explorer.finish().unwrap();
 }
 
+#[test]
+fn survival_gui_uses_pixel_movement_inventory_crafting_errors_and_independent_save() {
+    use crate::experimental::infdev::survival::Panel;
+    let owned = Owned::new();
+    let mut explorer = Explorer::create_survival(owned.0.clone(), "Explore".into(), 42).unwrap();
+    wait(&mut explorer, |e| e.is_ready() && e.is_survival());
+    let start = explorer.position();
+    assert_eq!(
+        explorer
+            .survival_state()
+            .unwrap()
+            .player
+            .inventory
+            .used_slots(),
+        0
+    );
+    explorer.tick(&Input {
+        right: true,
+        ..Default::default()
+    });
+    wait(&mut explorer, |e| e.survival_state().unwrap().player.x == 9);
+    assert_eq!(
+        explorer.position(),
+        start,
+        "Survival moves one pixel, flight moves a whole tile"
+    );
+    explorer.tick(&Input {
+        menu: true,
+        ..Default::default()
+    });
+    wait(&mut explorer, |e| {
+        e.survival_state().unwrap().panel == Panel::Inventory
+    });
+    let assets = Assets::load(&[]).unwrap();
+    let mut screen = Screen::new();
+    explorer.render(&mut screen, &assets);
+    explorer.tick(&Input {
+        exit: true,
+        ..Default::default()
+    });
+    wait(&mut explorer, |e| {
+        e.survival_state().unwrap().panel == Panel::Closed
+    });
+    assert!(
+        !explorer.has_finished(),
+        "Esc closes inventory before quitting the world"
+    );
+    explorer.tick(&Input {
+        craft: true,
+        ..Default::default()
+    });
+    wait(&mut explorer, |e| {
+        e.survival_state().unwrap().panel == Panel::Crafting(false)
+    });
+    explorer.tick(&Input {
+        attack: true,
+        ..Default::default()
+    });
+    wait(&mut explorer, |e| e.status().contains("materials missing"));
+    std::thread::sleep(Duration::from_millis(80));
+    explorer.tick(&Input::default());
+    assert!(
+        explorer.status().contains("materials missing"),
+        "idle stamina ticks cannot erase actionable errors"
+    );
+    explorer.render(&mut screen, &assets);
+    explorer.finish().unwrap();
+    let world = World::open(&owned.0.join(paged::SURVIVAL_NAMESPACE).join("Explore"), 1).unwrap();
+    assert_eq!(world.survival().unwrap().player.inventory.used_slots(), 0);
+    assert_eq!(world.survival().unwrap().player.x, 9);
+    assert!(
+        !owned.directory().exists(),
+        "Survival did not overwrite the v2 namespace"
+    );
+}
+
+#[test]
+fn survival_tick_deadlines_preserve_rate_under_rounded_waits_and_bound_suspend_catchup() {
+    let base = Instant::now();
+    let mut next = base;
+    let mut ticks = 0;
+    // Simulated Windows waits, not a CPU/wall-clock performance assertion.
+    for millis in (0..=1000).step_by(16) {
+        let now = base + Duration::from_millis(millis);
+        if now >= next {
+            worker::advance_survival_deadline(&mut next, now);
+            ticks += 1;
+        }
+    }
+    assert!(
+        (60..=61).contains(&ticks),
+        "rounded wakeups must not halve the game rate: {ticks}"
+    );
+    let resumed = base + Duration::from_secs(3600);
+    worker::advance_survival_deadline(&mut next, resumed);
+    assert!(
+        next > resumed && next - resumed <= Duration::from_millis(17),
+        "no unbounded hour-long catchup burst"
+    );
+}
+
 fn natural_negative_stair() -> (i64, i64) {
     static STAIR: std::sync::OnceLock<(i64, i64)> = std::sync::OnceLock::new();
     *STAIR.get_or_init(|| {

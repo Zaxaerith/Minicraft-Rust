@@ -7,7 +7,7 @@ const ADDEND: u64 = 0xB;
 const MASK: u64 = (1_u64 << 48) - 1;
 
 /// java.util.Random compatible generator used by Minicraft+ 2.2.4.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct JavaRandom {
     seed: u64,
 }

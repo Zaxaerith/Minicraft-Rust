@@ -1,7 +1,7 @@
 # Infdev 实验引擎（Windows x64）
 
-当前提供独立图形化飞行探索：Seed → 按需生成64×64区块 → 跨边界与楼梯上下层 → 保存、卸载、重启恢复。
-支持地表0、铁矿层-1、金矿层-2、宝石层-3、黑曜石地牢-4；尚未接入Survival、实体、天空、船只或多人。普通游戏仍使用固定世界，
+当前提供独立图形化飞行探索，以及单独的**基础 Survival 实验检查点**。
+支持地表0、铁矿层-1、金矿层-2、宝石层-3、黑曜石地牢-4；尚未接入完整生存循环、怪物、天空、船只或多人。普通游戏仍使用固定世界，
 `Legacy224`、`Java230Flora`、`Java230World`及既有存档不切换规则。
 Phase 4A历史说明见[归档记录](history/infdev4a.md)。
 
@@ -14,7 +14,7 @@ cargo build --release --workspace --locked
 
 主菜单选择 **Infdev (Experimental)** → **New Layered World (v3)**，填写名称与有符号64位Seed，
 选择Create。新建不改变普通游戏的模式、世界列表或默认`Java230World`。
-默认实验根目录为`SAVEDIR/experiments`，GUI列表扫描其中的`infdev-v2`和`infdev-v3`，名称带版本标识。
+默认实验根目录为`SAVEDIR/experiments`，GUI列表扫描其中的`infdev-v2`、`infdev-v3`和`infdev-survival-v4`，名称带版本标识。
 使用已有4B世界时，可通过`--infdev-root target/experiments`指定其根目录；不要传单个世界目录。
 原4A世界须先用下述CLI复制升级。已有目标绝不覆盖，损坏世界会显示错误而非重新生成。
 
@@ -34,6 +34,43 @@ Seed 42的自然楼梯快速试玩坐标（从上到下）：地表`(-32,-20)`�
 打开校验、地形生成、保存与GC都在单个后台worker；GUI只读快照，不执行地形采样或磁盘IO。
 命令和快照队列各容量1，视野快照最多4区块，存储LRU为16区块；每轮worker至多加载/生成1区块。
 初次加载或大型GC期间窗口继续响应，但移动可能等待后台操作。退出时等待是有意的数据保护。
+
+## 基础 Survival（v4）
+
+在实验世界列表选择 **New Survival World (v4)**。它创建独立目录，不把飞行世界转换成生存世界，
+也不读取普通玩家存档。新玩家使用固定世界已有`Player`的空背包默认值、10点生命和10点耐力。
+启动只在原点32格内寻找自然安全出生点；找不到时拒绝创建，不会铺草地伪造出生区。
+沿用`Inventory`的27格容量、原有ItemId、ToolItem耐久、Tile碰撞判定、Recipe/ToolRecipe事务及HUD/背包渲染组件。
+无限坐标适配器保存i64全局Tile位置和Player的格内像素；不是把有限World.tick整体移植到无限地图。
+
+最短操作链：
+
+1. WASD/方向键逐像素行走，树、岩石、矿石和工作台阻挡移动。空手面向树反复按C采集，掉落物会自动拾取。
+2. 采集至少20 Wood。按Z，在手工列表选择Workbench并按C制作，消耗10 Wood。
+3. 按X/E打开背包，选Workbench按C装备，面向草地/泥地按C放置；面向工作台按Enter打开真实合成菜单。
+4. Wood Axe、Wood Pickaxe各需5 Wood；使用木镐采石后，可用5 Wood + 5 Stone制作Rock工具。
+   仅开放已接线的斧、镐、铲、工作台、Plank和StoneBrick配方；没有改写原配方的材料或数量。
+5. 站上楼梯按V/P下矿，使用镐采集铁/金/宝石/青金石。返回对应楼梯可回地表；负坐标和区块边界仍适用。
+6. 按Q丢一个所持物品、Shift+Q丢整堆；工具按实例丢弃并保留耐久，1秒后可自动拾回。
+7. Esc先关闭背包/合成面板，再按Esc执行Save & Quit；重进恢复位置、生命、耐力、库存、工具、掉落物及地图修改。
+
+装备铲子可把草变成泥土、挖泥土/沙子得到物品并留下洞。有限放置沿用已有TileItem规则：
+Dirt填洞/流体、Plank铺水面、Stone或StoneBrick铺桥，以及放回已采集的花。未接线的树苗等放置会拒绝并保留物品。
+V/P面向工作台可拆回一个真实物品掉落；楼梯上优先执行跨层。
+
+边界：目前没有饥饿消耗、食物循环、冶炼、装备、农业或怪物；饥饿栏保持初始值，不表示已完成这些玩法。
+水中不回复耐力且持续消耗，耗尽后溺水伤害；熔岩造成伤害。死亡后按Enter回初始出生点，**实验模式保留库存**，
+这不是Java死亡箱规则；出生点被阻挡会拒绝重生。下矿前请准备足够工具，尚无Boss/地下家具生成。
+最多保留512个掉落实例和64个工作台；达到上限时拒绝新增操作，物品不会被静默删除。掉落暂不自然过期。
+尚未推进随机方块tick或树/岩石的伤害衰减；部分采集伤害会持久化，不代表这些时序已与Java完整对等。
+耐力与伤害由后台游戏tick推进，菜单暂停生存计时；GUI不执行磁盘访问或地形采样。
+
+v4格式为`MinicraftRust.Experimental.Infdev.Survival.v4`，使用原`JavaLayersV1`地形、`MCIFCH04`区块头。
+工作台、掉落、游戏RNG及原有Player/Inventory数据位于有校验的不可变`sessions/`对象中（单对象256KiB上限）。
+同一个checkpoint原子发布session与区块根；LRU保存也使用完整会话，避免地图已采走而库存未提交。
+GC保护当前、备份和内存引用；玩家对象损坏时回退完整检查点或拒绝，不会重置玩家或重生资源。
+未知/无法原样表示的session字段拒绝读取，损坏恢复继续保留GC hold。旧EXE不保证读取v4。
+v2/v3保持旧字节及生成含义，目前没有v2/v3→v4升级路径；使用独立新世界试玩。
 
 ## 命令行诊断
 
@@ -101,7 +138,7 @@ Java原版连接Oracle实际执行`Level.loadChunk`验证自然楼梯；这证�
 
 ## 存储、兼容与恢复
 
-当前GUI新世界存于`ROOT/infdev-v3/NAME/`，格式为`MinicraftRust.Experimental.Infdev.v3`，
+GUI新飞行世界存于`ROOT/infdev-v3/NAME/`，格式为`MinicraftRust.Experimental.Infdev.v3`，
 生成器`JavaLayersV1`，索引键为depth/X/Y，checkpoint保存活动深度；区块头为`MCIFCH03`。
 已有v2保持`JavaSurfaceV1`/`MCIFCH02`、地表键及旧JSON字节含义，不允许写入新方块或深度。
 当前不提供v2→v3转换：新建独立v3，旧v2仍可打开探索，绝不将旧已保存区块按新规则重建。
@@ -155,7 +192,9 @@ i64极限属于Rust边界/恢复测试，不能当作Java完整极限坐标Oracl
 真实进程测试使用`python scripts/infdev4a/smoke.py --release`，复用Release parity；仅清理本次独占测试目录。
 `python scripts/infdev4a/window-smoke.py`运行两个真实窗口进程，用同一菜单/探索器和编程Input验证
 自然生成、正负区块、楼梯至-4并返回、各层编辑、地下Save & Quit及重开。它不是人类键盘试玩；PNG为真实软件渲染输出。
-完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，原658项基线全部保留。
+窗口脚本还通过独立v4菜单从空背包执行采集、工作台与工具制作、正常碰撞移动、下矿返回及重启检查；
+`--survival-only`仅运行这一组窗口流程。它不会注入库存、传送角色或预置资源。
+完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，原666项基线全部保留。
 最终结果复用`target/validation/current/infdev-final-validation.md`及同目录日志，不另建阶段日志树。
-下次优先评估更大世界的分批校验/GC、天空与地牢装饰的确定性设计，再规划独立Survival接线；
-不重解释已有生成器版本，不将飞行探索模式当作已完成无限世界游戏。
+下次优先扩展基础生存的冶炼、食物/饥饿、死亡箱和实体，同时评估更大世界的分批校验/GC；
+不重解释已有生成器版本，不将当前检查点当作完整无限世界游戏。

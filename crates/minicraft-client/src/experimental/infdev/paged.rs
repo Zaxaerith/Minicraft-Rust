@@ -23,6 +23,8 @@ use std::{
 pub const NAMESPACE: &str = "infdev-v2";
 pub const LAYERED_NAMESPACE: &str = "infdev-v3";
 const FORMAT: &str = "MinicraftRust.Experimental.Infdev.v2";
+pub const SURVIVAL_NAMESPACE: &str = "infdev-survival-v4";
+const SURVIVAL_FORMAT: &str = "MinicraftRust.Experimental.Infdev.Survival.v4";
 const LAYERED_FORMAT: &str = "MinicraftRust.Experimental.Infdev.v3";
 const MAX_CHECKPOINT: u64 = 4096;
 const AUTO_GC_COMMITS: u32 = 128;
@@ -94,6 +96,8 @@ struct Checkpoint {
     depth: i8,
     root: Option<Object>,
     sequence: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session: Option<Object>,
 }
 
 struct Cached {
@@ -106,6 +110,7 @@ pub struct World {
     directory: PathBuf,
     _lock: File,
     saved: Checkpoint,
+    survival: Option<Box<super::survival::State>>,
     resident: BTreeMap<Key, Cached>,
     nodes: BTreeMap<Object, (Node, u64)>,
     capacity: usize,
@@ -142,7 +147,25 @@ impl World {
         self.saved.depth
     }
     pub fn is_layered(&self) -> bool {
-        self.saved.format == LAYERED_FORMAT
+        self.saved.format == LAYERED_FORMAT || self.is_survival()
+    }
+    pub fn is_survival(&self) -> bool {
+        self.saved.format == SURVIVAL_FORMAT
+    }
+    pub(crate) fn survival(&self) -> Option<&super::survival::State> {
+        self.survival.as_deref()
+    }
+    pub(crate) fn survival_action(
+        &mut self,
+        action: super::survival::Action,
+    ) -> Result<(), String> {
+        // Keep the previous complete session available to eviction checkpoints.
+        // Actions read/load first and make at most one map write, LAST; no IO
+        // follows that write before installing the new session in memory.
+        let mut state = self.survival.clone().ok_or("not a Survival world")?;
+        state.act(self, action)?;
+        self.survival = Some(state);
+        Ok(())
     }
     pub fn resident_count(&self) -> usize {
         self.resident.len()
@@ -162,7 +185,7 @@ impl World {
     }
 
     pub fn create(root: &Path, name: &str, seed: i64, capacity: usize) -> Result<Self, String> {
-        Self::create_inner(root, name, seed, capacity, None, false)
+        Self::create_inner(root, name, seed, capacity, None, FORMAT)
     }
 
     pub fn create_layers(
@@ -171,9 +194,17 @@ impl World {
         seed: i64,
         capacity: usize,
     ) -> Result<Self, String> {
-        Self::create_inner(root, name, seed, capacity, None, true)
+        Self::create_inner(root, name, seed, capacity, None, LAYERED_FORMAT)
     }
 
+    pub fn create_survival(
+        root: &Path,
+        name: &str,
+        seed: i64,
+        capacity: usize,
+    ) -> Result<Self, String> {
+        Self::create_inner(root, name, seed, capacity, None, SURVIVAL_FORMAT)
+    }
     /// Explicit copy upgrade; source is locked/read-only, including on recovery.
     /// Future unvisited chunks KEEP the old generator contract.
     pub fn upgrade_legacy(
@@ -183,7 +214,7 @@ impl World {
         capacity: usize,
     ) -> Result<Self, String> {
         let legacy = super::InfdevWorld::open_snapshot(source)?;
-        Self::create_inner(root, name, legacy.seed(), capacity, Some(&legacy), false)
+        Self::create_inner(root, name, legacy.seed(), capacity, Some(&legacy), FORMAT)
     }
 
     fn create_inner(
@@ -192,8 +223,9 @@ impl World {
         seed: i64,
         capacity: usize,
         legacy: Option<&super::InfdevWorld>,
-        layered: bool,
+        format: &str,
     ) -> Result<Self, String> {
+        let layered = format != FORMAT;
         Self::check_capacity(capacity)?;
         if name.is_empty()
             || name.len() > 64
@@ -206,7 +238,9 @@ impl World {
             return Err("invalid experimental world name".into());
         }
         real_path(root, true)?;
-        let namespace = root.join(if layered {
+        let namespace = root.join(if format == SURVIVAL_FORMAT {
+            SURVIVAL_NAMESPACE
+        } else if layered {
             LAYERED_NAMESPACE
         } else {
             NAMESPACE
@@ -224,12 +258,17 @@ impl World {
         let stage = objects::Stage::create(&namespace)?;
         fs::create_dir(stage.0.join("chunks")).map_err(|e| e.to_string())?;
         fs::create_dir(stage.0.join("nodes")).map_err(|e| e.to_string())?;
+        if format == SURVIVAL_FORMAT {
+            fs::create_dir(stage.0.join("sessions")).map_err(|e| e.to_string())?;
+        }
         let handle = lock(&stage.0)?;
         let mut w = Self {
             directory: stage.0.clone(),
             _lock: handle,
+            survival: (format == SURVIVAL_FORMAT)
+                .then(|| Box::new(super::survival::State::new(seed))),
             saved: Checkpoint {
-                format: if layered { LAYERED_FORMAT } else { FORMAT }.into(),
+                format: format.into(),
                 generator: if layered {
                     Generator::JavaLayersV1
                 } else if legacy.is_some() {
@@ -242,6 +281,7 @@ impl World {
                 depth: 0,
                 root: None,
                 sequence: 0,
+                session: None,
             },
             resident: BTreeMap::new(),
             nodes: BTreeMap::new(),
@@ -268,6 +308,11 @@ impl World {
             w.saved.position = (i64::from(old.position.0), i64::from(old.position.1));
         } else {
             w.ensure(Key::at(0, 0))?;
+        }
+        if w.is_survival() {
+            let spawn = super::survival::find_spawn(&mut w)?;
+            w.visit(spawn.0, spawn.1)?;
+            w.survival.as_mut().expect("new Survival").spawn = spawn;
         }
         w.checkpoint()?;
         w.validate_root(w.saved.root)?;
@@ -323,6 +368,7 @@ impl World {
                 directory: directory.into(),
                 _lock: handle.try_clone().map_err(|e| e.to_string())?,
                 saved,
+                survival: None,
                 resident: BTreeMap::new(),
                 nodes: BTreeMap::new(),
                 capacity,
@@ -332,6 +378,7 @@ impl World {
             };
             let valid: Result<(), String> = (|| {
                 w.validate_root(w.saved.root)?;
+                w.survival = w.read_session(&w.saved)?;
                 let p = w.position();
                 if w.find(w.saved.root, Key::at_depth(w.depth(), p.0, p.1))?
                     .is_none()
@@ -364,8 +411,15 @@ impl World {
     fn parse_checkpoint(text: &str) -> Result<Checkpoint, String> {
         let saved: Checkpoint = serde_json::from_str(text).map_err(|e| e.to_string())?;
         let contract = match (saved.format.as_str(), saved.generator) {
-            (FORMAT, Generator::LegacyHeightV1 | Generator::JavaSurfaceV1) => saved.depth == 0,
-            (LAYERED_FORMAT, Generator::JavaLayersV1) => (-4..=0).contains(&saved.depth),
+            (FORMAT, Generator::LegacyHeightV1 | Generator::JavaSurfaceV1) => {
+                saved.depth == 0 && saved.session.is_none()
+            }
+            (LAYERED_FORMAT, Generator::JavaLayersV1) => {
+                (-4..=0).contains(&saved.depth) && saved.session.is_none()
+            }
+            (SURVIVAL_FORMAT, Generator::JavaLayersV1) => {
+                (-4..=0).contains(&saved.depth) && saved.session.is_some()
+            }
             _ => false,
         };
         if !contract {
@@ -380,20 +434,23 @@ impl World {
         };
         let format = value.get("format").and_then(|v| v.as_str());
         let generator = value.get("generator").and_then(|v| v.as_str());
-        if format.is_some_and(|f| f != FORMAT && f != LAYERED_FORMAT)
+        if (format == Some(SURVIVAL_FORMAT) && value.get("session").is_none_or(|v| v.is_null()))
+            || (matches!(format, Some(FORMAT | LAYERED_FORMAT))
+                && value.get("session").is_some_and(|v| !v.is_null()))
+            || format.is_some_and(|f| f != FORMAT && f != LAYERED_FORMAT && f != SURVIVAL_FORMAT)
             || generator
                 .is_some_and(|g| !matches!(g, "LegacyHeightV1" | "JavaSurfaceV1" | "JavaLayersV1"))
             || matches!((format, generator), (Some(FORMAT), Some("JavaLayersV1")))
             || matches!(
                 (format, generator),
                 (
-                    Some(LAYERED_FORMAT),
+                    Some(LAYERED_FORMAT | SURVIVAL_FORMAT),
                     Some("LegacyHeightV1" | "JavaSurfaceV1")
                 )
             )
             || value.get("depth").is_some_and(|depth| {
                 depth.as_i64().is_none_or(|d| {
-                    if format == Some(LAYERED_FORMAT) {
+                    if matches!(format, Some(LAYERED_FORMAT | SURVIVAL_FORMAT)) {
                         !(-4..=0).contains(&d)
                     } else {
                         d != 0
@@ -469,6 +526,9 @@ impl World {
     pub fn set_cell_at(&mut self, depth: i8, x: i64, y: i64, cell: Cell) -> Result<(), String> {
         if !self.is_layered() && cell.ground as u8 > Ground::StairsDown as u8 {
             return Err("layered ground cannot be written to a v2 world".into());
+        }
+        if !self.is_survival() && cell.ground as u8 > Ground::ObsidianDoor as u8 {
+            return Err("Survival ground cannot be written to an exploration world".into());
         }
         let key = Key::at_depth(depth, x, y);
         self.ensure(key)?;
@@ -548,6 +608,18 @@ impl World {
                 objects::hold_recovery(&self.directory)?;
             }
         }
+        let session = self
+            .survival
+            .as_ref()
+            .map(|state| {
+                state.validate()?;
+                objects::write(
+                    &self.directory,
+                    objects::Domain::Sessions,
+                    &serde_json::to_vec(state).map_err(|e| e.to_string())?,
+                )
+            })
+            .transpose()?;
         let dirty: Vec<_> = self
             .resident
             .iter()
@@ -559,7 +631,9 @@ impl World {
                 &self.directory.join("checkpoint.json"),
                 MAX_CHECKPOINT,
             )?;
-            if Self::parse_checkpoint(&old)? == self.saved {
+            let mut desired = self.saved.clone();
+            desired.session = session;
+            if Self::parse_checkpoint(&old)? == desired {
                 before_publish()?;
                 return Ok(());
             }
@@ -571,6 +645,7 @@ impl World {
         }
         let mut next = self.saved.clone();
         next.root = root;
+        next.session = session;
         next.sequence = next
             .sequence
             .checked_add(1)

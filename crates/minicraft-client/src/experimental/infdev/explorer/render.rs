@@ -6,8 +6,12 @@ use crate::{
     level::tile::{self, Tile},
 };
 
-pub(super) fn tile_for(cell: Cell) -> Tile {
+pub(crate) fn tile_for(cell: Cell) -> Tile {
     match cell.ground {
+        Ground::Hole => Tile::Hole,
+        Ground::WoodFloor => Tile::WoodFloor,
+        Ground::RawStone => Tile::RawStone,
+        Ground::StoneFloor => Tile::StoneFloor,
         Ground::Grass => Tile::Grass,
         Ground::Water => Tile::Water,
         Ground::Sand => Tile::Sand,
@@ -104,13 +108,19 @@ pub(super) fn draw(explorer: &Explorer, screen: &mut Screen, assets: &Assets) {
             flip,
         );
         // A small cyan flight marker distinguishes this from the Survival player.
-        screen.rect(
-            WIDTH as i32 / 2 - 3,
-            HEIGHT as i32 / 2 + 9,
-            6,
-            1,
-            0xFF50DDED,
-        );
+        if !explorer.is_survival() {
+            screen.rect(
+                WIDTH as i32 / 2 - 3,
+                HEIGHT as i32 / 2 + 9,
+                6,
+                1,
+                0xFF50DDED,
+            );
+        }
+    }
+    if let Some(s) = &explorer.snapshot.survival {
+        draw_survival(explorer, s, screen, assets);
+        return;
     }
     screen.rect(0, 0, WIDTH as i32, 24, 0xFF101820);
     screen.text(assets.font(), "INFDEV EXPERIMENT / FLIGHT", 4, 1);
@@ -172,5 +182,200 @@ pub(super) fn draw(explorer: &Explorer, screen: &mut Screen, assets: &Assets) {
             );
         }
         screen.text(assets.font(), "ESC: RETRY SAVE / RETURN", 8, 123);
+    }
+}
+
+fn draw_survival(
+    explorer: &Explorer,
+    s: &super::super::survival::State,
+    screen: &mut Screen,
+    assets: &Assets,
+) {
+    use super::super::survival::{Loot, Panel, recipes};
+    use crate::{
+        entity::furniture::FurnitureKind,
+        item::{RecipeOutput, recipe_can_craft},
+        world::{GameMode, hud, inventory_ui},
+    };
+    let (cx, cy) = explorer.position();
+    let point = |x: i64, y: i64| {
+        x.checked_sub(cx)
+            .zip(y.checked_sub(cy))
+            .filter(|(dx, dy)| dx.unsigned_abs() <= 11 && dy.unsigned_abs() <= 8)
+            .map(|(dx, dy)| {
+                (
+                    WIDTH as i32 / 2 - 8 + dx as i32 * 16 + explorer.camera_offset.0,
+                    HEIGHT as i32 / 2 - 8 + dy as i32 * 16 + explorer.camera_offset.1,
+                )
+            })
+    };
+    for station in &s.stations {
+        if station.depth == explorer.depth()
+            && let Some((x, y)) = point(station.x, station.y)
+        {
+            assets.furniture_linked(FurnitureKind::Workbench).render(
+                assets.sheets(),
+                screen,
+                x,
+                y,
+                0,
+                false,
+                0,
+            );
+        }
+    }
+    for drop in &s.drops {
+        if drop.depth == explorer.depth()
+            && let Some((x, y)) = point(drop.x, drop.y)
+        {
+            screen.blit(
+                match drop.loot {
+                    Loot::Stack(st) => assets.item_stack(st),
+                    Loot::Tool(t) => assets.tool(t),
+                },
+                x + 4,
+                y + 4,
+            );
+        }
+    }
+    screen.rect(0, 0, WIDTH as i32, 24, 0xFF101820);
+    screen.text(assets.font(), "INFDEV / SURVIVAL CHECKPOINT", 4, 1);
+    screen.text(
+        assets.font(),
+        &format!("D:{} X:{cx} Y:{cy}", explorer.depth()),
+        4,
+        12,
+    );
+    screen.rect(0, HEIGHT as i32 - 40, WIDTH as i32, 40, 0xFF101820);
+    screen.text(
+        assets.font(),
+        "X: BAG Z: CRAFT V/P: STAIRS",
+        4,
+        HEIGHT as i32 - 39,
+    );
+    let status = if explorer.closing {
+        "SAVING..."
+    } else {
+        explorer.status()
+    };
+    screen.text(
+        assets.font(),
+        &status
+            .chars()
+            .filter(char::is_ascii)
+            .take(35)
+            .collect::<String>(),
+        4,
+        HEIGHT as i32 - 29,
+    );
+    hud::render_hud(
+        screen,
+        assets,
+        &s.player,
+        GameMode::Survival,
+        0,
+        explorer.depth(),
+        0,
+        1,
+    );
+    match s.panel {
+        Panel::Inventory => {
+            let mut entries = s
+                .player
+                .inventory
+                .slots()
+                .iter()
+                .map(|st| {
+                    (
+                        assets.item_stack(*st),
+                        format!(" {} {}", st.count, st.item.display_name()),
+                    )
+                })
+                .collect::<Vec<_>>();
+            entries.extend(
+                s.player
+                    .inventory
+                    .tools()
+                    .iter()
+                    .map(|t| (assets.tool(*t), format!(" {}", t.display_name()))),
+            );
+            inventory_ui::render_inventory_panel(
+                screen,
+                assets,
+                &entries,
+                "Inventory",
+                9,
+                Some(s.selection),
+            );
+            if let Some(t) = s
+                .player
+                .inventory
+                .tools()
+                .get(s.selection.saturating_sub(s.player.inventory.slots().len()))
+                && s.selection >= s.player.inventory.slots().len()
+            {
+                screen.text(
+                    assets.font(),
+                    &format!("Durability {}/{}", t.durability, t.max_durability),
+                    12,
+                    115,
+                );
+            }
+            screen.text(assets.font(), "C: EQUIP / ESC: CLOSE", 12, 138);
+        }
+        Panel::Crafting(b) => {
+            let recipes = recipes(b);
+            let entries = recipes
+                .iter()
+                .map(|r| {
+                    (
+                        match r.output {
+                            RecipeOutput::Stack(st) => assets.item_stack(st),
+                            RecipeOutput::Tool(t) => assets.tool(t),
+                        },
+                        r.label(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            inventory_ui::render_inventory_panel(
+                screen,
+                assets,
+                &entries,
+                if b { "Workbench" } else { "Hand Crafting" },
+                9,
+                Some(s.selection),
+            );
+            if let Some(r) = recipes.get(s.selection) {
+                for (row, cost) in r.costs.iter().take(3).enumerate() {
+                    screen.text(
+                        assets.font(),
+                        &format!(
+                            "{} {}/{}",
+                            cost.item.display_name(),
+                            s.player.inventory.count(cost.item),
+                            cost.count
+                        ),
+                        12,
+                        110 + row as i32 * 9,
+                    );
+                }
+                screen.text(
+                    assets.font(),
+                    if recipe_can_craft(r, &s.player.inventory, false) {
+                        "C: CRAFT / ESC: CLOSE"
+                    } else {
+                        "MISSING MATERIALS"
+                    },
+                    12,
+                    145,
+                );
+            }
+        }
+        Panel::Closed => (),
+    }
+    if s.player.health == 0 {
+        screen.rect(8, 65, WIDTH as i32 - 16, 40, 0xFF281820);
+        screen.text(assets.font(), "DEAD - ENTER TO RESPAWN", 12, 72);
+        screen.text(assets.font(), "EXPERIMENT: KEEP INVENTORY", 12, 85);
     }
 }

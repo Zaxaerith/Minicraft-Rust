@@ -28,8 +28,8 @@ mod entity;
 mod entity_render;
 mod furniture_action;
 mod generation;
-mod hud;
-mod inventory_ui;
+pub(crate) mod hud;
+pub(crate) mod inventory_ui;
 #[cfg(test)]
 mod item_instance_tests;
 mod item_instances;
@@ -194,7 +194,7 @@ pub(crate) enum CreativeEntry {
     Tool(ToolItem),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Player {
     pub(crate) x: i32,
     pub(crate) y: i32,

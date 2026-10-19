@@ -15,23 +15,27 @@ pub(super) struct Object {
 pub(super) enum Domain {
     Nodes,
     Chunks,
+    Sessions,
 }
 impl Domain {
     fn name(self) -> &'static str {
         match self {
             Self::Nodes => "nodes",
             Self::Chunks => "chunks",
+            Self::Sessions => "sessions",
         }
     }
     fn suffix(self) -> &'static str {
         match self {
             Self::Nodes => "node",
             Self::Chunks => "chunk",
+            Self::Sessions => "session",
         }
     }
     fn limit(self) -> usize {
         match self {
             Self::Nodes => 1024,
+            Self::Sessions => 256 * 1024,
             Self::Chunks => 8 + 4096 * 3,
         }
     }
@@ -193,7 +197,9 @@ impl World {
             return Err("invalid chunk cell count".into());
         }
         let mut bytes = Vec::with_capacity(Domain::Chunks.limit());
-        bytes.extend_from_slice(if self.is_layered() {
+        bytes.extend_from_slice(if self.is_survival() {
+            b"MCIFCH04"
+        } else if self.is_layered() {
             b"MCIFCH03"
         } else {
             b"MCIFCH02"
@@ -202,6 +208,9 @@ impl World {
             if !self.is_layered() && c.ground as u8 > Ground::StairsDown as u8 {
                 return Err("layered ground cannot be written to a v2 object".into());
             }
+            if !self.is_survival() && c.ground as u8 > Ground::ObsidianDoor as u8 {
+                return Err("Survival ground in old object".into());
+            }
             bytes.push(c.ground as u8);
             bytes.extend_from_slice(&c.data.to_le_bytes());
         }
@@ -209,7 +218,9 @@ impl World {
     }
     pub(super) fn read_chunk(&self, reference: Object) -> Result<Vec<Cell>, String> {
         let bytes = read(&self.directory, Domain::Chunks, reference)?;
-        let header = if self.is_layered() {
+        let header = if self.is_survival() {
+            b"MCIFCH04"
+        } else if self.is_layered() {
             b"MCIFCH03"
         } else {
             b"MCIFCH02"
@@ -244,6 +255,10 @@ impl World {
                         17 if self.is_layered() => Ground::OrnateObsidian,
                         18 if self.is_layered() => Ground::StairsUp,
                         19 if self.is_layered() => Ground::ObsidianDoor,
+                        20 if self.is_survival() => Ground::Hole,
+                        21 if self.is_survival() => Ground::WoodFloor,
+                        22 if self.is_survival() => Ground::RawStone,
+                        23 if self.is_survival() => Ground::StoneFloor,
                         _ => return Err("unknown ground ID".into()),
                     },
                     data: u16::from_le_bytes([b[1], b[2]]),
@@ -457,9 +472,42 @@ impl World {
         Ok((height, count))
     }
 
+    pub(super) fn read_session(
+        &self,
+        cp: &Checkpoint,
+    ) -> Result<Option<Box<super::super::survival::State>>, String> {
+        cp.session
+            .map(|object| {
+                let bytes = read(&self.directory, Domain::Sessions, object)?;
+                let state: super::super::survival::State =
+                    serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                state.validate()?;
+                let source: serde_json::Value =
+                    serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                if source != serde_json::to_value(&state).map_err(|e| e.to_string())? {
+                    return Err(
+                        "noncanonical or unknown Survival session fields; conversion refused"
+                            .into(),
+                    );
+                }
+                Ok(Box::new(state))
+            })
+            .transpose()
+    }
     pub fn collect_garbage(&mut self) -> Result<Collection, String> {
         if self.resident.values().any(|c| c.dirty) {
             return Err("save dirty chunks before collection".into());
+        }
+        if let Some(state) = &self.survival {
+            let bytes = serde_json::to_vec(state).map_err(|e| e.to_string())?;
+            let saved = read(
+                &self.directory,
+                Domain::Sessions,
+                self.saved.session.ok_or("missing saved player")?,
+            )?;
+            if saved != bytes {
+                return Err("save player changes before collection".into());
+            }
         }
         self.collect_inner()
     }
@@ -506,6 +554,10 @@ impl World {
                 {
                     return Err("checkpoint identity mismatch".into());
                 }
+                self.read_session(&saved)?;
+                if let Some(session) = saved.session {
+                    live.insert((Domain::Sessions, session));
+                }
                 if validated_roots.insert(saved.root) {
                     live.extend(self.validate_root(saved.root)?);
                 }
@@ -534,12 +586,21 @@ impl World {
         if validated_roots.insert(self.saved.root) {
             live.extend(self.validate_root(self.saved.root)?);
         }
+        self.read_session(&self.saved)?;
+        if let Some(session) = self.saved.session {
+            live.insert((Domain::Sessions, session));
+        }
         let mut candidates = Vec::new();
         let mut report = Collection {
             retained_objects: live.len() as u64,
             ..Default::default()
         };
-        for domain in [Domain::Nodes, Domain::Chunks] {
+        let domains = if self.is_survival() {
+            &[Domain::Nodes, Domain::Chunks, Domain::Sessions][..]
+        } else {
+            &[Domain::Nodes, Domain::Chunks][..]
+        };
+        for &domain in domains {
             let directory = self.directory.join(domain.name());
             real_path(&directory, true)?;
             for bucket in fs::read_dir(&directory).map_err(|e| e.to_string())? {

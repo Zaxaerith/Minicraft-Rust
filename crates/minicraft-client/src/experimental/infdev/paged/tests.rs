@@ -702,3 +702,228 @@ fn layered_failed_transition_publication_and_corrupt_current_chunk_recover_compl
     assert!(recovered.collect_garbage().is_err());
     assert_eq!(files(&directory), preserved);
 }
+
+#[test]
+fn survival_publication_failure_and_corrupt_player_recover_player_and_map_together() {
+    use crate::item::ItemId;
+    let root = Owned::new();
+    let mut w = World::create_survival(&root.0, "AtomicPlayer", 42, 1).unwrap();
+    w.survival
+        .as_mut()
+        .unwrap()
+        .player
+        .inventory
+        .add(ItemId::Wood, 23);
+    w.set_cell_at(
+        -1,
+        -65,
+        -1,
+        Cell {
+            ground: Ground::Dirt,
+            data: 731,
+        },
+    )
+    .unwrap();
+    w.checkpoint().unwrap();
+    let dir = w.directory.clone();
+    let old = fs::read(dir.join("checkpoint.json")).unwrap();
+    w.survival
+        .as_mut()
+        .unwrap()
+        .player
+        .inventory
+        .remove(ItemId::Wood, 10);
+    w.set_cell_at(
+        -1,
+        -65,
+        -1,
+        Cell {
+            ground: Ground::Dirt,
+            data: 23,
+        },
+    )
+    .unwrap();
+    assert!(
+        w.commit_with_hook(|| Err("termination before player/map publication".into()))
+            .is_err()
+    );
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), old);
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Wood),
+        23
+    );
+    assert_eq!(w.cell_at(-1, -65, -1).unwrap().data, 731);
+    w.survival.as_mut().unwrap().player.health = 9;
+    w.checkpoint().unwrap();
+    let prior_session = w.saved.session.unwrap();
+    w.survival.as_mut().unwrap().player.health = 8;
+    w.set_cell_at(
+        -1,
+        -65,
+        -1,
+        Cell {
+            ground: Ground::Dirt,
+            data: 41,
+        },
+    )
+    .unwrap();
+    w.checkpoint().unwrap();
+    w.collect_garbage().unwrap();
+    assert!(
+        objects::read(&dir, objects::Domain::Sessions, prior_session).is_ok(),
+        "GC protects backup player"
+    );
+    let damaged = w.saved.session.unwrap();
+    drop(w);
+    fs::write(
+        objects::path(&dir, objects::Domain::Sessions, damaged),
+        b"torn player",
+    )
+    .unwrap();
+    let mut recovered = World::open(&dir, 1).unwrap();
+    assert!(recovered.recovered_backup());
+    assert_eq!(recovered.survival().unwrap().player.health, 9);
+    assert_eq!(recovered.cell_at(-1, -65, -1).unwrap().data, 731);
+    assert!(recovered.collect_garbage().is_err());
+}
+
+#[test]
+fn survival_format_and_unknown_instance_fields_cannot_downgrade_into_exploration() {
+    let root = Owned::new();
+    let mut old = World::create_layers(&root.0, "Separate", 42, 2).unwrap();
+    let before = files(&old.directory);
+    assert!(
+        old.set_cell(
+            0,
+            0,
+            Cell {
+                ground: Ground::Hole,
+                data: 0
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(files(&old.directory), before);
+    let old_checkpoint = fs::read(old.directory.join("checkpoint.json")).unwrap();
+    let w = World::create_survival(&root.0, "Separate", 42, 2).unwrap();
+    assert_ne!(old.directory, w.directory);
+    let dir = w.directory.clone();
+    let checkpoint = fs::read(dir.join("checkpoint.json")).unwrap();
+    let original_session = w.saved.session.unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(
+        &objects::read(&dir, objects::Domain::Sessions, original_session).unwrap(),
+    )
+    .unwrap();
+    value["player"]["future_owned_item"] = serde_json::json!(731);
+    let unknown = objects::write(
+        &dir,
+        objects::Domain::Sessions,
+        &serde_json::to_vec(&value).unwrap(),
+    )
+    .unwrap();
+    let mut bad = w.saved.clone();
+    bad.session = Some(unknown);
+    drop(w);
+    fs::write(
+        dir.join("checkpoint.json"),
+        serde_json::to_vec(&bad).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        World::open(&dir, 2).is_err(),
+        "unknown player fields cannot be silently removed"
+    );
+    // A valid exploration backup is not a substitute for a Survival session.
+    fs::write(dir.join("checkpoint.json.bak"), old_checkpoint).unwrap();
+    assert!(
+        World::open(&dir, 2)
+            .err()
+            .unwrap()
+            .contains("different world format")
+    );
+    fs::write(dir.join("checkpoint.json"), &checkpoint).unwrap();
+    fs::write(
+        objects::path(&dir, objects::Domain::Sessions, original_session),
+        b"damaged",
+    )
+    .unwrap();
+    assert!(World::open(&dir, 2).is_err());
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), checkpoint);
+}
+
+#[test]
+fn survival_shovel_place_and_real_stairs_keep_materials_player_and_tools_on_disk() {
+    use crate::{
+        experimental::infdev::survival::Action,
+        item::{ItemId, ToolItem, ToolKind, ToolTier},
+        world::ActiveItem,
+    };
+    let root = Owned::new();
+    let mut w = World::create_survival(&root.0, "Placement", 42, 2).unwrap();
+    // Constructed dirt/tool fixture isolates placement conservation; the
+    // natural-resource and window tests separately earn materials from zero.
+    w.set_cell(
+        -65,
+        -1,
+        Cell {
+            ground: Ground::Dirt,
+            data: 0,
+        },
+    )
+    .unwrap();
+    w.visit(-65, -2).unwrap();
+    w.survival
+        .as_mut()
+        .unwrap()
+        .player
+        .inventory
+        .add_tool(ToolItem::new(ToolKind::Shovel, ToolTier::Wood))
+        .unwrap();
+    w.survival.as_mut().unwrap().player.active_item = Some(ActiveItem::Tool(0));
+    w.survival_action(Action::Attack).unwrap();
+    assert_eq!(w.cell(-65, -1).unwrap().ground, Ground::Hole);
+    for _ in 0..60 {
+        w.survival_action(Action::Tick).unwrap();
+    }
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Dirt),
+        1
+    );
+    let durability = w.survival().unwrap().player.inventory.tools()[0].durability;
+    w.survival_action(Action::Inventory).unwrap();
+    w.survival_action(Action::Confirm).unwrap();
+    w.survival_action(Action::Attack).unwrap();
+    assert_eq!(w.cell(-65, -1).unwrap().ground, Ground::Dirt);
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Dirt),
+        0
+    );
+    assert!(w.survival().unwrap().drops.is_empty());
+    assert_eq!(
+        w.survival().unwrap().player.inventory.tools()[0].durability,
+        durability
+    );
+    w.visit(-32, -20).unwrap();
+    assert_eq!(w.cell(-32, -20).unwrap().ground, Ground::StairsDown);
+    w.survival_action(Action::Pickup).unwrap();
+    assert_eq!(w.depth(), -1);
+    w.survival_action(Action::Pickup).unwrap();
+    assert_eq!(w.depth(), 0);
+    w.survival.as_mut().unwrap().player.health = 7;
+    w.survival.as_mut().unwrap().player.stamina = 3;
+    w.checkpoint().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.position(), (-32, -20));
+    assert_eq!(w.depth(), 0);
+    assert_eq!(w.survival().unwrap().player.health, 7);
+    assert_eq!(w.survival().unwrap().player.stamina, 3);
+    assert_eq!(
+        w.survival().unwrap().player.inventory.tools()[0].durability,
+        durability
+    );
+    assert_eq!(w.cell(-65, -1).unwrap().ground, Ground::Dirt);
+}

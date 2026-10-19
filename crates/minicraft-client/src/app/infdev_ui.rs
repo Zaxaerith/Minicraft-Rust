@@ -5,7 +5,7 @@ use crate::{
     assets::Assets,
     experimental::infdev::{
         explorer::Explorer,
-        paged::{LAYERED_NAMESPACE, NAMESPACE},
+        paged::{LAYERED_NAMESPACE, NAMESPACE, SURVIVAL_NAMESPACE},
     },
     gfx::{HEIGHT, Screen, WIDTH, font},
     io::Input,
@@ -79,6 +79,7 @@ pub(super) struct Browser {
     records: Vec<Record>,
     menu: Menu,
     creating: bool,
+    survival_form: bool,
     error: Option<String>,
 }
 
@@ -98,6 +99,7 @@ impl Browser {
             records: Vec::new(),
             menu: Menu::default(),
             creating: false,
+            survival_form: false,
             error: None,
         };
         browser.refresh();
@@ -110,7 +112,7 @@ impl Browser {
         }
         real_directory(&self.root)?;
         let mut records = Vec::new();
-        for namespace in [NAMESPACE, LAYERED_NAMESPACE] {
+        for namespace in [NAMESPACE, LAYERED_NAMESPACE, SURVIVAL_NAMESPACE] {
             let namespace = self.root.join(namespace);
             if !namespace.try_exists().map_err(|e| e.to_string())? {
                 continue;
@@ -149,6 +151,7 @@ impl Browser {
         let mut entries = vec![
             Entry::select("New Layered World (v3)", false),
             Entry::select("Refresh", false),
+            Entry::select("New Survival World (v4)", false),
         ];
         entries.extend(self.records.iter().map(|r| {
             let label = if r.name.chars().count() > 22 {
@@ -157,6 +160,12 @@ impl Browser {
                 r.name.clone()
             };
             let version = if r
+                .directory
+                .parent()
+                .is_some_and(|p| p.ends_with(SURVIVAL_NAMESPACE))
+            {
+                4
+            } else if r
                 .directory
                 .parent()
                 .is_some_and(|p| p.ends_with(LAYERED_NAMESPACE))
@@ -174,7 +183,8 @@ impl Browser {
             .create_menu();
     }
 
-    fn new_form(&mut self) {
+    fn new_form(&mut self, survival: bool) {
+        self.survival_form = survival;
         let mut seed = Entry::input("Seed: ", 20);
         if let Entry::Input { user_input, .. } = &mut seed {
             *user_input = "42".into();
@@ -190,7 +200,11 @@ impl Browser {
                 Entry::select("Back", false),
             ],
         )
-        .set_title("New Layered World (v3)")
+        .set_title(if survival {
+            "New Survival World (v4)"
+        } else {
+            "New Layered World (v3)"
+        })
         .set_positioning((WIDTH as i32 / 2, 86), RelPos::CENTER)
         .create_menu();
         self.creating = true;
@@ -224,7 +238,11 @@ impl Browser {
                             if name.trim().is_empty() {
                                 return Err("Enter a world name".into());
                             }
-                            Explorer::create_layers(self.root.clone(), name, seed)
+                            if self.survival_form {
+                                Explorer::create_survival(self.root.clone(), name, seed)
+                            } else {
+                                Explorer::create_layers(self.root.clone(), name, seed)
+                            }
                         });
                     match result {
                         Ok(explorer) => return Action::Start(Box::new(explorer)),
@@ -236,10 +254,11 @@ impl Browser {
             }
         } else {
             match self.menu.selection {
-                0 => self.new_form(),
+                0 => self.new_form(false),
                 1 => self.refresh(),
+                2 => self.new_form(true),
                 index => {
-                    if let Some(record) = self.records.get(index - 2) {
+                    if let Some(record) = self.records.get(index - 3) {
                         match Explorer::open(record.directory.clone()) {
                             Ok(explorer) => return Action::Start(Box::new(explorer)),
                             Err(error) => self.error = Some(error),
@@ -256,7 +275,7 @@ impl Browser {
         font::draw_centered(
             screen,
             assets.font(),
-            "EXPERIMENTAL - NOT SURVIVAL",
+            "EXPERIMENTAL: FLIGHT / SURVIVAL",
             8,
             0xffcc55,
         );

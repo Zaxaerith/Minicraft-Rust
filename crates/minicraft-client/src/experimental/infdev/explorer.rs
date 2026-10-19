@@ -1,6 +1,6 @@
 //! GUI adapter for the independent Infdev store. Disk work and terrain sampling
 //! belong exclusively to one worker; rendering only reads bounded snapshots.
-mod render;
+pub(super) mod render;
 #[cfg(test)]
 mod tests;
 mod worker;
@@ -30,6 +30,8 @@ struct Snapshot {
     status: String,
     ready: bool,
     save_failed: bool,
+    survival: Option<super::survival::State>,
+    action_serial: u64,
 }
 
 impl Snapshot {
@@ -45,6 +47,7 @@ enum Command {
     Move(i32, i32),
     Edit(i32, i32),
     Stairs,
+    Survival(super::survival::Action),
     Quit(Option<SyncSender<Result<(), String>>>),
 }
 
@@ -54,6 +57,7 @@ enum Start {
         name: String,
         seed: i64,
         layered: bool,
+        survival: bool,
     },
     Open(PathBuf),
 }
@@ -84,6 +88,7 @@ impl Explorer {
             name,
             seed,
             layered: false,
+            survival: false,
         })
     }
 
@@ -94,9 +99,28 @@ impl Explorer {
             name,
             seed,
             layered: true,
+            survival: false,
         })
     }
 
+    pub fn create_survival(root: PathBuf, name: String, seed: i64) -> Result<Self, String> {
+        Self::start(Start::Create {
+            root,
+            name,
+            seed,
+            layered: true,
+            survival: true,
+        })
+    }
+    pub(crate) fn action_serial(&self) -> u64 {
+        self.snapshot.action_serial
+    }
+    pub(crate) fn survival_state(&self) -> Option<&super::survival::State> {
+        self.snapshot.survival.as_ref()
+    }
+    pub fn is_survival(&self) -> bool {
+        self.snapshot.survival.is_some()
+    }
     pub fn open(directory: PathBuf) -> Result<Self, String> {
         Self::start(Start::Open(directory))
     }
@@ -154,7 +178,15 @@ impl Explorer {
         while let Ok(snapshot) = self.updates.try_recv() {
             let old = self.snapshot.position;
             let next = snapshot.position;
-            if snapshot.depth != self.snapshot.depth {
+            if let Some(survival) = &snapshot.survival {
+                self.camera_offset = (8 - survival.player.x, 8 - survival.player.y);
+                self.direction = match survival.player.direction {
+                    crate::world::Direction::Down => (0, 1),
+                    crate::world::Direction::Up => (0, -1),
+                    crate::world::Direction::Left => (-1, 0),
+                    crate::world::Direction::Right => (1, 0),
+                };
+            } else if snapshot.depth != self.snapshot.depth {
                 self.camera_offset = (0, 0);
             } else if let (Some(dx), Some(dy)) =
                 (next.0.checked_sub(old.0), next.1.checked_sub(old.1))
@@ -191,7 +223,20 @@ impl Explorer {
         self.poll();
         self.ticks = self.ticks.wrapping_add(1);
         for offset in [&mut self.camera_offset.0, &mut self.camera_offset.1] {
+            if self.snapshot.survival.is_some() {
+                break;
+            }
             *offset -= offset.signum() * offset.abs().min(4);
+        }
+        if input.exit
+            && self
+                .snapshot
+                .survival
+                .as_ref()
+                .is_some_and(|s| s.panel != super::survival::Panel::Closed)
+        {
+            self.send(Command::Survival(super::survival::Action::Close));
+            return;
         }
         if input.exit || (self.snapshot.save_failed && input.select) {
             self.request_save_quit();
@@ -203,6 +248,50 @@ impl Explorer {
             return;
         }
         if !self.snapshot.ready {
+            return;
+        }
+        if let Some(survival) = &self.snapshot.survival {
+            use super::survival::{Action, Panel};
+            let action = if input.menu {
+                if survival.panel == Panel::Closed {
+                    Action::Inventory
+                } else {
+                    Action::Close
+                }
+            } else if input.craft {
+                Action::Crafting
+            } else if survival.panel != Panel::Closed {
+                if input.cursor_up_pressed || input.up_pressed {
+                    Action::Cursor(-1)
+                } else if input.cursor_down_pressed || input.down_pressed {
+                    Action::Cursor(1)
+                } else if input.attack || input.select {
+                    Action::Confirm
+                } else {
+                    Action::Tick
+                }
+            } else if input.drop_one || input.drop_stack {
+                Action::Drop(input.drop_stack)
+            } else if input.pickup {
+                Action::Pickup
+            } else if input.attack {
+                Action::Attack
+            } else if input.select {
+                Action::Interact
+            } else if input.up {
+                Action::Move(0, -1)
+            } else if input.down {
+                Action::Move(0, 1)
+            } else if input.left {
+                Action::Move(-1, 0)
+            } else if input.right {
+                Action::Move(1, 0)
+            } else {
+                Action::Tick
+            };
+            if !matches!(action, Action::Tick) && !self.send(Command::Survival(action)) {
+                self.snapshot.status = "BUSY; RETRY AFTER LOADING".into();
+            }
             return;
         }
         if self.cooldown > 0 {

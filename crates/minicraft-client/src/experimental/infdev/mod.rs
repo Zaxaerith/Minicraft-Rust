@@ -6,6 +6,7 @@ mod generation;
 pub mod paged;
 pub mod stairs;
 mod store;
+pub(crate) mod survival;
 pub mod terrain;
 #[cfg(test)]
 mod tests;
@@ -65,6 +66,10 @@ pub enum Ground {
     OrnateObsidian,
     StairsUp,
     ObsidianDoor,
+    Hole,
+    WoodFloor,
+    RawStone,
+    StoneFloor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

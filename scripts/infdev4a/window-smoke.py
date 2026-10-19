@@ -8,6 +8,12 @@ import json
 import shutil
 import subprocess
 import tempfile
+import argparse
+import threading
+
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--survival-only",action="store_true")
+options=parser.parse_args()
 
 repo = Path(__file__).resolve().parents[2]
 output = repo / "target/validation/current"
@@ -16,15 +22,32 @@ exe = repo / "target/release/minicraft-rust.exe"
 with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as owned:
     root = Path(owned).resolve()
     assert root.is_relative_to(output.resolve()) and root.name.startswith("infdev-owned-window-")
-    for mode in ("create", "reopen"):
-        result = subprocess.run([str(exe), "--infdev-window-smoke", mode, str(root)],
-                                capture_output=True, text=True, encoding="utf-8", timeout=110)
-        print(result.stdout, end="")
-        if result.returncode:
-            print(result.stderr)
-            raise RuntimeError(f"Real window {mode} failed: exit={result.returncode}")
-    evidence = json.loads((root / "gui-expect.json").read_text(encoding="utf-8"))
-    shutil.copyfile(root / "infdev-window.png", output / "infdev-window.png")
-    shutil.copyfile(root / "infdev-underground.png", output / "infdev-underground.png")
-    (output / "infdev-window-result.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
-    print("PASS separate real-window v3 create / natural stair chain to -4 and return / layer edits / Save & Quit underground / process restart / five-layer restore")
+    modes=("survival-create","survival-reopen") if options.survival_only else ("create","reopen","survival-create","survival-reopen")
+    for mode in modes:
+        session_root=root/"survival" if mode.startswith("survival-") else root
+        with subprocess.Popen([str(exe), "--infdev-window-smoke", mode, str(session_root)],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8") as process:
+            def forward():
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+            reader=threading.Thread(target=forward,daemon=True)
+            reader.start()
+            try:
+                process.wait(timeout=210 if mode.startswith("survival-") else 110)
+            except subprocess.TimeoutExpired:
+                process.kill();process.wait()
+                raise
+            finally:
+                reader.join(timeout=5)
+            if process.returncode:
+                raise RuntimeError(f"Real window {mode} failed: exit={process.returncode}")
+    if not options.survival_only:
+        evidence = json.loads((root / "gui-expect.json").read_text(encoding="utf-8"))
+        shutil.copyfile(root / "infdev-window.png", output / "infdev-window.png")
+        shutil.copyfile(root / "infdev-underground.png", output / "infdev-underground.png")
+        (output / "infdev-window-result.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+        print("PASS separate real-window v3 create / natural stair chain to -4 and return / layer edits / Save & Quit underground / process restart / five-layer restore")
+    evidence=json.loads((root/"survival/survival-expect.json").read_text(encoding="utf-8"))
+    (output/"infdev-survival-result.json").write_text(json.dumps(evidence,indent=2),encoding="utf-8")
+    shutil.copyfile(root/"survival/infdev-survival.png",output/"infdev-survival.png")
+    print("PASS independent native Survival create/restart: empty inventory, earned resources, tools, collisions, workbench, mining underground, return, drops and disk state")

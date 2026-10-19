@@ -332,6 +332,8 @@ fn view(world: &mut Host) -> Result<(), String> {
                     Ground::Obsidian => '=',
                     Ground::RawObsidian => '%',
                     Ground::OrnateObsidian => '+',
+                    Ground::Hole => 'o',
+                    Ground::WoodFloor | Ground::RawStone | Ground::StoneFloor => '.',
                     Ground::ObsidianDoor => 'D',
                 }
             });

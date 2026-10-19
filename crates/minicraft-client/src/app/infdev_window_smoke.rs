@@ -10,6 +10,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod survival;
+
 struct Host {
     window: Window,
     presenter: Presenter,
@@ -42,7 +44,21 @@ impl Host {
         check: impl Fn(&Explorer) -> bool,
     ) -> Result<(), String> {
         loop {
-            self.frame(explorer)?;
+            if check(explorer) {
+                return Ok(());
+            }
+            self.frame(explorer).map_err(|error| {
+                format!(
+                    "{error}; pos={:?} depth={} status={} player={}",
+                    explorer.position(),
+                    explorer.depth(),
+                    explorer.status(),
+                    explorer.survival_state().map_or_else(
+                        || "flight".into(),
+                        |s| serde_json::to_string(&s.player).unwrap_or_default()
+                    )
+                )
+            })?;
             if check(explorer) {
                 return Ok(());
             }
@@ -213,9 +229,14 @@ fn explore_layers(host: &mut Host, explorer: &mut Explorer, root: &Path) -> Resu
 }
 
 pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
-    if !matches!(mode, "create" | "reopen") {
+    if !matches!(
+        mode,
+        "create" | "reopen" | "survival-create" | "survival-reopen"
+    ) {
         return Err("window smoke mode must be create or reopen".into());
     }
+    let survival = mode.starts_with("survival-");
+    let creating = mode.ends_with("create");
     let assets = Assets::load(&[])?;
     let mut window = Window::new(
         "Minicraft Infdev - scripted window smoke",
@@ -234,7 +255,7 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         presenter,
         assets,
         screen: Screen::new(),
-        deadline: Instant::now() + Duration::from_secs(90),
+        deadline: Instant::now() + Duration::from_secs(if survival { 180 } else { 90 }),
     };
     let locale = Localization::load("en-us", &[]);
     let mut title = infdev_ui::title_menu(&locale, 7);
@@ -263,7 +284,15 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
     let mut browser = Browser::new(root.clone());
     browser.render(&mut host.screen, &host.assets);
     host.present()?;
-    let action = if mode == "create" {
+    let action = if creating {
+        if survival {
+            for _ in 0..2 {
+                browser.tick(&Input {
+                    cursor_down_pressed: true,
+                    ..Default::default()
+                });
+            }
+        }
         browser.tick(&Input {
             select: true,
             ..Default::default()
@@ -287,7 +316,11 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             ..Default::default()
         })
     } else {
-        // New / Refresh / Window42. The driver uses a dedicated empty root.
+        // New Flight / Refresh / New Survival / Window42. The driver uses a dedicated empty root.
+        browser.tick(&Input {
+            cursor_down_pressed: true,
+            ..Default::default()
+        });
         browser.tick(&Input {
             cursor_down_pressed: true,
             ..Default::default()
@@ -313,6 +346,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
                 })
             })
     })?;
+    if survival {
+        return survival::run(&mut host, &mut explorer, &root, creating);
+    }
     let evidence = root.join("gui-expect.json");
     if mode == "create" {
         for goal in [(66, 0), (-66, 0), (-66, -66), (1, 1), (-1, -1)] {
