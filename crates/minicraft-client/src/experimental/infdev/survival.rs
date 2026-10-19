@@ -20,6 +20,54 @@ use serde::{Deserialize, Serialize};
 const MAX_DROPS: usize = 512;
 const MAX_STATIONS: usize = 64;
 
+mod metabolism;
+
+// A missing marker is the original v4 checkpoint: no hunger progression and
+// keep inventory on death. Do not silently opt existing players into new rules.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum FoodRules {
+    #[default]
+    Legacy,
+    JavaNormal,
+}
+impl FoodRules {
+    fn is_legacy(&self) -> bool {
+        *self == Self::Legacy
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub(crate) enum StationKind {
+    #[default]
+    Workbench,
+    Furnace,
+    Anvil,
+}
+impl StationKind {
+    fn is_workbench(&self) -> bool {
+        *self == Self::Workbench
+    }
+    pub fn furniture(self) -> FurnitureKind {
+        match self {
+            Self::Workbench => FurnitureKind::Workbench,
+            Self::Furnace => FurnitureKind::Furnace,
+            Self::Anvil => FurnitureKind::Anvil,
+        }
+    }
+    pub fn item(self) -> ItemId {
+        match self {
+            Self::Workbench => ItemId::Workbench,
+            Self::Furnace => ItemId::Furnace,
+            Self::Anvil => ItemId::Anvil,
+        }
+    }
+    fn from_item(item: ItemId) -> Option<Self> {
+        [Self::Workbench, Self::Furnace, Self::Anvil]
+            .into_iter()
+            .find(|k| k.item() == item)
+    }
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub(crate) enum Loot {
     Stack(ItemStack),
@@ -41,6 +89,8 @@ pub(crate) struct Station {
     pub depth: i8,
     pub x: i64,
     pub y: i64,
+    #[serde(default, skip_serializing_if = "StationKind::is_workbench")]
+    pub kind: StationKind,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -48,12 +98,14 @@ pub(crate) enum Panel {
     #[default]
     Closed,
     Inventory,
-    Crafting(bool),
+    Crafting(Option<StationKind>),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default, skip_serializing_if = "FoodRules::is_legacy")]
+    pub food_rules: FoodRules,
     pub player: Player,
     pub spawn: (i64, i64),
     pub drops: Vec<Drop>,
@@ -118,13 +170,21 @@ pub(crate) fn find_spawn(world: &mut World) -> Result<(i64, i64), String> {
     Err("no safe natural Survival spawn within 32 tiles; terrain was not replaced".into())
 }
 
-pub(crate) fn recipes(workbench: bool) -> Vec<RecipeView> {
-    recipe_views(workbench.then_some(FurnitureKind::Workbench))
+pub(crate) fn recipes(station: Option<StationKind>) -> Vec<RecipeView> {
+    recipe_views(station.map(StationKind::furniture))
         .into_iter()
         .filter(|r| match r.output {
             RecipeOutput::Stack(s) => matches!(
                 s.item,
-                ItemId::Workbench | ItemId::Plank | ItemId::StoneBrick
+                ItemId::Workbench
+                    | ItemId::Furnace
+                    | ItemId::Anvil
+                    | ItemId::Plank
+                    | ItemId::StoneBrick
+                    | ItemId::IronIngot
+                    | ItemId::GoldIngot
+                    | ItemId::Glass
+                    | ItemId::GlassBottle
             ),
             RecipeOutput::Tool(t) => {
                 matches!(t.kind, ToolKind::Axe | ToolKind::Pickaxe | ToolKind::Shovel)
@@ -151,6 +211,7 @@ impl State {
             },
         );
         Self {
+            food_rules: FoodRules::JavaNormal,
             player: template.player,
             spawn: (0, 0),
             drops: Vec::new(),
@@ -281,6 +342,9 @@ impl State {
                 self.player.y = 8;
                 self.player.health = 10;
                 self.player.stamina = 10;
+                if self.food_rules == FoodRules::JavaNormal {
+                    metabolism::reset(&mut self.player);
+                }
             }
             return Ok(());
         }
@@ -291,7 +355,7 @@ impl State {
                 self.selection = 0;
             }
             Action::Crafting => {
-                self.panel = Panel::Crafting(false);
+                self.panel = Panel::Crafting(None);
                 self.selection = 0;
             }
             Action::Close => self.panel = Panel::Closed,
@@ -319,8 +383,12 @@ impl State {
             }
             Action::Interact => {
                 let (x, y) = self.target(w)?;
-                if self.station_at(w.depth(), x, y) {
-                    self.panel = Panel::Crafting(true);
+                if let Some(station) = self
+                    .stations
+                    .iter()
+                    .find(|s| (s.depth, s.x, s.y) == (w.depth(), x, y))
+                {
+                    self.panel = Panel::Crafting(Some(station.kind));
                     self.selection = 0;
                 }
             }
@@ -340,8 +408,8 @@ impl State {
                         if self.drops.len() >= MAX_DROPS {
                             return Err("drop limit reached; collect existing items first".into());
                         }
-                        self.stations.remove(i);
-                        self.add_drop(w, p, Loot::Stack(ItemStack::new(ItemId::Workbench, 1)), 0);
+                        let station = self.stations.remove(i);
+                        self.add_drop(w, p, Loot::Stack(ItemStack::new(station.kind.item(), 1)), 0);
                     }
                 }
             }
@@ -360,7 +428,7 @@ impl State {
         let (x, y) = w.position();
         let cell = w.cell(x, y)?;
         let swimming = cell.ground == Ground::Water;
-        // Same Player stamina thresholds; hunger/food progression is deferred.
+        // Same Player stamina thresholds; menu time does not advance metabolism.
         if self.player.stamina == 0
             && self.player.stamina_recharge_delay == 0
             && self.player.stamina_recharge == 0
@@ -379,6 +447,9 @@ impl State {
         if self.player.stamina_recharge > 10 {
             self.player.stamina_recharge -= 10;
             self.player.stamina = (self.player.stamina + 1).min(10);
+        }
+        if self.food_rules == FoodRules::JavaNormal {
+            metabolism::tick(&mut self.player, self.ticks);
         }
         if swimming && self.ticks.is_multiple_of(60) {
             if self.player.stamina > 0 {
@@ -452,6 +523,7 @@ impl State {
         self.player.x = px.rem_euclid(16);
         self.player.y = py.rem_euclid(16);
         self.player.walk_distance = self.player.walk_distance.wrapping_add(1);
+        self.player.step_count = self.player.step_count.saturating_add(1);
         Ok(())
     }
 
@@ -537,6 +609,21 @@ impl State {
         if self.player.attack_time > 0 || self.player.stamina == 0 {
             return Ok(());
         }
+        // Food interacts with the player, regardless of the facing tile, drop
+        // limit or whether another station is in front of them.
+        if let Some(ActiveItem::Stack(id)) = self.player.active_item
+            && let Some(feed) = id.food_value()
+        {
+            if self.player.hunger < 10 && self.player.inventory.remove(id, 1) {
+                self.player.stamina = self
+                    .player
+                    .stamina
+                    .saturating_sub(crate::item::food::FOOD_STAMINA_COST);
+                self.player.hunger = self.player.hunger.saturating_add(feed).min(10);
+                self.player.attack_time = 10;
+            }
+            return Ok(());
+        }
         if self.drops.len() + 3 > MAX_DROPS {
             return Err("drop limit reached; collect existing items before mining".into());
         }
@@ -560,7 +647,7 @@ impl State {
         let mut next = c;
         let mut drops = Vec::new();
         if let Some(ActiveItem::Stack(id)) = self.player.active_item {
-            if id == ItemId::Workbench {
+            if let Some(kind) = StationKind::from_item(id) {
                 if self.stations.len() >= MAX_STATIONS {
                     return Err("workstation limit reached".into());
                 }
@@ -581,6 +668,7 @@ impl State {
                         depth: w.depth(),
                         x: p.0,
                         y: p.1,
+                        kind,
                     });
                     self.player.attack_time = 10;
                     return Ok(());
@@ -627,6 +715,11 @@ impl State {
         };
         match c.ground {
             Ground::Tree | Ground::Rock => {
+                // Infdev TreeTile.hurt: one real Apple on 1/100 of all hits,
+                // including bare hands; not a guaranteed break reward.
+                if c.ground == Ground::Tree && self.random.next_int(tree::APPLE_DROP_CHANCE) == 0 {
+                    drops.push(ItemStack::new(ItemId::Apple, 1));
+                }
                 let max = if c.ground == Ground::Tree {
                     tree::MAX_HEALTH
                 } else {

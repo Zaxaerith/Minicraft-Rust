@@ -927,3 +927,82 @@ fn survival_shovel_place_and_real_stairs_keep_materials_player_and_tools_on_disk
     );
     assert_eq!(w.cell(-65, -1).unwrap().ground, Ground::Dirt);
 }
+
+#[test]
+fn survival_legacy_session_and_smelting_interruption_preserve_exact_ownership() {
+    use crate::{
+        experimental::infdev::survival::{Action, FoodRules, Panel, Station, StationKind, recipes},
+        item::{ItemId, ToolItem, ToolKind, ToolTier},
+    };
+    let root = Owned::new();
+    let mut w = World::create_survival(&root.0, "LegacyFood", 42, 1).unwrap();
+    let position = w.position();
+    let s = w.survival.as_mut().unwrap();
+    s.food_rules = FoodRules::Legacy;
+    s.stations.push(Station {
+        depth: 0,
+        x: position.0 + 1,
+        y: position.1,
+        kind: StationKind::Workbench,
+    });
+    s.player.inventory.add(ItemId::IronOre, 31);
+    s.player.inventory.add(ItemId::Coal, 11);
+    let mut tool = ToolItem::new(ToolKind::Pickaxe, ToolTier::Rock);
+    tool.durability = 23;
+    s.player.inventory.add_tool(tool).unwrap();
+    w.checkpoint().unwrap();
+    let old = objects::read(
+        &w.directory,
+        objects::Domain::Sessions,
+        w.saved.session.unwrap(),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&old).unwrap();
+    assert!(value.get("food_rules").is_none());
+    assert!(value["stations"][0].get("kind").is_none());
+    let dir = w.directory.clone();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert!(w.survival().unwrap().food_rules == FoodRules::Legacy);
+    assert_eq!(serde_json::to_vec(w.survival().unwrap()).unwrap(), old);
+    // Test a new-rules checkpoint's atomic material/fuel/terrain publication.
+    let s = w.survival.as_mut().unwrap();
+    s.food_rules = FoodRules::JavaNormal;
+    s.stations[0].kind = StationKind::Furnace;
+    w.cell_at(-1, -65, -1).unwrap(); // preload before the transaction, even at LRU=1
+    w.checkpoint().unwrap();
+    let checkpoint = fs::read(dir.join("checkpoint.json")).unwrap();
+    let s = w.survival.as_mut().unwrap();
+    s.panel = Panel::Crafting(Some(StationKind::Furnace));
+    s.selection = recipes(Some(StationKind::Furnace))
+        .iter()
+        .position(|r| r.product_name() == "Iron")
+        .unwrap();
+    w.survival_action(Action::Confirm).unwrap();
+    w.survival_action(Action::Close).unwrap();
+    w.set_cell_at(
+        -1,
+        -65,
+        -1,
+        Cell {
+            ground: Ground::Dirt,
+            data: 731,
+        },
+    )
+    .unwrap();
+    assert!(
+        w.commit_with_hook(|| Err("interrupted smelt before publication".into()))
+            .is_err()
+    );
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), checkpoint);
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    let s = w.survival().unwrap();
+    assert_eq!(s.player.inventory.count(ItemId::IronOre), 31);
+    assert_eq!(s.player.inventory.count(ItemId::Coal), 11);
+    assert_eq!(s.player.inventory.count(ItemId::IronIngot), 0);
+    assert_eq!(s.player.inventory.tools()[0].durability, 23);
+    assert!(s.stations[0].kind == StationKind::Furnace);
+    assert_ne!(w.cell_at(-1, -65, -1).unwrap().data, 731);
+    w.collect_garbage().unwrap();
+}

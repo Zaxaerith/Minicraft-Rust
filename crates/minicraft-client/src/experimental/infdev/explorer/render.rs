@@ -193,7 +193,6 @@ fn draw_survival(
 ) {
     use super::super::survival::{Loot, Panel, recipes};
     use crate::{
-        entity::furniture::FurnitureKind,
         item::{RecipeOutput, recipe_can_craft},
         world::{GameMode, hud, inventory_ui},
     };
@@ -213,7 +212,7 @@ fn draw_survival(
         if station.depth == explorer.depth()
             && let Some((x, y)) = point(station.x, station.y)
         {
-            assets.furniture_linked(FurnitureKind::Workbench).render(
+            assets.furniture_linked(station.kind.furniture()).render(
                 assets.sheets(),
                 screen,
                 x,
@@ -239,7 +238,16 @@ fn draw_survival(
         }
     }
     screen.rect(0, 0, WIDTH as i32, 24, 0xFF101820);
-    screen.text(assets.font(), "INFDEV / SURVIVAL CHECKPOINT", 4, 1);
+    screen.text(
+        assets.font(),
+        if s.food_rules == super::super::survival::FoodRules::Legacy {
+            "INFDEV / LEGACY HUNGER OFF"
+        } else {
+            "INFDEV / SURVIVAL CHECKPOINT"
+        },
+        4,
+        1,
+    );
     screen.text(
         assets.font(),
         &format!("D:{} X:{cx} Y:{cy}", explorer.depth()),
@@ -341,7 +349,7 @@ fn draw_survival(
                 screen,
                 assets,
                 &entries,
-                if b { "Workbench" } else { "Hand Crafting" },
+                b.map_or("Hand Crafting", |k| k.item().display_name()),
                 9,
                 Some(s.selection),
             );

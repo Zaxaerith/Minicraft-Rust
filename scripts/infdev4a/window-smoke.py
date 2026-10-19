@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
             reader=threading.Thread(target=forward,daemon=True)
             reader.start()
             try:
-                process.wait(timeout=210 if mode.startswith("survival-") else 110)
+                process.wait(timeout=510 if mode.startswith("survival-") else 110)
             except subprocess.TimeoutExpired:
                 process.kill();process.wait()
                 raise
@@ -50,4 +50,4 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
     evidence=json.loads((root/"survival/survival-expect.json").read_text(encoding="utf-8"))
     (output/"infdev-survival-result.json").write_text(json.dumps(evidence,indent=2),encoding="utf-8")
     shutil.copyfile(root/"survival/infdev-survival.png",output/"infdev-survival.png")
-    print("PASS independent native Survival create/restart: empty inventory, earned resources, tools, collisions, workbench, mining underground, return, drops and disk state")
+    print("PASS independent native Survival create/restart: empty inventory, earned resources, tools, furnace/anvil, fuel, natural apple/food, mining underground, return, drops and disk state")

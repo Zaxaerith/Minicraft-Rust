@@ -360,7 +360,7 @@ fn survival_gui_uses_pixel_movement_inventory_crafting_errors_and_independent_sa
         ..Default::default()
     });
     wait(&mut explorer, |e| {
-        e.survival_state().unwrap().panel == Panel::Crafting(false)
+        e.survival_state().unwrap().panel == Panel::Crafting(None)
     });
     explorer.tick(&Input {
         attack: true,

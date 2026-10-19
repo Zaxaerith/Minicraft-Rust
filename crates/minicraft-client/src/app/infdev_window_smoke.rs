@@ -255,7 +255,7 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         presenter,
         assets,
         screen: Screen::new(),
-        deadline: Instant::now() + Duration::from_secs(if survival { 180 } else { 90 }),
+        deadline: Instant::now() + Duration::from_secs(if survival { 480 } else { 90 }),
     };
     let locale = Localization::load("en-us", &[]);
     let mut title = infdev_ui::title_menu(&locale, 7);

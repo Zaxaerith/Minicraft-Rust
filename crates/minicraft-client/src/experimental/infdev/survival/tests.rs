@@ -38,7 +38,7 @@ fn craft(w: &mut World, workbench: bool, name: &str) {
         act(w, Action::Close);
         act(w, Action::Interact);
     }
-    let i = recipes(workbench)
+    let i = recipes(workbench.then_some(StationKind::Workbench))
         .iter()
         .position(|r| r.product_name() == name)
         .unwrap();
@@ -65,10 +65,12 @@ fn select_stack(w: &mut World, id: ItemId) {
 fn target(w: &mut World, g: Ground) -> (i64, i64) {
     for y in -64..64 {
         for x in -64..64 {
-            if w.cell_at(0, x, y).unwrap().ground == g {
+            if w.cell_at(0, x, y).unwrap().ground == g && !w.survival().unwrap().station_at(0, x, y)
+            {
                 let stand = w.cell_at(0, x, y - 1).unwrap();
                 if !tile(stand).solid(stand.data)
                     && !matches!(stand.ground, Ground::Water | Ground::Lava | Ground::Hole)
+                    && !w.survival().unwrap().station_at(0, x, y - 1)
                 {
                     w.visit_layer(0, x, y - 1).unwrap();
                     act(w, Action::Move(0, 1));
@@ -99,6 +101,299 @@ fn gather(w: &mut World, g: Ground, id: ItemId, count: u16) {
         w.position(),
         serde_json::to_string(w.survival().unwrap()).unwrap()
     )
+}
+
+fn place_station(w: &mut World, id: ItemId) -> (i64, i64) {
+    let p = target(w, Ground::Grass);
+    select_stack(w, id);
+    ticks(w, 60);
+    act(w, Action::Attack);
+    assert!(w.survival().unwrap().station_at(0, p.0, p.1));
+    p
+}
+
+fn station_craft(w: &mut World, p: (i64, i64), kind: StationKind, name: &str) {
+    w.visit_layer(0, p.0, p.1 - 1).unwrap();
+    act(w, Action::Move(0, 1));
+    act(w, Action::Interact);
+    assert!(
+        w.survival().unwrap().panel == Panel::Crafting(Some(kind)),
+        "expected {kind:?} at {p:?}"
+    );
+    let i = recipes(Some(kind))
+        .iter()
+        .position(|r| r.product_name() == name)
+        .unwrap();
+    act(w, Action::Cursor(i as i32));
+    act(w, Action::Confirm);
+    act(w, Action::Close);
+}
+
+#[test]
+fn natural_resources_to_furnace_iron_anvil_tools_and_food_restore() {
+    let owned = Owned::new();
+    let mut w = World::create_survival(&owned.0, "Smelt", 42, 4).unwrap();
+    gather(&mut w, Ground::Tree, ItemId::Wood, 40);
+    craft(&mut w, false, "Workbench");
+    let bench = place_station(&mut w, ItemId::Workbench);
+    station_craft(&mut w, bench, StationKind::Workbench, "Wood Pickaxe");
+    gather(&mut w, Ground::Rock, ItemId::Stone, 25);
+    station_craft(&mut w, bench, StationKind::Workbench, "Rock Pickaxe");
+    station_craft(&mut w, bench, StationKind::Workbench, "Furnace");
+    let furnace = place_station(&mut w, ItemId::Furnace);
+    let i = w
+        .survival()
+        .unwrap()
+        .player
+        .inventory
+        .tools()
+        .iter()
+        .position(|t| t.kind == ToolKind::Pickaxe && t.tier == crate::item::ToolTier::Rock)
+        .unwrap();
+    let slot = w.survival().unwrap().player.inventory.slots().len() + i;
+    act(&mut w, Action::Inventory);
+    act(&mut w, Action::Cursor(slot as i32));
+    act(&mut w, Action::Confirm);
+    // Fixture positioning is explicit; harvesting and crafting are real actions.
+    for _ in 0..100 {
+        let inv = &w.survival().unwrap().player.inventory;
+        if inv.count(ItemId::IronOre) >= 30 {
+            break;
+        }
+        let mut found = None;
+        'scan: for y in -64..64 {
+            for x in -64..64 {
+                if w.cell_at(-1, x, y).unwrap().ground == Ground::IronOre {
+                    let stand = w.cell_at(-1, x, y - 1).unwrap();
+                    if !tile(stand).solid(stand.data)
+                        && !matches!(stand.ground, Ground::Water | Ground::Lava | Ground::Hole)
+                    {
+                        found = Some((x, y));
+                        break 'scan;
+                    }
+                }
+            }
+        }
+        let p = found.expect("natural underground iron");
+        w.visit_layer(-1, p.0, p.1 - 1).unwrap();
+        act(&mut w, Action::Move(0, 1));
+        for _ in 0..20 {
+            if w.cell(p.0, p.1).unwrap().ground != Ground::IronOre {
+                break;
+            }
+            ticks(&mut w, 100);
+            act(&mut w, Action::Attack);
+        }
+    }
+    assert!(
+        w.survival()
+            .unwrap()
+            .player
+            .inventory
+            .count(ItemId::IronOre)
+            >= 30
+    );
+    gather(&mut w, Ground::Rock, ItemId::Coal, 10);
+    let ore = w
+        .survival()
+        .unwrap()
+        .player
+        .inventory
+        .count(ItemId::IronOre);
+    let coal = w.survival().unwrap().player.inventory.count(ItemId::Coal);
+    for _ in 0..10 {
+        station_craft(&mut w, furnace, StationKind::Furnace, "Iron");
+    }
+    assert_eq!(
+        w.survival()
+            .unwrap()
+            .player
+            .inventory
+            .count(ItemId::IronOre),
+        ore - 30
+    );
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Coal),
+        coal - 10
+    );
+    station_craft(&mut w, bench, StationKind::Workbench, "Anvil");
+    let anvil = place_station(&mut w, ItemId::Anvil);
+    station_craft(&mut w, anvil, StationKind::Anvil, "Iron Pickaxe");
+    assert_eq!(
+        w.survival()
+            .unwrap()
+            .player
+            .inventory
+            .count(ItemId::IronIngot),
+        0
+    );
+    assert_eq!(
+        w.survival()
+            .unwrap()
+            .player
+            .inventory
+            .tools()
+            .last()
+            .unwrap()
+            .tier,
+        crate::item::ToolTier::Iron
+    );
+    // Food comes from actual TreeTile-style hit drops, never test injection.
+    gather(&mut w, Ground::Tree, ItemId::Apple, 1);
+    assert!(w.survival().unwrap().player.hunger < 10);
+    let food = w.survival().unwrap().player.inventory.count(ItemId::Apple);
+    let hunger = w.survival().unwrap().player.hunger;
+    select_stack(&mut w, ItemId::Apple);
+    ticks(&mut w, 60);
+    act(&mut w, Action::Attack);
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Apple),
+        food - 1
+    );
+    assert_eq!(w.survival().unwrap().player.hunger, hunger + 1);
+    let before = serde_json::to_value(w.survival().unwrap()).unwrap();
+    w.checkpoint().unwrap();
+    let path = w.directory().to_owned();
+    w.collect_garbage().unwrap();
+    drop(w);
+    let w = World::open(&path, 1).unwrap();
+    assert_eq!(serde_json::to_value(w.survival().unwrap()).unwrap(), before);
+}
+
+#[test]
+fn smelting_failures_and_station_pickup_do_not_consume_or_duplicate_items() {
+    let owned = Owned::new();
+    let mut w = World::create_survival(&owned.0, "FullSmelt", 42, 2).unwrap();
+    let mut s = w.survival().unwrap().clone();
+    s.player.inventory.add(ItemId::IronOre, 31);
+    s.player.inventory.add(ItemId::Coal, 11);
+    for _ in 0..25 {
+        s.player
+            .inventory
+            .add_tool(ToolItem::new(
+                ToolKind::Pickaxe,
+                crate::item::ToolTier::Wood,
+            ))
+            .unwrap();
+    }
+    s.panel = Panel::Crafting(Some(StationKind::Furnace));
+    s.selection = recipes(Some(StationKind::Furnace))
+        .iter()
+        .position(|r| r.product_name() == "Iron")
+        .unwrap();
+    let before = serde_json::to_value(&s).unwrap();
+    assert!(s.confirm().is_err());
+    assert_eq!(serde_json::to_value(&s).unwrap(), before);
+    s.player.inventory.take_tool(0).unwrap();
+    s.confirm().unwrap();
+    assert_eq!(s.player.inventory.count(ItemId::IronIngot), 1);
+    assert_eq!(s.player.inventory.count(ItemId::Coal), 10);
+    assert_eq!(s.player.inventory.count(ItemId::IronOre), 28);
+    s.player.inventory.remove(ItemId::Coal, 10);
+    let before = serde_json::to_value(&s).unwrap();
+    assert!(s.confirm().is_err());
+    assert_eq!(serde_json::to_value(&s).unwrap(), before);
+    s.panel = Panel::Closed;
+    for kind in [StationKind::Furnace, StationKind::Anvil] {
+        let p = s.target(&w).unwrap();
+        s.stations.push(Station {
+            depth: w.depth(),
+            x: p.0,
+            y: p.1,
+            kind,
+        });
+        s.act(&mut w, Action::Pickup).unwrap();
+        assert!(s.stations.is_empty());
+        assert!(
+            matches!(s.drops.last().unwrap().loot,Loot::Stack(st) if st.item==kind.item() && st.count==1)
+        );
+    }
+    s.validate().unwrap();
+}
+
+#[test]
+fn food_metabolism_pause_heal_starve_and_legacy_session_contracts() {
+    let owned = Owned::new();
+    let mut w = World::create_survival(&owned.0, "Food", 42, 2).unwrap();
+    let mut s = w.survival().unwrap().clone();
+    s.player.inventory.add(ItemId::Apple, 2);
+    s.player.active_item = Some(ActiveItem::Stack(ItemId::Apple));
+    let before = serde_json::to_value(&s).unwrap();
+    s.act(&mut w, Action::Attack).unwrap();
+    assert_eq!(
+        serde_json::to_value(&s).unwrap(),
+        before,
+        "full hunger retains food and stamina"
+    );
+    s.player.hunger = 8;
+    s.player.stamina = 0;
+    s.act(&mut w, Action::Attack).unwrap();
+    assert_eq!(s.player.inventory.count(ItemId::Apple), 2);
+    s.player.stamina = 1;
+    s.act(&mut w, Action::Attack).unwrap();
+    assert_eq!(s.player.hunger, 9);
+    assert_eq!(s.player.stamina, 0);
+    assert_eq!(s.player.inventory.count(ItemId::Apple), 1);
+    s.panel = Panel::Inventory;
+    let before = serde_json::to_value(&s).unwrap();
+    for _ in 0..121 {
+        s.act(&mut w, Action::Tick).unwrap();
+    }
+    assert_eq!(serde_json::to_value(&s).unwrap(), before);
+    s.player.health = 9;
+    s.player.hunger = 10;
+    s.player.hunger_charge_delay = 0;
+    for tick in 1..=80 {
+        metabolism::tick(&mut s.player, tick);
+    }
+    assert_eq!(s.player.health, 9);
+    metabolism::tick(&mut s.player, 81);
+    assert_eq!(s.player.health, 10);
+    s.player.hunger = 0;
+    s.player.health = 4;
+    s.player.hunger_starve_delay = 0;
+    for tick in 1..=119 {
+        metabolism::tick(&mut s.player, tick);
+    }
+    assert_eq!(s.player.health, 4);
+    metabolism::tick(&mut s.player, 120);
+    for tick in 121..=1000 {
+        metabolism::tick(&mut s.player, tick);
+    }
+    assert_eq!(s.player.health, 3, "Normal starvation floor, not Hardcore");
+    s.food_rules = FoodRules::Legacy;
+    s.panel = Panel::Closed;
+    s.stations.push(Station {
+        depth: 0,
+        x: 1,
+        y: 1,
+        kind: StationKind::Workbench,
+    });
+    let old = serde_json::to_value(&s).unwrap();
+    assert!(old.get("food_rules").is_none());
+    assert!(old["stations"][0].get("kind").is_none());
+    let mut restored: State = serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored).unwrap(),
+        old,
+        "byte-semantic old fields stay canonical"
+    );
+    let hunger = restored.player.hunger;
+    for _ in 0..3000 {
+        restored.act(&mut w, Action::Tick).unwrap();
+    }
+    assert_eq!(
+        restored.player.hunger, hunger,
+        "legacy v4 must not silently enable hunger"
+    );
+    restored.player.health = 0;
+    let inventory = serde_json::to_value(&restored.player.inventory).unwrap();
+    restored.act(&mut w, Action::Confirm).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored.player.inventory).unwrap(),
+        inventory,
+        "legacy death retains every instance"
+    );
 }
 
 #[test]

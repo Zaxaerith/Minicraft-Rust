@@ -2,7 +2,7 @@
 //! injection, teleports, terrain edits, or alternate game-action implementation.
 use super::*;
 use crate::{
-    experimental::infdev::survival::{self, Loot},
+    experimental::infdev::survival::{self, Loot, StationKind},
     item::{ItemId, ToolKind},
     world::ActiveItem,
 };
@@ -86,11 +86,16 @@ fn stack(h: &mut Host, e: &mut Explorer, id: ItemId) -> Result<(), String> {
         .ok_or("earned stack missing")?;
     select(h, e, i)
 }
-fn craft(h: &mut Host, e: &mut Explorer, bench: bool, name: &str) -> Result<(), String> {
+fn craft(
+    h: &mut Host,
+    e: &mut Explorer,
+    bench: Option<StationKind>,
+    name: &str,
+) -> Result<(), String> {
     pulse(
         h,
         e,
-        if bench {
+        if bench.is_some() {
             Input {
                 select: true,
                 ..Default::default()
@@ -138,6 +143,25 @@ fn craft(h: &mut Host, e: &mut Explorer, bench: bool, name: &str) -> Result<(), 
             ..Default::default()
         },
     )
+}
+
+fn place(h: &mut Host, e: &mut Explorer, id: ItemId, dir: Point) -> Result<Point, String> {
+    stack(h, e, id)?;
+    face(h, e, dir)?;
+    let p = (e.position().0 + dir.0, e.position().1 + dir.1);
+    h.wait(e, |e| e.survival_state().unwrap().player.attack_time == 0)?;
+    pulse(
+        h,
+        e,
+        Input {
+            attack: true,
+            ..Default::default()
+        },
+    )?;
+    if !e.survival_state().unwrap().station_at(e.depth(), p.0, p.1) {
+        return Err(format!("earned {id:?} placement failed"));
+    }
+    Ok(p)
 }
 
 type Point = (i64, i64);
@@ -260,7 +284,9 @@ fn mine(
             let needed = if matches!(p.active_item, Some(ActiveItem::Tool(_))) {
                 7
             } else {
-                1
+                // Do not deliberately spend the last bolt every bare-handed
+                // hit and repeatedly incur the real 40-tick exhaustion delay.
+                2
             };
             p.stamina >= needed && p.attack_time == 0
         })?;
@@ -389,7 +415,7 @@ pub(super) fn run(
             "PASS native Survival: naturally earned {} wood",
             count(e, ItemId::Wood)
         );
-        craft(h, e, false, "Workbench")?;
+        craft(h, e, None, "Workbench")?;
         println!("Survival window stage: earned workbench crafted");
         // Use the actual just-cleared tree site, leaving the player beside it.
         let d = match e.survival_state().unwrap().player.direction {
@@ -416,18 +442,32 @@ pub(super) fn run(
         if !e.survival_state().unwrap().station_at(0, bench.0, bench.1) {
             return Err("earned workbench placement failed".into());
         }
-        craft(h, e, true, "Wood Axe")?;
+        craft(h, e, Some(StationKind::Workbench), "Wood Axe")?;
         println!("Survival window stage: wood axe crafted");
-        craft(h, e, true, "Wood Pickaxe")?;
+        craft(h, e, Some(StationKind::Workbench), "Wood Pickaxe")?;
         println!("Survival window stage: wood pickaxe crafted");
-        gather(h, e, Ground::Rock, ItemId::Stone, 5, &mut samples)?;
+        gather(h, e, Ground::Rock, ItemId::Stone, 25, &mut samples)?;
         println!("Survival window stage: stone naturally mined");
-        gather(h, e, Ground::Tree, ItemId::Wood, 5, &mut samples)?;
+        gather(h, e, Ground::Tree, ItemId::Wood, 10, &mut samples)?;
         println!("Survival window stage: additional wood earned");
         navigate(h, e, stand, &mut samples)?;
         face(h, e, d)?;
-        craft(h, e, true, "Rock Pickaxe")?;
+        craft(h, e, Some(StationKind::Workbench), "Rock Pickaxe")?;
         println!("PASS native Survival: real workbench, wood tools, stone mining and Rock Pickaxe");
+        craft(h, e, Some(StationKind::Workbench), "Furnace")?;
+        // The original bench is on d; use the opposite naturally walkable tile.
+        let furnace_dir = (-d.0, -d.1);
+        let f = (stand.0 + furnace_dir.0, stand.1 + furnace_dir.1);
+        if e.visible_cell(f.0, f.1)
+            .is_some_and(|c| c.ground == Ground::Tree || c.ground == Ground::Rock)
+        {
+            let g = e.visible_cell(f.0, f.1).unwrap().ground;
+            mine(h, e, furnace_dir, g, &mut samples)?;
+        }
+        let furnace = place(h, e, ItemId::Furnace, furnace_dir)?;
+        println!("Survival window stage: earned furnace placed");
+        gather(h, e, Ground::Rock, ItemId::Coal, 10, &mut samples)?;
+        println!("Survival window stage: ten natural coal earned");
         // Same natural v3/v4 Seed 42 stair; normal pixel/collision movement only.
         navigate(h, e, (-32, -20), &mut samples)?;
         pulse(
@@ -441,7 +481,8 @@ pub(super) fn run(
         if e.depth() != -1 {
             return Err("natural Survival stairs did not descend".into());
         }
-        gather(h, e, Ground::IronOre, ItemId::IronOre, 1, &mut samples)?;
+        gather(h, e, Ground::IronOre, ItemId::IronOre, 30, &mut samples)?;
+        println!("Survival window stage: thirty natural iron ore earned");
         h.screen.save_png(&root.join("infdev-survival.png"))?;
         navigate(h, e, (-32, -20), &mut samples)?;
         pulse(
@@ -467,6 +508,85 @@ pub(super) fn run(
         )?;
         h.wait(e, |e| count(e, ItemId::IronOre) == before)?;
         println!("PASS native Survival: down mine / surface return / drop and repickup");
+        navigate(h, e, stand, &mut samples)?;
+        face(h, e, (furnace.0 - stand.0, furnace.1 - stand.1))?;
+        let ore = count(e, ItemId::IronOre);
+        let coal = count(e, ItemId::Coal);
+        for _ in 0..10 {
+            craft(h, e, Some(StationKind::Furnace), "Iron")?;
+        }
+        if count(e, ItemId::IronOre) != ore - 30
+            || count(e, ItemId::Coal) != coal - 10
+            || count(e, ItemId::IronIngot) != 10
+        {
+            return Err("real furnace did not conserve ore/fuel/ingots".into());
+        }
+        face(h, e, d)?;
+        craft(h, e, Some(StationKind::Workbench), "Anvil")?;
+        // Carry the furnace back into inventory; reuse its cleared location.
+        face(h, e, furnace_dir)?;
+        pulse(
+            h,
+            e,
+            Input {
+                pickup: true,
+                ..Default::default()
+            },
+        )?;
+        h.wait(e, |e| count(e, ItemId::Furnace) == 1)?;
+        place(h, e, ItemId::Anvil, furnace_dir)?;
+        craft(h, e, Some(StationKind::Anvil), "Iron Pickaxe")?;
+        let stone_target = count(e, ItemId::Stone)
+            .checked_add(1)
+            .ok_or("stone target overflow")?;
+        gather(
+            h,
+            e,
+            Ground::Rock,
+            ItemId::Stone,
+            stone_target,
+            &mut samples,
+        )?;
+        let iron_tool = e
+            .survival_state()
+            .unwrap()
+            .player
+            .inventory
+            .tools()
+            .iter()
+            .any(|t| {
+                t.kind == ToolKind::Pickaxe
+                    && t.tier == crate::item::ToolTier::Iron
+                    && t.durability < t.max_durability
+            });
+        if !iron_tool {
+            return Err("crafted iron pickaxe was not actually used".into());
+        }
+        println!("PASS native Survival: natural ore/coal -> furnace -> anvil -> used Iron Pickaxe");
+        gather(h, e, Ground::Tree, ItemId::Apple, 1, &mut samples)?;
+        h.wait(e, |e| {
+            e.survival_state().unwrap().player.hunger < 10
+                && e.survival_state().unwrap().player.attack_time == 0
+                && e.survival_state().unwrap().player.stamina > 0
+        })?;
+        stack(h, e, ItemId::Apple)?;
+        let apples = count(e, ItemId::Apple);
+        let hunger = e.survival_state().unwrap().player.hunger;
+        pulse(
+            h,
+            e,
+            Input {
+                attack: true,
+                ..Default::default()
+            },
+        )?;
+        if count(e, ItemId::Apple) != apples - 1
+            || e.survival_state().unwrap().player.hunger != hunger + 1
+        {
+            return Err("naturally earned apple did not feed the player exactly once".into());
+        }
+        h.screen.save_png(&root.join("infdev-survival.png"))?;
+        println!("PASS native Survival: naturally dropped apple eaten with real hunger/stamina");
     } else {
         let expected: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&evidence).map_err(|e| e.to_string())?)
@@ -477,6 +597,7 @@ pub(super) fn run(
             || serde_json::json!(e.position()) != expected["position"]
             || serde_json::json!(e.depth()) != expected["depth"]
             || serde_json::json!(s.player.health) != expected["health"]
+            || serde_json::json!(s.food_rules) != expected["food_rules"]
         {
             return Err("native Survival player/inventory did not restore".into());
         }
@@ -496,7 +617,7 @@ pub(super) fn run(
     let mut check = paged::World::open(&directory, 1)?;
     if creating {
         let s = check.survival().unwrap();
-        let mut value = serde_json::json!({"inventory":s.player.inventory,"health":s.player.health,"stamina":s.player.stamina,"position":check.position(),"depth":check.depth(),"stations":s.stations.len()});
+        let mut value = serde_json::json!({"inventory":s.player.inventory,"health":s.player.health,"hunger":s.player.hunger,"food_rules":s.food_rules,"stamina":s.player.stamina,"position":check.position(),"depth":check.depth(),"stations":s.stations});
         let mut terrain = Vec::new();
         samples.sort();
         samples.dedup();
@@ -525,20 +646,12 @@ pub(super) fn run(
                 return Err("a naturally mined resource regenerated after process restart".into());
             }
         }
-        if serde_json::json!(check.survival().unwrap().stations.len()) != value["stations"] {
+        if serde_json::json!(check.survival().unwrap().stations) != value["stations"] {
             return Err("real workbench did not restore".into());
         }
     }
-    if creating
-        && !matches!(
-            check.survival().unwrap().player.active_item,
-            Some(ActiveItem::Stack(ItemId::IronOre))
-        )
-    {
-        return Err("active stack was not preserved".into());
-    }
     println!(
-        "PASS real Survival window {}: empty bag -> natural wood -> workbench -> tools -> rock -> underground ore -> return -> Save/Quit/restart; no fixture injection",
+        "PASS real Survival window {}: empty bag -> resources -> furnace -> iron -> anvil -> iron tool -> natural food -> Save/Quit/restart; no fixture injection",
         if creating { "create" } else { "reopen" }
     );
     Ok(())
