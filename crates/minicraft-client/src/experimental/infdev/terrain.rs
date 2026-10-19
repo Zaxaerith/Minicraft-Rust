@@ -3,6 +3,11 @@
 use super::{Cell, Ground};
 use crate::progression::Simplex;
 
+pub mod layers;
+pub use layers::{
+    LayerComparison, LayerSample, compare_layer_observation, generate_layer, sample_layer,
+};
+
 const SCALES: [f64; 10] = [1., 4., 8., 16., 32., 64., 128., 512., 2048., 8192.];
 const TEMP: [f64; 10] = [0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 0.05, 0.04, 0.01];
 const HEIGHT: [f64; 10] = [0.005, 0.01, 0.02, 0.01, 0.02, 0.05, 0.1, 0.2, 0.7, 0.2];

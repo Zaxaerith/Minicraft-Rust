@@ -7,6 +7,12 @@ use std::{
 
 pub fn run(command: &str, args: Vec<String>) -> Result<(), String> {
     let mut world = match (command, args.as_slice()) {
+        ("infdev-layers-create", [root, name, seed]) => Host::Paged(paged::World::create_layers(
+            Path::new(root),
+            name,
+            seed.parse::<i64>().map_err(|e| e.to_string())?,
+            4,
+        )?),
         ("infdev-surface-create", [root, name, seed]) => Host::Paged(paged::World::create(
             Path::new(root),
             name,
@@ -43,7 +49,7 @@ pub fn run(command: &str, args: Vec<String>) -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: infdev-surface-create ROOT NAME SEED | infdev-open DIRECTORY | infdev-upgrade SOURCE ROOT NAME | infdev-create ROOT NAME SEED (legacy)".into(),
+                "usage: infdev-layers-create ROOT NAME SEED | infdev-surface-create ROOT NAME SEED | infdev-open DIRECTORY | infdev-upgrade SOURCE ROOT NAME | infdev-create ROOT NAME SEED (legacy)".into(),
             );
         }
     };
@@ -53,7 +59,7 @@ pub fn run(command: &str, args: Vec<String>) -> Result<(), String> {
         world.directory().display()
     );
     println!(
-        "Commands: status | view | move DX DY (each -256..256) | set grass|water|sand|rock|tree|flower|cactus|stairs DATA | visit X Y | gc | unload | save | quit"
+        "Commands: status | view | move DX DY | set GROUND DATA | visit X Y | visit-depth DEPTH X Y (diagnostic) | stairs | gc | unload | save | quit"
     );
     if world.recovered_backup() {
         println!("RECOVERED complete validated backup checkpoint");
@@ -105,6 +111,18 @@ pub fn run(command: &str, args: Vec<String>) -> Result<(), String> {
                     "flower" => Ground::Flower,
                     "cactus" => Ground::Cactus,
                     "stairs" => Ground::StairsDown,
+                    "up" => Ground::StairsUp,
+                    "dirt" => Ground::Dirt,
+                    "iron" => Ground::IronOre,
+                    "gold" => Ground::GoldOre,
+                    "gem" => Ground::GemOre,
+                    "lapis" => Ground::Lapis,
+                    "lava" => Ground::Lava,
+                    "obsidian" => Ground::Obsidian,
+                    "obsidian-wall" => Ground::ObsidianWall,
+                    "raw-obsidian" => Ground::RawObsidian,
+                    "ornate-obsidian" => Ground::OrnateObsidian,
+                    "obsidian-door" => Ground::ObsidianDoor,
                     _ => return Err("unknown experimental ground".into()),
                 };
                 let data = data.parse::<u16>().map_err(|e| e.to_string())?;
@@ -119,6 +137,24 @@ pub fn run(command: &str, args: Vec<String>) -> Result<(), String> {
                 )?;
                 status(&mut world)?;
             }
+            ["visit-depth", depth, x, y] => match &mut world {
+                Host::Paged(w) => {
+                    w.visit_layer(
+                        depth.parse::<i8>().map_err(|e| e.to_string())?,
+                        x.parse::<i64>().map_err(|e| e.to_string())?,
+                        y.parse::<i64>().map_err(|e| e.to_string())?,
+                    )?;
+                    status(&mut world)?;
+                }
+                Host::Legacy(_) => return Err("legacy surface-only world".into()),
+            },
+            ["stairs"] => match &mut world {
+                Host::Paged(w) => {
+                    minicraft_client::experimental::infdev::stairs::travel(w)?;
+                    status(&mut world)?;
+                }
+                Host::Legacy(_) => return Err("legacy surface-only world".into()),
+            },
             ["gc"] => match &mut world {
                 Host::Paged(w) => println!("COLLECTED {:?}", w.collect_garbage()?),
                 Host::Legacy(_) => {
@@ -158,7 +194,11 @@ impl Host {
     fn generator(&self) -> String {
         match self {
             Self::Legacy(_) => "LegacyHeightV1/4A".into(),
-            Self::Paged(w) => format!("{:?}/paged-v2", w.generator()),
+            Self::Paged(w) => format!(
+                "{:?}/paged-v{}",
+                w.generator(),
+                if w.is_layered() { 3 } else { 2 }
+            ),
         }
     }
     fn seed(&self) -> i64 {
@@ -250,6 +290,9 @@ fn status(world: &mut Host) -> Result<(), String> {
         world.resident_count(),
         world.saved_chunk_count()?
     );
+    if let Host::Paged(w) = world {
+        println!("depth={}", w.depth());
+    }
     if let Host::Paged(w) = world
         && let Some(issue) = w.collection_warning()
     {
@@ -278,6 +321,18 @@ fn view(world: &mut Host) -> Result<(), String> {
                     Ground::Flower => '*',
                     Ground::Cactus => 'C',
                     Ground::StairsDown => '>',
+                    Ground::StairsUp => '<',
+                    Ground::Dirt => '.',
+                    Ground::IronOre => 'I',
+                    Ground::GoldOre => 'G',
+                    Ground::GemOre => '$',
+                    Ground::Lapis => 'L',
+                    Ground::Lava => '!',
+                    Ground::ObsidianWall => 'O',
+                    Ground::Obsidian => '=',
+                    Ground::RawObsidian => '%',
+                    Ground::OrnateObsidian => '+',
+                    Ground::ObsidianDoor => 'D',
                 }
             });
         }
@@ -331,6 +386,57 @@ pub fn compare(args: Vec<String>) -> Result<(), String> {
     }
     println!(
         "TOTAL cells={total}, time-eligible={eligible}, actual differing time choices={differences}; NOT a full deterministic-tile equality claim"
+    );
+    Ok(())
+}
+
+pub fn compare_underground(args: Vec<String>) -> Result<(), String> {
+    let [directory] = args.as_slice() else {
+        return Err("usage: infdev-underground-check OUTPUT_DIRECTORY".into());
+    };
+    let root = Path::new(directory);
+    let cases =
+        std::fs::read_to_string(root.join("underground-cases.tsv")).map_err(|e| e.to_string())?;
+    let mut total = terrain::layers::LayerComparison::default();
+    for line in cases.lines() {
+        let v: Vec<_> = line.split('\t').collect();
+        if v.len() != 7 {
+            return Err("invalid underground case".into());
+        }
+        let expected = format!("underground-{}-{}-{}-{}.bin", v[1], v[0], v[2], v[3]);
+        if v[4] != expected || expected.contains(['/', '\\']) {
+            return Err("invalid underground filename".into());
+        }
+        let bytes = std::fs::read(root.join(expected)).map_err(|e| e.to_string())?;
+        let r = terrain::layers::compare_layer_observation(
+            &bytes,
+            v[0].parse::<i64>().map_err(|e| e.to_string())?,
+            v[1].parse::<i8>().map_err(|e| e.to_string())?,
+            v[2].parse::<i64>().map_err(|e| e.to_string())?,
+            v[3].parse::<i64>().map_err(|e| e.to_string())?,
+        )?;
+        println!(
+            "PASS Java underground {}/{}/{}/{}: cells={} time-candidates={} differing-time-choices={} actual-decorator-writes={}",
+            v[0],
+            v[1],
+            v[2],
+            v[3],
+            r.cells,
+            r.time_eligible,
+            r.time_choice_differences,
+            r.decoration_cells
+        );
+        total.cells += r.cells;
+        total.time_eligible += r.time_eligible;
+        total.time_choice_differences += r.time_choice_differences;
+        total.decoration_cells += r.decoration_cells;
+    }
+    if total.cells == 0 {
+        return Err("no Java underground observations".into());
+    }
+    println!(
+        "TOTAL {:?}; time stair choices and actual random decorator writes are NOT deterministic Tile equality claims",
+        total
     );
     Ok(())
 }

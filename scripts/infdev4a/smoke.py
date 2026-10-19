@@ -1,4 +1,4 @@
-"""Real Windows processes: both storage generations, upgrade, GC and termination.
+"""Real Windows processes: all storage generations, upgrade, GC and termination.
 Only the invocation's exclusively created temporary fixtures are ever removed.
 """
 import subprocess
@@ -30,14 +30,18 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-smoke-", dir=output) as ow
     for create,namespace,name,ground,data in [
         ("infdev-create","infdev4a-v1","Legacy42","rock",731),
         ("infdev-surface-create","infdev-v2","Surface42","flower",11),
+        ("infdev-layers-create","infdev-v3","Layers42","iron",731),
     ]:
         world=root/namespace/name
-        commands=f"move -65 -1\nset {ground} {data}\nsave\nunload\nview\nsave\n"
-        if namespace=="infdev-v2":commands+="gc\n"
+        commands="move -65 -1\n"
+        if namespace=="infdev-v3":commands+="visit-depth -2 -65 -1\n"
+        commands+=f"set {ground} {data}\nsave\nunload\nview\nsave\n"
+        if namespace!="infdev4a-v1":commands+="gc\n"
         run([create,root,name,42],commands+"quit\n")
         text=run(["infdev-open",world],"view\nquit\n")
         assert "position=(-65,-1)" in text and f"data={data}" in text
-        manifest=world/("checkpoint.json" if namespace=="infdev-v2" else "manifest.json")
+        if namespace=="infdev-v3":assert "depth=-2" in text
+        manifest=world/("manifest.json" if namespace=="infdev4a-v1" else "checkpoint.json")
         checkpoint=manifest.read_bytes()
         process=subprocess.Popen([str(binary),"infdev-open",str(world)],stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding="utf-8")
@@ -58,10 +62,10 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-smoke-", dir=output) as ow
         text=run(["infdev-open",world],"view\nquit\n")
         assert f"data={data}" in text
         run([create,root,name,43],"",check=False)
-        if namespace=="infdev-v2":
+        if namespace!="infdev4a-v1":
             manifest.write_bytes(b"truncated checkpoint")
             text=run(["infdev-open",world],"view\nquit\n")
-            assert "RECOVERED" in text and "data=11" in text
+            assert "RECOVERED" in text and f"data={data}" in text
             assert (world/"gc-recovery.hold").exists()
             objects=snapshot(world/"chunks")|{"nodes/"+k:v for k,v in snapshot(world/"nodes").items()}
             run(["infdev-open",world],"gc\n",check=False)
@@ -72,4 +76,4 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-smoke-", dir=output) as ow
     assert "LegacyHeightV1/paged-v2" in text and "data=731" in text
     assert snapshot(source)==before
     run(["infdev-upgrade",source,root,"Converted42"],"",check=False)
-    print("PASS both generations: boundary/restart/forced termination/duplicate refusal; paged GC+corrupt recovery pin; read-only copy upgrade")
+    print("PASS v1/v2/v3: boundary/restart/forced termination/duplicate refusal; paged GC+corrupt recovery pin; independent underground checkpoint; read-only copy upgrade")

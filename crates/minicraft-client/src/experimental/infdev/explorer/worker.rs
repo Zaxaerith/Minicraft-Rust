@@ -12,12 +12,17 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
 pub(super) fn needed(position: (i64, i64)) -> BTreeSet<Key> {
+    needed_at(0, position)
+}
+
+pub(super) fn needed_at(depth: i8, position: (i64, i64)) -> BTreeSet<Key> {
     let mut keys = BTreeSet::new();
     for dx in [-VIEW_X, 0, VIEW_X] {
         for dy in [-VIEW_Y, 0, VIEW_Y] {
             if let (Some(x), Some(y)) = (position.0.checked_add(dx), position.1.checked_add(dy)) {
-                keys.insert(Key::at(x, y));
+                keys.insert(Key::at_depth(depth, x, y));
             }
         }
     }
@@ -30,7 +35,7 @@ fn load_chunk(world: &mut World, key: Key) -> Result<Arc<[Cell]>, String> {
     let mut cells = Vec::with_capacity(4096);
     for y in 0..64 {
         for x in 0..64 {
-            cells.push(world.cell(origin_x + x, origin_y + y)?);
+            cells.push(world.cell_at(key.depth, origin_x + x, origin_y + y)?);
         }
     }
     Ok(cells.into())
@@ -38,9 +43,18 @@ fn load_chunk(world: &mut World, key: Key) -> Result<Arc<[Cell]>, String> {
 
 fn open(start: Start) -> Result<World, String> {
     match start {
-        Start::Create { root, name, seed } => {
+        Start::Create {
+            root,
+            name,
+            seed,
+            layered,
+        } => {
             std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-            World::create(&root, &name, seed, 16)
+            if layered {
+                World::create_layers(&root, &name, seed, 16)
+            } else {
+                World::create(&root, &name, seed, 16)
+            }
         }
         Start::Open(directory) => World::open(&directory, 16),
     }
@@ -56,6 +70,8 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             };
             let snapshot = Snapshot {
                 position: world.position(),
+                depth: world.depth(),
+                layered: world.is_layered(),
                 status: status.into(),
                 ..Snapshot::default()
             };
@@ -127,39 +143,67 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                 if let Some(world) = world.as_mut() {
                     let result = match command {
                         Command::Move(dx, dy) => world.step(dx, dy),
+                        Command::Stairs => crate::experimental::infdev::stairs::travel(world),
                         Command::Edit(dx, dy) => {
                             let (x, y) = world.position();
                             match (x.checked_add(i64::from(dx)), y.checked_add(i64::from(dy))) {
-                                (Some(x), Some(y)) => world.cell(x, y).and_then(|old| {
-                                    // Deliberately limited, reversible probe: only
-                                    // Grass <-> Flower ordinal 0. Other terrain is untouched.
-                                    let new = match old {
-                                        Cell {
-                                            ground: Ground::Grass,
-                                            data: 0,
-                                        } => Cell {
-                                            ground: Ground::Flower,
-                                            data: 0,
-                                        },
-                                        Cell {
-                                            ground: Ground::Flower,
-                                            data: 0,
-                                        } => Cell {
-                                            ground: Ground::Grass,
-                                            data: 0,
-                                        },
-                                        _ => return Err("EDIT ONLY GRASS / OXEYE DAISY".into()),
-                                    };
-                                    world.set_cell(x, y, new)?;
-                                    state.chunks.remove(&Key::at(x, y));
-                                    Ok(())
-                                }),
+                                (Some(x), Some(y)) => {
+                                    world.cell_at(world.depth(), x, y).and_then(|old| {
+                                        // Deliberately limited, reversible probe: only
+                                        // Grass <-> Flower ordinal 0. Other terrain is untouched.
+                                        let new = match old {
+                                            Cell {
+                                                ground: Ground::Grass,
+                                                data: 0,
+                                            } if world.depth() == 0 => Cell {
+                                                ground: Ground::Flower,
+                                                data: 0,
+                                            },
+                                            Cell {
+                                                ground: Ground::Flower,
+                                                data: 0,
+                                            } if world.depth() == 0 => Cell {
+                                                ground: Ground::Grass,
+                                                data: 0,
+                                            },
+                                            Cell {
+                                                ground: Ground::Dirt,
+                                                data: 0,
+                                            } if world.depth() < 0 => Cell {
+                                                ground: Ground::Rock,
+                                                data: 0,
+                                            },
+                                            Cell {
+                                                ground: Ground::Rock,
+                                                data: 0,
+                                            } if world.depth() < 0 => Cell {
+                                                ground: Ground::Dirt,
+                                                data: 0,
+                                            },
+                                            _ => {
+                                                return Err(if world.depth() < 0 {
+                                                    "EDIT ONLY DIRT / ROCK"
+                                                } else {
+                                                    "EDIT ONLY GRASS / OXEYE DAISY"
+                                                }
+                                                .into());
+                                            }
+                                        };
+                                        world.set_cell_at(world.depth(), x, y, new)?;
+                                        state.chunks.remove(&Key::at_depth(world.depth(), x, y));
+                                        Ok(())
+                                    })
+                                }
                                 _ => Err("EDIT COORDINATE OVERFLOW".into()),
                             }
                         }
                         Command::Quit(_) => unreachable!("quit handled above"),
                     };
+                    if world.depth() != state.depth {
+                        state.chunks.clear();
+                    }
                     state.position = world.position();
+                    state.depth = world.depth();
                     state.save_failed = false;
                     state.status = match result {
                         Ok(()) => "FLIGHT EXPLORER / NOT SURVIVAL".into(),
@@ -172,7 +216,7 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             None => (),
         }
         if let Some(world) = world.as_mut() {
-            let keys = needed(state.position);
+            let keys = needed_at(state.depth, state.position);
             state.chunks.retain(|key, _| keys.contains(key));
             if !touched_chunk
                 && !failed_load
@@ -192,9 +236,11 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                 }
                 changed = true;
             }
-            state.ready = state
-                .chunks
-                .contains_key(&Key::at(state.position.0, state.position.1));
+            state.ready = state.chunks.contains_key(&Key::at_depth(
+                state.depth,
+                state.position.0,
+                state.position.1,
+            ));
             if !state.save_failed
                 && let Some(warning) = world.collection_warning()
             {

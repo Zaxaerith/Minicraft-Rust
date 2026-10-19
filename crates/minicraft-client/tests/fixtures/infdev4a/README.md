@@ -26,3 +26,19 @@ actual differences and validate the original allowed domain; they are never
 claimed bit-exact. All other fields/cells compare exactly.
 The terrain cases include the first/last signed-i32 tile chunks. Outside that
 Java coordinate domain, Rust's signed-i64 address extension is tested separately.
+
+`underground-observation.zip` contains 36 actual stage3 chunks (147,456 cells)
+from the same pinned source: depths -1/-2/-3/-4, signed seeds, positive and
+negative adjacent chunks, and both signed-i32 coordinate edges. Run the same
+`run-terrain.ps1`; it executes `UndergroundOracle` after the surface Oracle.
+Each row retains original Tile kind, big-endian data, the actual selected biome,
+the original time-random stair eligibility and final-writer decoration flag.
+A read-only ChunkManager subclass records whether the original Structure.draw
+performed the final tile write; no source algorithm or RNG is substituted.
+Time-seeded stairs are compared by their exact allowed original domain;
+random ornate-pool writes are explicitly counted rather than claimed equal.
+Rust currently implements the dungeon base terrain, not those order-dependent
+random pools. The fixture also retains naturally generated parent stair
+coordinates verified by the actual original Level.loadChunk at all four
+underground transitions; those time-dependent coordinates are observations,
+not a deterministic complete-World golden.

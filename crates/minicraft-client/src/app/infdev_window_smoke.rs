@@ -4,7 +4,7 @@ use super::{
     infdev_ui::{self, Action, Browser},
     *,
 };
-use crate::experimental::infdev::{Cell, Ground, explorer::Explorer};
+use crate::experimental::infdev::{Cell, Ground, explorer::Explorer, paged, stairs};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -77,6 +77,139 @@ impl Host {
         }
         Ok(())
     }
+
+    fn stairs(&mut self, explorer: &mut Explorer, depth: i8) -> Result<(), String> {
+        for _ in 0..6 {
+            explorer.tick(&Input::default());
+        }
+        explorer.tick(&Input {
+            pickup: true,
+            ..Default::default()
+        });
+        self.wait(explorer, |e| e.depth() == depth && e.is_ready())
+    }
+}
+
+fn natural_down(depth: i8, position: (i64, i64)) -> Result<(i64, i64), String> {
+    let center = paged::Key::at_depth(depth, position.0, position.1);
+    for radius in 0_i64..=8 {
+        let mut best = None;
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let (cx, cy) = (center.x + dx, center.y + dy);
+                for (index, cell) in stairs::generate(42, depth, cx, cy)?.iter().enumerate() {
+                    if cell.ground == Ground::StairsDown {
+                        let p = (cx * 64 + (index % 64) as i64, cy * 64 + (index / 64) as i64);
+                        let distance = p.0.abs_diff(position.0) + p.1.abs_diff(position.1);
+                        if best.is_none_or(|(d, _)| distance < d) {
+                            best = Some((distance, p));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((_, p)) = best {
+            return Ok(p);
+        }
+    }
+    Err("No naturally generated staircase in bounded diagnostic discovery".into())
+}
+
+fn edit_underground(host: &mut Host, explorer: &mut Explorer) -> Result<serde_json::Value, String> {
+    host.wait(explorer, |e| {
+        [-7, 0, 7].into_iter().all(|dx| {
+            [-5, 0, 5].into_iter().all(|dy| {
+                e.visible_cell(e.position().0 + dx, e.position().1 + dy)
+                    .is_some()
+            })
+        })
+    })?;
+    let (px, py) = explorer.position();
+    let target = (-5..=5)
+        .flat_map(|dy| (-7..=7).map(move |dx| (px + dx, py + dy)))
+        .find_map(|(x, y)| {
+            explorer
+                .visible_cell(x, y)
+                .filter(|c| {
+                    matches!(
+                        c,
+                        Cell {
+                            ground: Ground::Dirt | Ground::Rock,
+                            data: 0
+                        }
+                    )
+                })
+                .map(|c| (x, y, c))
+        })
+        .ok_or("No natural editable underground tile in loaded viewport")?;
+    let (x, y, before) = target;
+    host.walk(explorer, (x, y - 2))?;
+    host.walk(explorer, (x, y - 1))?;
+    explorer.tick(&Input {
+        attack: true,
+        ..Default::default()
+    });
+    let after = Cell {
+        ground: if before.ground == Ground::Dirt {
+            Ground::Rock
+        } else {
+            Ground::Dirt
+        },
+        data: 0,
+    };
+    host.wait(explorer, |e| e.visible_cell(x, y) == Some(after))?;
+    Ok(
+        serde_json::json!({"depth":explorer.depth(),"edited":[x,y],"ground":after.ground as u8,"data":0}),
+    )
+}
+
+fn explore_layers(host: &mut Host, explorer: &mut Explorer, root: &Path) -> Result<(), String> {
+    let evidence = root.join("gui-expect.json");
+    let mut surface: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&evidence).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    surface["depth"] = 0.into();
+    let mut edits = vec![surface];
+    let mut links = Vec::new();
+    for depth in (-4..=-1).rev() {
+        let stair = natural_down(explorer.depth(), explorer.position())?;
+        println!(
+            "Natural v3 stair depth={} position={stair:?}",
+            explorer.depth()
+        );
+        host.walk(explorer, stair)?;
+        links.push(stair);
+        host.stairs(explorer, depth)?;
+        // Explicitly cross an underground chunk boundary through normal input.
+        if depth == -1 {
+            host.walk(explorer, (stair.0 - 70, stair.1 - 65))?;
+        }
+        edits.push(edit_underground(host, explorer)?);
+        if depth == -3 {
+            host.screen.save_png(&root.join("infdev-underground.png"))?;
+        }
+    }
+    for (index, stair) in links.iter().enumerate().rev() {
+        host.walk(explorer, *stair)?;
+        host.stairs(explorer, -(index as i8))?;
+    }
+    if explorer.depth() != 0 {
+        return Err("Failed to return through complete staircase chain".into());
+    }
+    // Save underground, after already proving the complete round trip.
+    host.stairs(explorer, -1)?;
+    let edited = &edits[1];
+    let x = edited["edited"][0].as_i64().ok_or("edit x missing")?;
+    let y = edited["edited"][1].as_i64().ok_or("edit y missing")?;
+    host.walk(explorer, (x, y - 1))?;
+    let mut final_state = edited.clone();
+    final_state["position"] = serde_json::json!(explorer.position());
+    final_state["edits"] = serde_json::json!(edits);
+    final_state["stairs"] = serde_json::json!(links);
+    fs_write_evidence(&evidence, final_state)
 }
 
 pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
@@ -172,7 +305,13 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         return Err("Experimental browser did not start a session".into());
     };
     host.wait(&mut explorer, |e| {
-        e.is_ready() && e.visible_chunk_count() == 4
+        e.is_ready()
+            && [-11, 11].into_iter().all(|dx| {
+                [-8, 8].into_iter().all(|dy| {
+                    e.visible_cell(e.position().0 + dx, e.position().1 + dy)
+                        .is_some()
+                })
+            })
     })?;
     let evidence = root.join("gui-expect.json");
     if mode == "create" {
@@ -224,6 +363,7 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             &evidence,
             serde_json::json!({"position":explorer.position(),"edited":[x,y],"ground":after.ground as u8,"data":after.data}),
         )?;
+        explore_layers(&mut host, &mut explorer, &root)?;
     } else {
         let expected: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&evidence).map_err(|e| e.to_string())?)
@@ -236,6 +376,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         };
         if explorer.position() != array("position")? {
             return Err("Reopened GUI position differs".into());
+        }
+        if Some(i64::from(explorer.depth())) != expected["depth"].as_i64() {
+            return Err("Reopened GUI depth differs".into());
         }
         let (x, y) = array("edited")?;
         host.wait(&mut explorer, |e| e.visible_cell(x, y).is_some())?;
@@ -255,10 +398,32 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
     host.wait(&mut explorer, Explorer::has_finished)?;
     explorer.finish()?;
     // The exact GUI-started world is now unlocked and independently openable.
-    let check =
-        crate::experimental::infdev::paged::World::open(&root.join("infdev-v2/Window42"), 1)?;
+    let mut check = paged::World::open(&root.join("infdev-v3/Window42"), 1)?;
+    let evidence: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&evidence).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    for edit in evidence["edits"]
+        .as_array()
+        .ok_or("missing multilayer edit evidence")?
+    {
+        let depth = edit["depth"].as_i64().ok_or("missing edit depth")? as i8;
+        let x = edit["edited"][0].as_i64().ok_or("missing edit x")?;
+        let y = edit["edited"][1].as_i64().ok_or("missing edit y")?;
+        let cell = check.cell_at(depth, x, y)?;
+        if Some(cell.ground as u64) != edit["ground"].as_u64()
+            || Some(u64::from(cell.data)) != edit["data"].as_u64()
+        {
+            return Err("A saved layer edit differs".into());
+        }
+    }
     println!(
-        "PASS real window {mode}: title/browser, natural surface, scripted Input, negative/positive chunk traversal, edit, Save & Quit; position={:?}",
+        "PASS real window {mode}: {}; five persisted layer edits checked; depth={} position={:?}",
+        if mode == "create" {
+            "legal stairs down to -4 and back; scripted negative/positive exploration"
+        } else {
+            "restored underground position and terrain; Save & Quit"
+        },
+        check.depth(),
         check.position()
     );
     Ok(())

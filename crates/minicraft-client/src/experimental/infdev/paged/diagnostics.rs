@@ -29,11 +29,16 @@ pub fn measure_storage(output: &Path) -> Result<(), String> {
         for x in 0..count {
             let key = if dataset == "natural_java_surface" {
                 Key {
+                    depth: 0,
                     x: (x % 8) as i64 - 4,
                     y: (x / 8) as i64 - 4,
                 }
             } else {
-                Key { x: x as i64, y: 0 }
+                Key {
+                    depth: 0,
+                    x: x as i64,
+                    y: 0,
+                }
             };
             let cells = if dataset == "natural_java_surface" {
                 terrain::generate(42, key.x, key.y)

@@ -24,6 +24,8 @@ const MOVE_TICKS: u8 = 6;
 #[derive(Clone, Default)]
 struct Snapshot {
     position: (i64, i64),
+    depth: i8,
+    layered: bool,
     chunks: BTreeMap<Key, Arc<[Cell]>>,
     status: String,
     ready: bool,
@@ -33,7 +35,7 @@ struct Snapshot {
 impl Snapshot {
     fn cell(&self, x: i64, y: i64) -> Option<Cell> {
         self.chunks
-            .get(&Key::at(x, y))?
+            .get(&Key::at_depth(self.depth, x, y))?
             .get((x.rem_euclid(64) + y.rem_euclid(64) * 64) as usize)
             .copied()
     }
@@ -42,6 +44,7 @@ impl Snapshot {
 enum Command {
     Move(i32, i32),
     Edit(i32, i32),
+    Stairs,
     Quit(Option<SyncSender<Result<(), String>>>),
 }
 
@@ -50,6 +53,7 @@ enum Start {
         root: PathBuf,
         name: String,
         seed: i64,
+        layered: bool,
     },
     Open(PathBuf),
 }
@@ -75,7 +79,22 @@ impl Explorer {
     /// Returns immediately after starting the worker; initialization errors are
     /// displayed in `status`, without performing filesystem work on the GUI.
     pub fn create(root: PathBuf, name: String, seed: i64) -> Result<Self, String> {
-        Self::start(Start::Create { root, name, seed })
+        Self::start(Start::Create {
+            root,
+            name,
+            seed,
+            layered: false,
+        })
+    }
+
+    /// A separate v3 world; opening v2 never upgrades or regenerates its surface.
+    pub fn create_layers(root: PathBuf, name: String, seed: i64) -> Result<Self, String> {
+        Self::start(Start::Create {
+            root,
+            name,
+            seed,
+            layered: true,
+        })
     }
 
     pub fn open(directory: PathBuf) -> Result<Self, String> {
@@ -111,6 +130,12 @@ impl Explorer {
     pub fn position(&self) -> (i64, i64) {
         self.snapshot.position
     }
+    pub fn depth(&self) -> i8 {
+        self.snapshot.depth
+    }
+    pub fn is_layered(&self) -> bool {
+        self.snapshot.layered
+    }
     pub fn status(&self) -> &str {
         &self.snapshot.status
     }
@@ -129,7 +154,10 @@ impl Explorer {
         while let Ok(snapshot) = self.updates.try_recv() {
             let old = self.snapshot.position;
             let next = snapshot.position;
-            if let (Some(dx), Some(dy)) = (next.0.checked_sub(old.0), next.1.checked_sub(old.1))
+            if snapshot.depth != self.snapshot.depth {
+                self.camera_offset = (0, 0);
+            } else if let (Some(dx), Some(dy)) =
+                (next.0.checked_sub(old.0), next.1.checked_sub(old.1))
                 && (-1..=1).contains(&dx)
                 && (-1..=1).contains(&dy)
             {
@@ -179,6 +207,12 @@ impl Explorer {
         }
         if self.cooldown > 0 {
             self.cooldown -= 1;
+        }
+        if input.pickup {
+            if !self.send(Command::Stairs) {
+                self.snapshot.status = "BUSY; RETRY STAIRS AFTER LOADING".into();
+            }
+            return;
         }
         if input.attack {
             if !self.send(Command::Edit(self.direction.0, self.direction.1)) {

@@ -193,8 +193,15 @@ impl World {
             return Err("invalid chunk cell count".into());
         }
         let mut bytes = Vec::with_capacity(Domain::Chunks.limit());
-        bytes.extend_from_slice(b"MCIFCH02");
+        bytes.extend_from_slice(if self.is_layered() {
+            b"MCIFCH03"
+        } else {
+            b"MCIFCH02"
+        });
         for c in cells {
+            if !self.is_layered() && c.ground as u8 > Ground::StairsDown as u8 {
+                return Err("layered ground cannot be written to a v2 object".into());
+            }
             bytes.push(c.ground as u8);
             bytes.extend_from_slice(&c.data.to_le_bytes());
         }
@@ -202,7 +209,12 @@ impl World {
     }
     pub(super) fn read_chunk(&self, reference: Object) -> Result<Vec<Cell>, String> {
         let bytes = read(&self.directory, Domain::Chunks, reference)?;
-        if bytes.len() != Domain::Chunks.limit() || &bytes[..8] != b"MCIFCH02" {
+        let header = if self.is_layered() {
+            b"MCIFCH03"
+        } else {
+            b"MCIFCH02"
+        };
+        if bytes.len() != Domain::Chunks.limit() || &bytes[..8] != header {
             return Err("invalid complete chunk object".into());
         }
         bytes[8..]
@@ -220,6 +232,18 @@ impl World {
                         5 => Ground::Flower,
                         6 => Ground::Cactus,
                         7 => Ground::StairsDown,
+                        8 if self.is_layered() => Ground::Dirt,
+                        9 if self.is_layered() => Ground::IronOre,
+                        10 if self.is_layered() => Ground::GoldOre,
+                        11 if self.is_layered() => Ground::GemOre,
+                        12 if self.is_layered() => Ground::Lapis,
+                        13 if self.is_layered() => Ground::Lava,
+                        14 if self.is_layered() => Ground::ObsidianWall,
+                        15 if self.is_layered() => Ground::Obsidian,
+                        16 if self.is_layered() => Ground::RawObsidian,
+                        17 if self.is_layered() => Ground::OrnateObsidian,
+                        18 if self.is_layered() => Ground::StairsUp,
+                        19 if self.is_layered() => Ground::ObsidianDoor,
                         _ => return Err("unknown ground ID".into()),
                     },
                     data: u16::from_le_bytes([b[1], b[2]]),
@@ -235,7 +259,7 @@ impl World {
         }
         let bytes = read(&self.directory, Domain::Nodes, reference)?;
         let n: Node = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        if !n.key.valid() || n.height == 0 || n.height > 128 || n.count == 0 {
+        if !n.key.valid(self.is_layered()) || n.height == 0 || n.height > 128 || n.count == 0 {
             return Err("invalid index page".into());
         }
         if self.nodes.len() >= 512 {
@@ -476,14 +500,20 @@ impl World {
             let validation: Result<_, String> = (|| {
                 let text = crate::saveload::storage::read_text_limited(p, MAX_CHECKPOINT)?;
                 let saved = Self::parse_checkpoint(&text)?;
-                if saved.seed != self.seed() || saved.generator != self.generator() {
+                if saved.seed != self.seed()
+                    || saved.generator != self.generator()
+                    || saved.format != self.saved.format
+                {
                     return Err("checkpoint identity mismatch".into());
                 }
                 if validated_roots.insert(saved.root) {
                     live.extend(self.validate_root(saved.root)?);
                 }
                 if self
-                    .find(saved.root, Key::at(saved.position.0, saved.position.1))?
+                    .find(
+                        saved.root,
+                        Key::at_depth(saved.depth, saved.position.0, saved.position.1),
+                    )?
                     .is_none()
                 {
                     return Err("checkpoint explorer missing".into());

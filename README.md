@@ -93,7 +93,7 @@ Java 官方 Save 没有保存的羊色及瞬时 AI/RNG 状态无法从存档恢�
 - Boss 房修复保护玩家放置的非竞技场方块及容器，和 Java 无条件覆盖房间的行为有意不同。
 - 高等级 Spawner 暂不能通过 PowerGlove 无损搬运，拾起会拒绝并保留原实体，不会降成 level 1。
 - 本地 JSON-lines 服务器仅提供连接、身份与玩家状态转发基础设施；不兼容 Java 联机协议，也不是完整多人世界同步或服务端权威战斗。
-- 普通游戏仍使用有限世界。主菜单的 [Infdev (Experimental)](docs/infdev.md) 提供 Java 地表群系、64位区块图形探索、受限编辑和保存恢复；尚未接入 Survival、完整分层世界或船只。
+- 普通游戏仍使用有限世界。主菜单的 [Infdev (Experimental)](docs/infdev.md) 提供 Java 地表及四层地下地形、64位区块图形探索、楼梯跨层、受限编辑和保存恢复；尚未接入 Survival、实体、天空或船只。
 
 ## Windows 开发与验证
 

@@ -258,6 +258,7 @@ fn automatic_collection_and_avl_rotations_keep_live_index_balanced_and_old_chunk
             w = World::open(&path, 2).unwrap();
         }
         let key = Key {
+            depth: 0,
             x: i * 37 % 257 + 1,
             y: if i % 2 == 0 { -1 } else { 1 },
         };
@@ -378,7 +379,7 @@ fn interrupted_publication_missing_objects_and_gc_preflight_never_drop_live_data
     assert!(w.collect_garbage().unwrap().removed_files > 0);
     w.set_cell(0, 0, edited(7)).unwrap();
     w.checkpoint().unwrap();
-    let object = w.find(w.saved.root, Key { x: 0, y: 0 }).unwrap().unwrap();
+    let object = w.find(w.saved.root, Key::at(0, 0)).unwrap().unwrap();
     drop(w);
     let target = objects::path(&dir, objects::Domain::Chunks, object);
     fs::write(&target, b"torn").unwrap();
@@ -389,7 +390,7 @@ fn interrupted_publication_missing_objects_and_gc_preflight_never_drop_live_data
     let cp =
         World::parse_checkpoint(&fs::read_to_string(dir.join("checkpoint.json")).unwrap()).unwrap();
     let mut w = World::open(&dir, 1).unwrap();
-    let oldref = w.find(cp.root, Key { x: 0, y: 0 }).unwrap().unwrap();
+    let oldref = w.find(cp.root, Key::at(0, 0)).unwrap().unwrap();
     drop(w);
     fs::remove_file(objects::path(&dir, objects::Domain::Chunks, oldref)).unwrap();
     assert!(World::open(&dir, 1).is_err());
@@ -399,7 +400,7 @@ fn interrupted_publication_missing_objects_and_gc_preflight_never_drop_live_data
 fn collection_revalidates_distinct_backup_data_before_removing_any_object() {
     let root = Owned::new();
     let mut w = root.world(2);
-    let initial = w.find(w.saved.root, Key { x: 0, y: 0 }).unwrap().unwrap();
+    let initial = w.find(w.saved.root, Key::at(0, 0)).unwrap().unwrap();
     w.set_cell(0, 0, edited(12)).unwrap();
     w.checkpoint().unwrap();
     // First successful GC validates both roots. A later GC must not reuse
@@ -434,7 +435,9 @@ fn paged_index_exceeds_old_8192_limit_without_manifest_growth_and_keeps_lru_boun
     // not a claim that Java naturally generates identical terrain at each key.
     let cells = vec![edited(6); 4096];
     let chunk = w.write_chunk(&cells).unwrap();
-    let entries: Vec<_> = (0..8205).map(|x| (Key { x, y: 0 }, chunk)).collect();
+    let entries: Vec<_> = (0..8205)
+        .map(|x| (Key { depth: 0, x, y: 0 }, chunk))
+        .collect();
     w.saved.root = w.build_balanced(&entries).unwrap();
     w.resident.clear();
     w.commit_with_hook(|| Ok(())).unwrap();
@@ -455,4 +458,247 @@ fn paged_index_exceeds_old_8192_limit_without_manifest_growth_and_keeps_lru_boun
     assert_eq!(w.saved_chunk_count().unwrap(), 8205);
     assert_eq!(w.cell(8204 * 64, 0).unwrap(), edited(9));
     assert!(fs::metadata(dir.join("checkpoint.json")).unwrap().len() < 512);
+}
+
+#[test]
+fn layered_chunks_keep_depth_identity_across_eviction_collection_and_disk_restart() {
+    let root = Owned::new();
+    let mut w = World::create_layers(&root.0, "Layers", 42, 2).unwrap();
+    assert_eq!(
+        w.directory.parent().unwrap().file_name().unwrap(),
+        LAYERED_NAMESPACE
+    );
+    assert_eq!(w.generator(), Generator::JavaLayersV1);
+    assert_eq!(w.depth(), 0);
+    for depth in -4..=0 {
+        w.set_cell_at(
+            depth,
+            -65,
+            64,
+            Cell {
+                ground: Ground::Dirt,
+                data: (100 - depth) as u16,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            w.depth(),
+            0,
+            "off-screen chunk access cannot move the explorer"
+        );
+        assert!(w.resident_count() <= 2);
+    }
+    w.visit_layer(-4, -65, 64).unwrap();
+    w.checkpoint().unwrap();
+    w.collect_garbage().unwrap();
+    let dir = w.directory.clone();
+    let cp = fs::read_to_string(dir.join("checkpoint.json")).unwrap();
+    assert!(cp.contains(LAYERED_FORMAT));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&cp).unwrap()["depth"],
+        -4
+    );
+    w.unload_all().unwrap();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.depth(), -4);
+    assert_eq!(w.position(), (-65, 64));
+    for depth in -4..=0 {
+        assert_eq!(
+            w.cell_at(depth, -65, 64).unwrap(),
+            Cell {
+                ground: Ground::Dirt,
+                data: (100 - depth) as u16
+            }
+        );
+        assert_eq!(w.depth(), -4);
+        let reference = w
+            .find(w.saved.root, Key::at_depth(depth, -65, 64))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            &objects::read(&dir, objects::Domain::Chunks, reference).unwrap()[..8],
+            b"MCIFCH03"
+        );
+    }
+    let before = (w.depth(), w.position());
+    for invalid in [i8::MIN, -5, 1, i8::MAX] {
+        assert!(w.visit_layer(invalid, 0, 0).is_err());
+        assert!(w.cell_at(invalid, 0, 0).is_err());
+        assert!(w.set_cell_at(invalid, 0, 0, edited(0)).is_err());
+        assert_eq!((w.depth(), w.position()), before);
+    }
+    w.visit_layer(0, -65, 64).unwrap();
+    w.checkpoint().unwrap();
+    w.collect_garbage().unwrap();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.depth(), 0);
+    assert_eq!(w.cell_at(-4, -65, 64).unwrap().data, 104);
+}
+
+#[test]
+fn original_v2_bytes_and_contract_remain_isolated_from_layered_worlds() {
+    let root = Owned::new();
+    let mut old = root.world(1);
+    old.set_cell(-1, -1, edited(9)).unwrap();
+    old.visit(-1, -1).unwrap();
+    old.checkpoint().unwrap();
+    let directory = old.directory.clone();
+    let primary = fs::read(directory.join("checkpoint.json")).unwrap();
+    assert!(!std::str::from_utf8(&primary).unwrap().contains("depth"));
+    assert_eq!(
+        serde_json::to_string(&Key::at(0, 0)).unwrap(),
+        r#"{"x":0,"y":0}"#
+    );
+    let reference = old.find(old.saved.root, Key::at(-1, -1)).unwrap().unwrap();
+    assert_eq!(
+        &objects::read(&directory, objects::Domain::Chunks, reference).unwrap()[..8],
+        b"MCIFCH02"
+    );
+    let before = files(&directory);
+    assert!(old.visit_layer(-1, -1, -1).is_err());
+    assert!(
+        old.set_cell(
+            -1,
+            -1,
+            Cell {
+                ground: Ground::Dirt,
+                data: 4
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(old.cell(-1, -1).unwrap(), edited(9));
+    assert_eq!(files(&directory), before);
+    drop(old);
+    let mut reopened = World::open(&directory, 1).unwrap();
+    assert!(!reopened.is_layered());
+    assert_eq!(reopened.depth(), 0);
+    assert_eq!(reopened.cell(-1, -1).unwrap(), edited(9));
+    reopened.checkpoint().unwrap();
+    assert_eq!(
+        fs::read(directory.join("checkpoint.json")).unwrap(),
+        primary
+    );
+    drop(reopened);
+    for (field, value) in [
+        ("depth", serde_json::json!(-1)),
+        ("generator", serde_json::json!("JavaLayersV1")),
+        ("format", serde_json::json!(LAYERED_FORMAT)),
+    ] {
+        let mut invalid: serde_json::Value = serde_json::from_slice(&primary).unwrap();
+        invalid[field] = value;
+        let bytes = serde_json::to_vec(&invalid).unwrap();
+        fs::write(directory.join("checkpoint.json"), &bytes).unwrap();
+        assert!(
+            World::open(&directory, 1).is_err(),
+            "cannot reinterpret v2 {field}"
+        );
+        assert_eq!(fs::read(directory.join("checkpoint.json")).unwrap(), bytes);
+    }
+    fs::write(directory.join("checkpoint.json"), primary).unwrap();
+    // A checksummed index page with an unsupported depth is still invalid.
+    let mut old = World::open(&directory, 1).unwrap();
+    let node_reference = old.saved.root.unwrap();
+    let mut node = old.node(node_reference).unwrap();
+    node.key.depth = -1;
+    let incompatible = objects::write(
+        &directory,
+        objects::Domain::Nodes,
+        &serde_json::to_vec(&node).unwrap(),
+    )
+    .unwrap();
+    assert!(old.node(incompatible).is_err());
+    let v2_chunk = objects::read(&directory, objects::Domain::Chunks, reference).unwrap();
+    let layered = World::create_layers(&root.0, "World", 42, 1).unwrap();
+    let layered_dir = layered.directory.clone();
+    let wrong_header = objects::write(&layered_dir, objects::Domain::Chunks, &v2_chunk).unwrap();
+    assert!(layered.read_chunk(wrong_header).is_err());
+    let valid = fs::read(layered_dir.join("checkpoint.json")).unwrap();
+    drop(layered);
+    for (field, value) in [
+        ("depth", serde_json::json!(-5)),
+        ("depth", serde_json::json!(1)),
+        ("generator", serde_json::json!("JavaSurfaceV1")),
+    ] {
+        let mut invalid: serde_json::Value = serde_json::from_slice(&valid).unwrap();
+        invalid[field] = value;
+        let bytes = serde_json::to_vec(&invalid).unwrap();
+        fs::write(layered_dir.join("checkpoint.json"), &bytes).unwrap();
+        assert!(World::open(&layered_dir, 1).is_err());
+        assert_eq!(
+            fs::read(layered_dir.join("checkpoint.json")).unwrap(),
+            bytes
+        );
+    }
+    let mut missing_root: serde_json::Value = serde_json::from_slice(&valid).unwrap();
+    missing_root["root"] = serde_json::json!({"hash": 0, "slot": 0});
+    let wrong_primary = serde_json::to_vec(&missing_root).unwrap();
+    fs::write(layered_dir.join("checkpoint.json"), &wrong_primary).unwrap();
+    fs::write(
+        layered_dir.join("checkpoint.json.bak"),
+        fs::read(directory.join("checkpoint.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        World::open(&layered_dir, 1)
+            .err()
+            .unwrap()
+            .contains("different world format")
+    );
+    assert_eq!(
+        fs::read(layered_dir.join("checkpoint.json")).unwrap(),
+        wrong_primary
+    );
+}
+
+#[test]
+fn layered_failed_transition_publication_and_corrupt_current_chunk_recover_complete_backup() {
+    let root = Owned::new();
+    let mut w = World::create_layers(&root.0, "Recover", 42, 2).unwrap();
+    w.visit_layer(-1, -65, -1).unwrap();
+    w.set_cell(-65, -1, edited(7)).unwrap();
+    w.checkpoint().unwrap();
+    let directory = w.directory.clone();
+    let committed = fs::read(directory.join("checkpoint.json")).unwrap();
+    w.visit_layer(-2, -65, -1).unwrap();
+    w.set_cell(-65, -1, edited(8)).unwrap();
+    assert!(
+        w.commit_with_hook(|| Err("termination before layered root publication".into()))
+            .is_err()
+    );
+    assert_eq!(
+        fs::read(directory.join("checkpoint.json")).unwrap(),
+        committed
+    );
+    drop(w);
+    let mut w = World::open(&directory, 2).unwrap();
+    assert_eq!(w.depth(), -1);
+    assert_eq!(w.cell(-65, -1).unwrap(), edited(7));
+    w.collect_garbage().unwrap();
+    w.set_cell_at(-2, -65, -1, edited(10)).unwrap();
+    w.checkpoint().unwrap();
+    let invalid = w
+        .find(w.saved.root, Key::at_depth(-2, -65, -1))
+        .unwrap()
+        .unwrap();
+    w.resident.clear();
+    fs::write(
+        objects::path(&directory, objects::Domain::Chunks, invalid),
+        b"torn underground chunk",
+    )
+    .unwrap();
+    let before = (w.depth(), w.position());
+    assert!(w.visit_layer(-2, -65, -1).is_err());
+    assert_eq!((w.depth(), w.position()), before);
+    drop(w);
+    let mut recovered = World::open(&directory, 1).unwrap();
+    assert!(recovered.recovered_backup());
+    assert_eq!(recovered.depth(), -1);
+    assert_eq!(recovered.position(), (-65, -1));
+    assert_eq!(recovered.cell(-65, -1).unwrap(), edited(7));
+    let preserved = files(&directory);
+    assert!(recovered.collect_garbage().is_err());
+    assert_eq!(files(&directory), preserved);
 }

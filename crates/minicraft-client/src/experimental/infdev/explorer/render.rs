@@ -18,6 +18,18 @@ pub(super) fn tile_for(cell: Cell) -> Tile {
         Ground::Flower => Tile::Flower230,
         Ground::Cactus => Tile::Cactus,
         Ground::StairsDown => Tile::StairsDown,
+        Ground::Dirt => Tile::Dirt,
+        Ground::IronOre => Tile::IronOre,
+        Ground::GoldOre => Tile::GoldOre,
+        Ground::GemOre => Tile::GemOre,
+        Ground::Lapis => Tile::LapisOre,
+        Ground::Lava => Tile::Lava,
+        Ground::ObsidianWall => Tile::ObsidianWall,
+        Ground::Obsidian => Tile::ObsidianFloor,
+        Ground::RawObsidian => Tile::RawObsidian,
+        Ground::OrnateObsidian => Tile::OrnateObsidian,
+        Ground::StairsUp => Tile::StairsUp,
+        Ground::ObsidianDoor => Tile::ObsidianDoor,
     }
 }
 
@@ -55,7 +67,7 @@ pub(super) fn draw(explorer: &Explorer, screen: &mut Screen, assets: &Assets) {
                 continue;
             };
             let tile = tile_for(cell);
-            for layer in tile::underlay_layers(tile, cell.data, 0)
+            for layer in tile::underlay_layers(tile, cell.data, explorer.depth())
                 .into_iter()
                 .flatten()
                 .chain(std::iter::once(tile))
@@ -102,23 +114,41 @@ pub(super) fn draw(explorer: &Explorer, screen: &mut Screen, assets: &Assets) {
     }
     screen.rect(0, 0, WIDTH as i32, 24, 0xFF101820);
     screen.text(assets.font(), "INFDEV EXPERIMENT / FLIGHT", 4, 1);
-    let position = format!("X:{center_x} Y:{center_y}");
+    let position = format!("D:{} X:{center_x} Y:{center_y}", explorer.depth());
     // Two full i64 coordinates can exceed one text row. Keep both visible.
     if position.len() <= 35 {
         screen.text(assets.font(), &position, 4, 12);
     } else {
         screen.rect(0, 0, WIDTH as i32, 32, 0xFF101820);
         screen.text(assets.font(), &format!("X:{center_x}"), 4, 10);
-        screen.text(assets.font(), &format!("Y:{center_y}"), 4, 20);
+        screen.text(
+            assets.font(),
+            &format!("D:{} Y:{center_y}", explorer.depth()),
+            4,
+            20,
+        );
     }
     screen.rect(0, HEIGHT as i32 - 32, WIDTH as i32, 32, 0xFF101820);
     screen.text(
         assets.font(),
-        "MOVE / ATTACK: GRASS-DAISY",
+        if explorer.depth() < 0 {
+            "MOVE / ATTACK: DIRT-ROCK"
+        } else {
+            "MOVE / ATTACK: GRASS-DAISY"
+        },
         4,
         HEIGHT as i32 - 29,
     );
-    screen.text(assets.font(), "ESC: SAVE & QUIT", 4, HEIGHT as i32 - 19);
+    screen.text(
+        assets.font(),
+        if explorer.is_layered() {
+            "PICKUP: STAIRS / ESC: SAVE & QUIT"
+        } else {
+            "V2 SURFACE / ESC: SAVE & QUIT"
+        },
+        4,
+        HEIGHT as i32 - 19,
+    );
     let status = if explorer.closing {
         "SAVING... PLEASE WAIT"
     } else {

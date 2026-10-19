@@ -3,7 +3,10 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     assets::Assets,
-    experimental::infdev::{explorer::Explorer, paged::NAMESPACE},
+    experimental::infdev::{
+        explorer::Explorer,
+        paged::{LAYERED_NAMESPACE, NAMESPACE},
+    },
     gfx::{HEIGHT, Screen, WIDTH, font},
     io::Input,
     resource::localization::Localization,
@@ -106,26 +109,28 @@ impl Browser {
             return Ok(Vec::new());
         }
         real_directory(&self.root)?;
-        let namespace = self.root.join(NAMESPACE);
-        if !namespace.try_exists().map_err(|e| e.to_string())? {
-            return Ok(Vec::new());
-        }
-        real_directory(&namespace)?;
         let mut records = Vec::new();
-        for entry in fs::read_dir(namespace).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') || real_directory(&entry.path()).is_err() {
+        for namespace in [NAMESPACE, LAYERED_NAMESPACE] {
+            let namespace = self.root.join(namespace);
+            if !namespace.try_exists().map_err(|e| e.to_string())? {
                 continue;
             }
-            // Include damaged worlds so opening reports their actual error;
-            // do not hide them or replace them with a newly generated world.
-            records.push(Record {
-                name,
-                directory: entry.path(),
-            });
+            real_directory(&namespace)?;
+            for entry in fs::read_dir(namespace).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.starts_with('.') || real_directory(&entry.path()).is_err() {
+                    continue;
+                }
+                // Include damaged worlds so opening reports their actual error;
+                // do not hide them or replace them with a newly generated world.
+                records.push(Record {
+                    name,
+                    directory: entry.path(),
+                });
+            }
         }
-        records.sort_by(|a, b| a.name.cmp(&b.name));
+        records.sort_by(|a, b| (&a.name, &a.directory).cmp(&(&b.name, &b.directory)));
         Ok(records)
     }
 
@@ -142,16 +147,25 @@ impl Browser {
         }
         self.creating = false;
         let mut entries = vec![
-            Entry::select("New Experimental World", false),
+            Entry::select("New Layered World (v3)", false),
             Entry::select("Refresh", false),
         ];
         entries.extend(self.records.iter().map(|r| {
-            let label = if r.name.chars().count() > 28 {
-                format!("{}...", r.name.chars().take(25).collect::<String>())
+            let label = if r.name.chars().count() > 22 {
+                format!("{}...", r.name.chars().take(19).collect::<String>())
             } else {
                 r.name.clone()
             };
-            Entry::select(label, false)
+            let version = if r
+                .directory
+                .parent()
+                .is_some_and(|p| p.ends_with(LAYERED_NAMESPACE))
+            {
+                3
+            } else {
+                2
+            };
+            Entry::select(format!("[v{version}] {label}"), false)
         }));
         self.menu = MenuBuilder::new(true, 2, RelPos::CENTER, entries)
             .set_title("Infdev Worlds")
@@ -176,7 +190,7 @@ impl Browser {
                 Entry::select("Back", false),
             ],
         )
-        .set_title("New Experimental World")
+        .set_title("New Layered World (v3)")
         .set_positioning((WIDTH as i32 / 2, 86), RelPos::CENTER)
         .create_menu();
         self.creating = true;
@@ -210,7 +224,7 @@ impl Browser {
                             if name.trim().is_empty() {
                                 return Err("Enter a world name".into());
                             }
-                            Explorer::create(self.root.clone(), name, seed)
+                            Explorer::create_layers(self.root.clone(), name, seed)
                         });
                     match result {
                         Ok(explorer) => return Action::Start(Box::new(explorer)),

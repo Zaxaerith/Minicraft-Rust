@@ -4,6 +4,7 @@
 pub mod explorer;
 mod generation;
 pub mod paged;
+pub mod stairs;
 mod store;
 pub mod terrain;
 #[cfg(test)]
@@ -52,6 +53,18 @@ pub enum Ground {
     Flower,
     Cactus,
     StairsDown,
+    Dirt,
+    IronOre,
+    GoldOre,
+    GemOre,
+    Lapis,
+    Lava,
+    ObsidianWall,
+    Obsidian,
+    RawObsidian,
+    OrnateObsidian,
+    StairsUp,
+    ObsidianDoor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -18,6 +18,9 @@ fn run() -> Result<(), String> {
     if backend == "infdev-terrain-check" {
         return infdev_console::compare(arguments.collect());
     }
+    if backend == "infdev-underground-check" {
+        return infdev_console::compare_underground(arguments.collect());
+    }
     if backend == "infdev-storage-measure" {
         let output = arguments
             .next()
@@ -31,7 +34,11 @@ fn run() -> Result<(), String> {
     }
     if matches!(
         backend.as_str(),
-        "infdev-create" | "infdev-open" | "infdev-surface-create" | "infdev-upgrade"
+        "infdev-create"
+            | "infdev-open"
+            | "infdev-surface-create"
+            | "infdev-layers-create"
+            | "infdev-upgrade"
     ) {
         return infdev_console::run(&backend, arguments.collect());
     }

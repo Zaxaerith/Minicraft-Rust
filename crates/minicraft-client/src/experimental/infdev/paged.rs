@@ -21,7 +21,9 @@ use std::{
 };
 
 pub const NAMESPACE: &str = "infdev-v2";
+pub const LAYERED_NAMESPACE: &str = "infdev-v3";
 const FORMAT: &str = "MinicraftRust.Experimental.Infdev.v2";
+const LAYERED_FORMAT: &str = "MinicraftRust.Experimental.Infdev.v3";
 const MAX_CHECKPOINT: u64 = 4096;
 const AUTO_GC_COMMITS: u32 = 128;
 
@@ -29,28 +31,45 @@ const AUTO_GC_COMMITS: u32 = 128;
 pub enum Generator {
     LegacyHeightV1,
     JavaSurfaceV1,
+    JavaLayersV1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Key {
+    #[serde(default, skip_serializing_if = "is_surface")]
+    pub depth: i8,
     pub x: i64,
     pub y: i64,
 }
 impl Key {
     pub fn at(x: i64, y: i64) -> Self {
+        Self::at_depth(0, x, y)
+    }
+    pub fn at_depth(depth: i8, x: i64, y: i64) -> Self {
         Self {
+            depth,
             x: x.div_euclid(64),
             y: y.div_euclid(64),
         }
     }
-    fn valid(self) -> bool {
+    fn valid(self, layered: bool) -> bool {
         let bounds = i64::MIN / 64..=i64::MAX / 64;
-        bounds.contains(&self.x) && bounds.contains(&self.y)
+        bounds.contains(&self.x)
+            && bounds.contains(&self.y)
+            && if layered {
+                (-4..=0).contains(&self.depth)
+            } else {
+                self.depth == 0
+            }
     }
     fn local(x: i64, y: i64) -> usize {
         (x.rem_euclid(64) + y.rem_euclid(64) * 64) as usize
     }
+}
+
+fn is_surface(depth: &i8) -> bool {
+    *depth == 0
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -71,6 +90,8 @@ struct Checkpoint {
     generator: Generator,
     seed: i64,
     position: (i64, i64),
+    #[serde(default, skip_serializing_if = "is_surface")]
+    depth: i8,
     root: Option<Object>,
     sequence: u64,
 }
@@ -117,6 +138,12 @@ impl World {
     pub fn position(&self) -> (i64, i64) {
         self.saved.position
     }
+    pub fn depth(&self) -> i8 {
+        self.saved.depth
+    }
+    pub fn is_layered(&self) -> bool {
+        self.saved.format == LAYERED_FORMAT
+    }
     pub fn resident_count(&self) -> usize {
         self.resident.len()
     }
@@ -135,7 +162,16 @@ impl World {
     }
 
     pub fn create(root: &Path, name: &str, seed: i64, capacity: usize) -> Result<Self, String> {
-        Self::create_inner(root, name, seed, capacity, None)
+        Self::create_inner(root, name, seed, capacity, None, false)
+    }
+
+    pub fn create_layers(
+        root: &Path,
+        name: &str,
+        seed: i64,
+        capacity: usize,
+    ) -> Result<Self, String> {
+        Self::create_inner(root, name, seed, capacity, None, true)
     }
 
     /// Explicit copy upgrade; source is locked/read-only, including on recovery.
@@ -147,7 +183,7 @@ impl World {
         capacity: usize,
     ) -> Result<Self, String> {
         let legacy = super::InfdevWorld::open_snapshot(source)?;
-        Self::create_inner(root, name, legacy.seed(), capacity, Some(&legacy))
+        Self::create_inner(root, name, legacy.seed(), capacity, Some(&legacy), false)
     }
 
     fn create_inner(
@@ -156,6 +192,7 @@ impl World {
         seed: i64,
         capacity: usize,
         legacy: Option<&super::InfdevWorld>,
+        layered: bool,
     ) -> Result<Self, String> {
         Self::check_capacity(capacity)?;
         if name.is_empty()
@@ -169,7 +206,11 @@ impl World {
             return Err("invalid experimental world name".into());
         }
         real_path(root, true)?;
-        let namespace = root.join(NAMESPACE);
+        let namespace = root.join(if layered {
+            LAYERED_NAMESPACE
+        } else {
+            NAMESPACE
+        });
         match fs::create_dir(&namespace) {
             Ok(()) => (),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
@@ -188,14 +229,17 @@ impl World {
             directory: stage.0.clone(),
             _lock: handle,
             saved: Checkpoint {
-                format: FORMAT.into(),
-                generator: if legacy.is_some() {
+                format: if layered { LAYERED_FORMAT } else { FORMAT }.into(),
+                generator: if layered {
+                    Generator::JavaLayersV1
+                } else if legacy.is_some() {
                     Generator::LegacyHeightV1
                 } else {
                     Generator::JavaSurfaceV1
                 },
                 seed,
                 position: (0, 0),
+                depth: 0,
                 root: None,
                 sequence: 0,
             },
@@ -213,6 +257,7 @@ impl World {
                 let reference = w.write_chunk(&cells)?;
                 entries.push((
                     Key {
+                        depth: 0,
                         x: i64::from(key.x),
                         y: i64::from(key.y),
                     },
@@ -254,21 +299,9 @@ impl World {
         let path = directory.join("checkpoint.json");
         let candidates = objects::checkpoints(directory)?;
         let mut errors = Vec::new();
+        let mut identity = None;
         for (candidate, text) in candidates {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text)
-                && (value
-                    .get("format")
-                    .and_then(|v| v.as_str())
-                    .is_some_and(|f| f != FORMAT)
-                    || value
-                        .get("generator")
-                        .and_then(|v| v.as_str())
-                        .is_some_and(|g| g != "LegacyHeightV1" && g != "JavaSurfaceV1"))
-            {
-                return Err(
-                    "unknown checkpoint/generator version; downgrade recovery refused".into(),
-                );
-            }
+            Self::refuse_version_downgrade(&text)?;
             let saved = match Self::parse_checkpoint(&text) {
                 Ok(s) => s,
                 Err(e) => {
@@ -276,6 +309,16 @@ impl World {
                     continue;
                 }
             };
+            let candidate_identity = (saved.format.clone(), saved.generator, saved.seed);
+            if identity
+                .as_ref()
+                .is_some_and(|expected| expected != &candidate_identity)
+            {
+                return Err(
+                    "backup checkpoint belongs to a different world format/generator/seed".into(),
+                );
+            }
+            identity = Some(candidate_identity);
             let mut w = Self {
                 directory: directory.into(),
                 _lock: handle.try_clone().map_err(|e| e.to_string())?,
@@ -290,7 +333,9 @@ impl World {
             let valid: Result<(), String> = (|| {
                 w.validate_root(w.saved.root)?;
                 let p = w.position();
-                if w.find(w.saved.root, Key::at(p.0, p.1))?.is_none() {
+                if w.find(w.saved.root, Key::at_depth(w.depth(), p.0, p.1))?
+                    .is_none()
+                {
                     return Err("explorer chunk missing from checkpoint".into());
                 }
                 Ok(())
@@ -318,15 +363,52 @@ impl World {
 
     fn parse_checkpoint(text: &str) -> Result<Checkpoint, String> {
         let saved: Checkpoint = serde_json::from_str(text).map_err(|e| e.to_string())?;
-        if saved.format != FORMAT {
-            return Err("unknown Infdev checkpoint format".into());
+        let contract = match (saved.format.as_str(), saved.generator) {
+            (FORMAT, Generator::LegacyHeightV1 | Generator::JavaSurfaceV1) => saved.depth == 0,
+            (LAYERED_FORMAT, Generator::JavaLayersV1) => (-4..=0).contains(&saved.depth),
+            _ => false,
+        };
+        if !contract {
+            return Err("invalid Infdev format/generator/depth contract".into());
         }
         Ok(saved)
     }
 
+    fn refuse_version_downgrade(text: &str) -> Result<(), String> {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+            return Ok(());
+        };
+        let format = value.get("format").and_then(|v| v.as_str());
+        let generator = value.get("generator").and_then(|v| v.as_str());
+        if format.is_some_and(|f| f != FORMAT && f != LAYERED_FORMAT)
+            || generator
+                .is_some_and(|g| !matches!(g, "LegacyHeightV1" | "JavaSurfaceV1" | "JavaLayersV1"))
+            || matches!((format, generator), (Some(FORMAT), Some("JavaLayersV1")))
+            || matches!(
+                (format, generator),
+                (
+                    Some(LAYERED_FORMAT),
+                    Some("LegacyHeightV1" | "JavaSurfaceV1")
+                )
+            )
+            || value.get("depth").is_some_and(|depth| {
+                depth.as_i64().is_none_or(|d| {
+                    if format == Some(LAYERED_FORMAT) {
+                        !(-4..=0).contains(&d)
+                    } else {
+                        d != 0
+                    }
+                })
+            })
+        {
+            return Err("unknown or incompatible checkpoint/generator/depth version; downgrade recovery refused".into());
+        }
+        Ok(())
+    }
+
     fn ensure(&mut self, key: Key) -> Result<(), String> {
-        if !key.valid() {
-            return Err("chunk outside signed 64-bit tile domain".into());
+        if !key.valid(self.is_layered()) {
+            return Err("chunk outside this world's depth/signed 64-bit tile domain".into());
         }
         if !self.resident.contains_key(&key) {
             let reference = self.find(self.saved.root, key)?;
@@ -334,6 +416,9 @@ impl World {
                 Some(r) => self.read_chunk(r)?,
                 None => match self.generator() {
                     Generator::JavaSurfaceV1 => terrain::generate(self.seed(), key.x, key.y),
+                    Generator::JavaLayersV1 => {
+                        super::stairs::generate(self.seed(), key.depth, key.x, key.y)?
+                    }
                     Generator::LegacyHeightV1 => {
                         // Match the old contract at all old representable coordinates.
                         let coord = super::ChunkCoord::at(
@@ -371,12 +456,21 @@ impl World {
     }
 
     pub fn cell(&mut self, x: i64, y: i64) -> Result<Cell, String> {
-        let key = Key::at(x, y);
+        self.cell_at(self.depth(), x, y)
+    }
+    pub fn cell_at(&mut self, depth: i8, x: i64, y: i64) -> Result<Cell, String> {
+        let key = Key::at_depth(depth, x, y);
         self.ensure(key)?;
         Ok(self.resident[&key].cells[Key::local(x, y)])
     }
     pub fn set_cell(&mut self, x: i64, y: i64, cell: Cell) -> Result<(), String> {
-        let key = Key::at(x, y);
+        self.set_cell_at(self.depth(), x, y, cell)
+    }
+    pub fn set_cell_at(&mut self, depth: i8, x: i64, y: i64, cell: Cell) -> Result<(), String> {
+        if !self.is_layered() && cell.ground as u8 > Ground::StairsDown as u8 {
+            return Err("layered ground cannot be written to a v2 world".into());
+        }
+        let key = Key::at_depth(depth, x, y);
         self.ensure(key)?;
         let c = self.resident.get_mut(&key).expect("loaded");
         if c.cells[Key::local(x, y)] != cell {
@@ -386,8 +480,12 @@ impl World {
         Ok(())
     }
     pub fn visit(&mut self, x: i64, y: i64) -> Result<(), String> {
-        self.ensure(Key::at(x, y))?;
+        self.visit_layer(self.depth(), x, y)
+    }
+    pub fn visit_layer(&mut self, depth: i8, x: i64, y: i64) -> Result<(), String> {
+        self.ensure(Key::at_depth(depth, x, y))?;
         self.saved.position = (x, y);
+        self.saved.depth = depth;
         Ok(())
     }
     pub fn step(&mut self, dx: i32, dy: i32) -> Result<(), String> {
@@ -435,7 +533,10 @@ impl World {
         if primary.try_exists().map_err(|e| e.to_string())? {
             let text = crate::saveload::storage::read_text_limited(&primary, MAX_CHECKPOINT)?;
             let existing = Self::parse_checkpoint(&text)?;
-            if existing.seed != self.seed() || existing.generator != self.generator() {
+            if existing.seed != self.seed()
+                || existing.generator != self.generator()
+                || existing.format != self.saved.format
+            {
                 return Err("live checkpoint identity changed".into());
             }
         }
