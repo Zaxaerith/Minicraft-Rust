@@ -227,21 +227,62 @@ fn draw_survival(
         for entity in &page.entities {
             let at = page.position(entity);
             if let Some((x, y)) = point(at.x, at.y) {
-                let super::super::entities::Kind::DeathChest(chest) = &entity.kind;
-                assets
-                    .furniture_linked(crate::entity::furniture::FurnitureKind::Chest)
-                    .render(assets.sheets(), screen, x, y, 0, false, 0);
-                screen.text_colored(
-                    assets.font(),
-                    &format!("{}S", chest.remaining / 60),
-                    x,
-                    y - 8,
-                    if chest.remaining < 1800 {
-                        0xff7777
-                    } else {
-                        0xffffff
-                    },
-                );
+                use super::super::entities::Kind;
+                match &entity.kind {
+                    Kind::DeathChest(chest) => {
+                        assets
+                            .furniture_linked(crate::entity::furniture::FurnitureKind::Chest)
+                            .render(assets.sheets(), screen, x, y, 0, false, 0);
+                        screen.text_colored(
+                            assets.font(),
+                            &format!("{}S", chest.remaining / 60),
+                            x,
+                            y - 8,
+                            if chest.remaining < 1800 {
+                                0xff7777
+                            } else {
+                                0xffffff
+                            },
+                        );
+                    }
+                    Kind::Pig(pig) => {
+                        let d = if pig.mob.x_move < 0 {
+                            2
+                        } else if pig.mob.x_move > 0 {
+                            3
+                        } else if pig.mob.y_move < 0 {
+                            1
+                        } else {
+                            0
+                        };
+                        assets
+                            .mob_linked(
+                                crate::entity::mob::NaturalMob::Pig,
+                                d,
+                                ((pig.mob.walk_distance >> 3) % 2) as usize,
+                                false,
+                            )
+                            .render(
+                                assets.sheets(),
+                                screen,
+                                x + i32::from(pig.px) - 8,
+                                y + i32::from(pig.py) - 11,
+                                0,
+                                pig.mob.hurt_time > 0,
+                                0,
+                            );
+                    }
+                    Kind::Drop(drop) => {
+                        screen.blit(
+                            match drop.loot {
+                                Loot::Stack(s) => assets.item_stack(s),
+                                Loot::Tool(t) => assets.tool(t),
+                            },
+                            x + 4,
+                            y + 4,
+                        );
+                    }
+                }
             }
         }
     }

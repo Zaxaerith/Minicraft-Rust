@@ -4,9 +4,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-struct Owned(PathBuf);
+pub(super) struct Owned(pub(super) PathBuf);
 impl Owned {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         static N: AtomicU64 = AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
             "minicraft-infdev-v2-{}-{}",
@@ -938,6 +938,7 @@ fn survival_legacy_session_and_smelting_interruption_preserve_exact_ownership() 
     let mut w = World::create_survival(&root.0, "LegacyFood", 42, 1).unwrap();
     let position = w.position();
     let s = w.survival.as_mut().unwrap();
+    s.entity_rules = crate::experimental::infdev::survival::EntityRules::Legacy;
     s.food_rules = FoodRules::Legacy;
     s.death_rule = crate::experimental::infdev::survival::DeathRule::KeepInventory;
     s.stations.push(Station {
@@ -1021,6 +1022,7 @@ fn death_fixture(root: &Owned, name: &str) -> (World, crate::item::Inventory) {
         },
     )
     .unwrap();
+    w.survival.as_mut().unwrap().entity_rules = super::super::survival::EntityRules::Legacy;
     let p = &mut w.survival.as_mut().unwrap().player;
     p.inventory.add(ItemId::Wood, 731);
     p.inventory.add_stack(ItemStack::with_water(731));
@@ -1056,7 +1058,9 @@ fn death_chest_cross_depth_full_bag_instances_duplicate_touch_and_disk_gc() {
     }
     let page = w.entity_page(key).unwrap();
     assert_eq!(page.entities.len(), 1);
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(chest.inventory, owned);
     // Enter respawns, but must NOT retrieve an underground chest remotely.
     w.survival_action(Action::Interact).unwrap();
@@ -1075,7 +1079,9 @@ fn death_chest_cross_depth_full_bag_instances_duplicate_touch_and_disk_gc() {
     }
     w.survival_action(Action::Tick).unwrap();
     let page = w.entity_page(key).unwrap();
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(
         chest.inventory, owned,
         "full bag leaves every instance in the chest"
@@ -1117,7 +1123,9 @@ fn death_chest_partial_stack_pickup_never_loses_remainders() {
     }
     w.survival_action(Action::Tick).unwrap();
     let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(chest.inventory.count(ItemId::Wood), 730);
     assert_eq!(
         w.survival().unwrap().player.inventory.count(ItemId::Wood),
@@ -1136,7 +1144,9 @@ fn death_chest_partial_stack_pickup_never_loses_remainders() {
         w.survival_action(Action::Tick).unwrap();
     }
     let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(chest.inventory.count(ItemId::Wood), 730);
     w.checkpoint().unwrap();
     let dir = w.directory.clone();
@@ -1147,7 +1157,9 @@ fn death_chest_partial_stack_pickup_never_loses_remainders() {
         crate::item::MAX_STACK
     );
     let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(chest.inventory.count(ItemId::Wood), 730);
 }
 
@@ -1194,7 +1206,9 @@ fn death_and_retrieval_publication_faults_keep_a_single_inventory_owner() {
     let mut w = World::open(&dir, 1).unwrap();
     assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
     let page = w.entity_page(key).unwrap();
-    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    let Kind::DeathChest(chest) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(chest.inventory, owned);
     w.collect_garbage().unwrap();
 }
@@ -1263,14 +1277,18 @@ fn blocked_full_expired_and_legacy_deaths_keep_all_valid_items() {
     assert_eq!(s.player.inventory.count(ItemId::Wood), 23);
     assert_eq!(page.entities.len(), 64);
     for e in &mut page.entities {
-        let Kind::DeathChest(c) = &mut e.kind;
+        let Kind::DeathChest(c) = &mut e.kind else {
+            panic!("expected death chest")
+        };
         c.remaining = 1;
     }
     let other = Position { x: at.x - 1, ..at };
     page.tick(other, &mut s.player.inventory);
     assert_eq!(page.entities.len(), 64);
     assert!(page.entities.iter().all(|e| {
-        let Kind::DeathChest(c) = &e.kind;
+        let Kind::DeathChest(c) = &e.kind else {
+            panic!("expected death chest")
+        };
         c.remaining == 0
     }));
     page.interact(at, &mut s.player.inventory);
@@ -1323,7 +1341,9 @@ fn entity_pages_evict_across_signed_depth_keys_and_gc_retains_backups() {
     let mut w = World::open(&dir, 1).unwrap();
     for (at, count) in places {
         let page = w.entity_page(at.key()).unwrap();
-        let Kind::DeathChest(c) = &page.entities[0].kind;
+        let Kind::DeathChest(c) = &page.entities[0].kind else {
+            panic!("expected death chest")
+        };
         assert_eq!(c.inventory.count(ItemId::Wood), count);
         assert_eq!(page.position(&page.entities[0]), at);
     }
@@ -1353,7 +1373,9 @@ fn missing_entity_root_or_write_failure_cannot_silently_empty_player_inventory()
     assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
     let key = Key::at_depth(-1, -65, -65);
     let page = w.entity_page(key).unwrap();
-    let Kind::DeathChest(c) = &page.entities[0].kind;
+    let Kind::DeathChest(c) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(
         c.inventory, owned,
         "RAM still has exactly one owner after save failure"
@@ -1426,6 +1448,8 @@ fn gc_retains_pre_retrieval_chest_and_unknown_inventory_fields_are_refused() {
     assert!(w.recovered_backup());
     assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
     let page = w.entity_page(key).unwrap();
-    let Kind::DeathChest(c) = &page.entities[0].kind;
+    let Kind::DeathChest(c) = &page.entities[0].kind else {
+        panic!("expected death chest")
+    };
     assert_eq!(c.inventory, owned);
 }

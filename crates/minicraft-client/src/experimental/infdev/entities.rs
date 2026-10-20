@@ -7,6 +7,8 @@ use super::{
 use crate::{entity::furniture::chest::death_chest_lifetime, item::Inventory};
 use serde::{Deserialize, Serialize};
 
+pub mod dynamic;
+
 pub(crate) const PAGE_LIMIT: usize = 256 * 1024;
 const MAX_ENTITIES: usize = 64;
 
@@ -34,12 +36,16 @@ pub(crate) struct DeathChest {
 #[serde(deny_unknown_fields)]
 pub(crate) enum Kind {
     DeathChest(DeathChest),
+    Pig(dynamic::Pig),
+    Drop(dynamic::ItemDrop),
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Entity {
     pub id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub birth: Option<dynamic::Birth>,
     pub x: u8,
     pub y: u8,
     pub kind: Kind,
@@ -69,7 +75,29 @@ impl Page {
             if e.id == 0 || e.id >= self.next_id || !ids.insert(e.id) || e.x >= 64 || e.y >= 64 {
                 return Err("invalid/duplicate chunk entity identity".into());
             }
-            let Kind::DeathChest(chest) = &e.kind;
+            if let Some(b) = &e.birth {
+                b.validate()?;
+            }
+            if !matches!(e.kind, Kind::DeathChest(_)) && e.birth.is_none() {
+                return Err("dynamic entity missing birth identity".into());
+            }
+            match &e.kind {
+                Kind::Pig(p) => {
+                    p.validate()?;
+                    continue;
+                }
+                Kind::Drop(d) => {
+                    survival::validate_loot(d.loot)?;
+                    if d.delay > 60 {
+                        return Err("invalid drop delay".into());
+                    }
+                    continue;
+                }
+                Kind::DeathChest(_) => (),
+            }
+            let Kind::DeathChest(chest) = &e.kind else {
+                unreachable!()
+            };
             if chest.inventory.capacity() != 27
                 || chest.inventory.used_slots() > 27
                 || chest.inventory.used_slots() == 0
@@ -92,6 +120,37 @@ impl Page {
             y: self.key.y * 64 + i64::from(e.y),
         }
     }
+    pub fn reserve(&self, count: usize) -> Result<(), String> {
+        if self.entities.len() + count > MAX_ENTITIES
+            || self.next_id.checked_add(count as u64).is_none()
+            || serde_json::to_vec(self).map_err(|e| e.to_string())?.len() + count * 2048
+                > PAGE_LIMIT
+        {
+            return Err("entity page full; action retained unchanged".into());
+        }
+        Ok(())
+    }
+    pub fn insert(
+        &mut self,
+        at: Position,
+        kind: Kind,
+        birth: Option<dynamic::Birth>,
+    ) -> Result<(), String> {
+        self.reserve(1)?;
+        if at.key() != self.key {
+            return Err("entity destination page mismatch".into());
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        self.entities.push(Entity {
+            id,
+            birth: Some(birth.unwrap_or(dynamic::Birth { key: self.key, id })),
+            x: at.x.rem_euclid(64) as u8,
+            y: at.y.rem_euclid(64) as u8,
+            kind,
+        });
+        Ok(())
+    }
     pub fn record_death(&mut self, state: &mut State, at: Position, can_place: bool) {
         if state.death_rule != DeathRule::ChestNormal || state.death_recorded {
             return;
@@ -113,6 +172,7 @@ impl Page {
         }
         let candidate = Entity {
             id: self.next_id,
+            birth: None,
             x: at.x.rem_euclid(64) as u8,
             y: at.y.rem_euclid(64) as u8,
             kind: Kind::DeathChest(DeathChest {
@@ -138,7 +198,9 @@ impl Page {
     }
     pub fn tick(&mut self, at: Position, player: &mut Inventory) {
         for e in &mut self.entities {
-            let Kind::DeathChest(chest) = &mut e.kind;
+            let Kind::DeathChest(chest) = &mut e.kind else {
+                continue;
+            };
             // Unloaded/offline chunks do not age. At zero retain a recovery
             // chest instead of losing items to unimplemented drop expiry.
             chest.remaining = chest.remaining.saturating_sub(1);
@@ -153,7 +215,9 @@ impl Page {
         for e in &mut self.entities {
             if e.x == at.x.rem_euclid(64) as u8 && e.y == at.y.rem_euclid(64) as u8 {
                 found = true;
-                let Kind::DeathChest(chest) = &mut e.kind;
+                let Kind::DeathChest(chest) = &mut e.kind else {
+                    continue;
+                };
                 take(&mut chest.inventory, player);
             }
         }
@@ -162,7 +226,9 @@ impl Page {
     }
     fn remove_empty(&mut self) {
         self.entities.retain(|e| {
-            let Kind::DeathChest(c) = &e.kind;
+            let Kind::DeathChest(c) = &e.kind else {
+                return true;
+            };
             c.inventory.used_slots() != 0
         });
     }

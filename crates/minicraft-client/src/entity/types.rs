@@ -23,7 +23,7 @@ pub struct ItemMotion {
 }
 
 /// Java Mob runtime fields shared by every species (health, walk, attack timers).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mob {
     pub species: NaturalMob,
     /// Java EnemyMob.lvl; absent in historical Rust states means level one.

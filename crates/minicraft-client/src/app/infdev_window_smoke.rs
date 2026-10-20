@@ -238,11 +238,17 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             | "death-create"
             | "death-recover"
             | "death-reopen"
+            | "hunt-create"
+            | "hunt-reopen"
     ) {
         return Err("window smoke mode must be create or reopen".into());
     }
-    let survival = mode.starts_with("survival-") || mode.starts_with("death-");
+    let survival =
+        mode.starts_with("survival-") || mode.starts_with("death-") || mode.starts_with("hunt-");
     let creating = mode.ends_with("create");
+    if mode == "hunt-reopen" {
+        survival::hunt::preflight(&root)?;
+    }
     let assets = Assets::load(&[])?;
     let mut window = Window::new(
         "Minicraft Infdev - scripted window smoke",
@@ -352,6 +358,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
                 })
             })
     })?;
+    if mode.starts_with("hunt-") {
+        return survival::hunt::run(&mut host, &mut explorer, &root, creating);
+    }
     if mode.starts_with("death-") {
         return survival::run_death(&mut host, &mut explorer, &root, mode);
     }

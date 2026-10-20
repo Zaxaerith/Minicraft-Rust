@@ -2,6 +2,9 @@
 //! Windows writer lock covers saving, validation and reachability collection.
 #[doc(hidden)]
 pub mod diagnostics;
+mod dynamic;
+#[cfg(test)]
+mod dynamic_tests;
 mod entities;
 mod objects;
 #[cfg(test)]
@@ -166,6 +169,7 @@ impl World {
         if self.act_with_entities(action)? {
             self.checkpoint()?;
         }
+        self.trim_entities()?;
         Ok(())
     }
     pub fn resident_count(&self) -> usize {

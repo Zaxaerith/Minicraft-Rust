@@ -361,6 +361,7 @@ fn food_metabolism_pause_heal_starve_and_legacy_session_contracts() {
         metabolism::tick(&mut s.player, tick);
     }
     assert_eq!(s.player.health, 3, "Normal starvation floor, not Hardcore");
+    s.entity_rules = crate::experimental::infdev::survival::EntityRules::Legacy;
     s.food_rules = FoodRules::Legacy;
     s.death_rule = crate::experimental::infdev::survival::DeathRule::KeepInventory;
     s.panel = Panel::Closed;

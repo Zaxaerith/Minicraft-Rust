@@ -11,7 +11,9 @@ fn corpse(e: &Explorer, at: Point) -> Option<Inventory> {
         .flat_map(|p| {
             p.entities.iter().filter_map(move |entity| {
                 let pos = p.position(entity);
-                let Kind::DeathChest(chest) = &entity.kind;
+                let Kind::DeathChest(chest) = &entity.kind else {
+                    return None;
+                };
                 ((pos.x, pos.y) == at && pos.depth == e.depth()).then(|| chest.inventory.clone())
             })
         })

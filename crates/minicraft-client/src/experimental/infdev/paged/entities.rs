@@ -10,7 +10,7 @@ use objects::Domain;
 pub(super) struct CachedEntities {
     pub page: Page,
     pub dirty: bool,
-    touched: u64,
+    pub(super) touched: u64,
 }
 
 impl World {
@@ -98,6 +98,12 @@ impl World {
         Ok(root)
     }
     pub(super) fn act_with_entities(&mut self, action: Action) -> Result<bool, String> {
+        if self
+            .survival()
+            .is_some_and(|s| s.entity_rules == survival::EntityRules::PigV1)
+        {
+            return self.act_dynamic(action);
+        }
         let mut state = self.survival.clone().ok_or("not a Survival world")?;
         // Mining's map write remains LAST: do not load an entity page after an
         // edited tile but before installing the matching inventory in memory.
@@ -149,8 +155,12 @@ impl World {
         state.validate()?;
         let ownership_changed = old.entities.len() != page.entities.len()
             || old.entities.iter().zip(&page.entities).any(|(a, b)| {
-                let super::super::entities::Kind::DeathChest(a) = &a.kind;
-                let super::super::entities::Kind::DeathChest(b) = &b.kind;
+                let super::super::entities::Kind::DeathChest(a) = &a.kind else {
+                    return true;
+                };
+                let super::super::entities::Kind::DeathChest(b) = &b.kind else {
+                    return true;
+                };
                 a.inventory != b.inventory
             });
         let critical = ownership_changed || !receipt && state.death_recorded;

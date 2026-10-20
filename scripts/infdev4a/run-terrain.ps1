@@ -17,6 +17,7 @@ $arguments=@($sources | ForEach-Object {'"'+$_.FullName.Replace('\','/')+'"'})
 $arguments+='"'+"$PSScriptRoot/TerrainOracle.java".Replace('\','/')+'"'
 $arguments+='"'+"$PSScriptRoot/UndergroundOracle.java".Replace('\','/')+'"'
 $arguments+='"'+"$PSScriptRoot/DeathChestOracle.java".Replace('\','/')+'"'
+$arguments+='"'+"$PSScriptRoot/AnimalOracle.java".Replace('\','/')+'"'
 $argsFile=Join-Path $output 'terrain-sources.args'
 [IO.File]::WriteAllLines($argsFile,$arguments,[Text.UTF8Encoding]::new($false))
 & javac -encoding UTF-8 -cp $jar -d $classes "@$argsFile"
@@ -32,3 +33,10 @@ if ($code -ne 0) { throw 'Actual Infdev underground execution failed' }
 Push-Location $output
 try { & java '-Djava.awt.headless=true' -cp $cp minicraft.entity.furniture.DeathChestOracle $output; $code=$LASTEXITCODE } finally { Pop-Location }
 if ($code -ne 0) { throw 'Actual Infdev DeathChest execution failed' }
+
+Push-Location $output
+try { & java '-Djava.awt.headless=true' -cp $cp minicraft.entity.mob.AnimalOracle $output; $code=$LASTEXITCODE } finally { Pop-Location }
+if ($code -ne 0) { throw 'Actual Infdev animal execution failed' }
+
+& python -c 'import json,sys; assert json.load(open(sys.argv[1],encoding="utf-8")) == json.load(open(sys.argv[2],encoding="utf-8")), "original animal Oracle fixture changed"' (Join-Path $output 'animals.json') (Join-Path $repo 'crates/minicraft-client/tests/fixtures/infdev4a/animals.json')
+if ($LASTEXITCODE -ne 0) { throw 'Original animal fixture comparison failed' }

@@ -2,6 +2,7 @@
 //! injection, teleports, terrain edits, or alternate game-action implementation.
 use super::*;
 mod death;
+pub(super) mod hunt;
 pub(super) fn run_death(
     h: &mut Host,
     e: &mut Explorer,

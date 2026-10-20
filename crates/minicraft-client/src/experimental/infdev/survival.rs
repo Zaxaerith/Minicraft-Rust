@@ -51,6 +51,18 @@ fn is_false(v: &bool) -> bool {
     !*v
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum EntityRules {
+    #[default]
+    Legacy,
+    PigV1,
+}
+impl EntityRules {
+    fn is_legacy(&self) -> bool {
+        *self == Self::Legacy
+    }
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) enum StationKind {
     #[default]
@@ -83,7 +95,7 @@ impl StationKind {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Loot {
     Stack(ItemStack),
     Tool(ToolItem),
@@ -119,6 +131,8 @@ pub(crate) enum Panel {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default, skip_serializing_if = "EntityRules::is_legacy")]
+    pub entity_rules: EntityRules,
     #[serde(default, skip_serializing_if = "DeathRule::is_keep")]
     pub death_rule: DeathRule,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -135,8 +149,8 @@ pub(crate) struct State {
     pub spawn: (i64, i64),
     pub drops: Vec<Drop>,
     pub stations: Vec<Station>,
-    random: JavaRandom,
-    ticks: u64,
+    pub(super) random: JavaRandom,
+    pub(super) ticks: u64,
     #[serde(skip)]
     pub panel: Panel,
     #[serde(skip)]
@@ -237,6 +251,7 @@ impl State {
             },
         );
         Self {
+            entity_rules: EntityRules::PigV1,
             death_rule: DeathRule::ChestNormal,
             entity_pages_present: false,
             death_recorded: false,
@@ -324,7 +339,7 @@ impl State {
             .zip(y.checked_add(dy))
             .ok_or_else(|| "interaction outside i64 tiles".into())
     }
-    fn tool(&self) -> Option<ToolItem> {
+    pub(super) fn tool(&self) -> Option<ToolItem> {
         match self.player.active_item {
             Some(ActiveItem::Tool(i)) => self.player.inventory.tools().get(i).copied(),
             _ => None,
@@ -337,7 +352,7 @@ impl State {
             self.player.active_item = None;
         }
     }
-    fn charge_tool(&mut self, cost: u8) -> Option<ToolItem> {
+    pub(super) fn charge_tool(&mut self, cost: u8) -> Option<ToolItem> {
         let Some(ActiveItem::Tool(i)) = self.player.active_item else {
             return None;
         };
@@ -885,7 +900,7 @@ pub(super) fn validate_inventory(i: &Inventory) -> Result<(), String> {
     }
     Ok(())
 }
-fn validate_loot(loot: Loot) -> Result<(), String> {
+pub(super) fn validate_loot(loot: Loot) -> Result<(), String> {
     match loot {
         Loot::Stack(s) => {
             s.validate_instance()?;
