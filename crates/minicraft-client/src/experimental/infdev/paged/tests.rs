@@ -939,6 +939,7 @@ fn survival_legacy_session_and_smelting_interruption_preserve_exact_ownership() 
     let position = w.position();
     let s = w.survival.as_mut().unwrap();
     s.food_rules = FoodRules::Legacy;
+    s.death_rule = crate::experimental::infdev::survival::DeathRule::KeepInventory;
     s.stations.push(Station {
         depth: 0,
         x: position.0 + 1,
@@ -1005,4 +1006,426 @@ fn survival_legacy_session_and_smelting_interruption_preserve_exact_ownership() 
     assert!(s.stations[0].kind == StationKind::Furnace);
     assert_ne!(w.cell_at(-1, -65, -1).unwrap().data, 731);
     w.collect_garbage().unwrap();
+}
+
+fn death_fixture(root: &Owned, name: &str) -> (World, crate::item::Inventory) {
+    use crate::item::{ItemId, ItemStack, ToolItem, ToolKind, ToolTier};
+    let mut w = World::create_survival(&root.0, name, 42, 1).unwrap();
+    w.visit_layer(-1, -65, -65).unwrap();
+    w.set_cell(
+        -65,
+        -65,
+        Cell {
+            ground: Ground::Dirt,
+            data: 0,
+        },
+    )
+    .unwrap();
+    let p = &mut w.survival.as_mut().unwrap().player;
+    p.inventory.add(ItemId::Wood, 731);
+    p.inventory.add_stack(ItemStack::with_water(731));
+    p.inventory.add_stack(ItemStack::with_water(23));
+    p.inventory.add_stack(ItemStack {
+        item: ItemId::WateringCan,
+        count: 1,
+        watering_content: None,
+    });
+    let mut t = ToolItem::new(ToolKind::Pickaxe, ToolTier::Iron);
+    t.durability = 23;
+    p.inventory.add_tool(t).unwrap();
+    p.active_item = Some(crate::world::ActiveItem::Tool(0));
+    let inventory = p.inventory.clone();
+    w.checkpoint().unwrap();
+    (w, inventory)
+}
+
+#[test]
+fn death_chest_cross_depth_full_bag_instances_duplicate_touch_and_disk_gc() {
+    use crate::{
+        experimental::infdev::{entities::Kind, survival::Action},
+        item::{Inventory, ToolItem, ToolKind, ToolTier},
+    };
+    let root = Owned::new();
+    let (mut w, owned) = death_fixture(&root, "Death");
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
+    assert!(w.survival().unwrap().player.active_item.is_none());
+    let key = Key::at_depth(-1, -65, -65);
+    for _ in 0..5 {
+        w.survival_action(Action::Tick).unwrap();
+    }
+    let page = w.entity_page(key).unwrap();
+    assert_eq!(page.entities.len(), 1);
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(chest.inventory, owned);
+    // Enter respawns, but must NOT retrieve an underground chest remotely.
+    w.survival_action(Action::Interact).unwrap();
+    assert_eq!(w.depth(), 0);
+    assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
+    let spawn = w.position();
+    w.visit_layer(-1, -65, -65).unwrap();
+    for _ in 0..27 {
+        w.survival
+            .as_mut()
+            .unwrap()
+            .player
+            .inventory
+            .add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood))
+            .unwrap();
+    }
+    w.survival_action(Action::Tick).unwrap();
+    let page = w.entity_page(key).unwrap();
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(
+        chest.inventory, owned,
+        "full bag leaves every instance in the chest"
+    );
+    // Remove only the explicit capacity fixture, not any of the source items.
+    w.survival.as_mut().unwrap().player.inventory = Inventory::new(27);
+    w.survival_action(Action::Tick).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    assert!(w.entity_page(key).unwrap().entities.is_empty());
+    w.survival_action(Action::Tick).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    w.visit_layer(0, spawn.0, spawn.1).unwrap();
+    w.unload_all().unwrap();
+    assert!(w.entity_cache.is_empty());
+    w.collect_garbage().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    assert!(w.entity_page(key).unwrap().entities.is_empty());
+}
+
+#[test]
+fn death_chest_partial_stack_pickup_never_loses_remainders() {
+    use crate::{
+        experimental::infdev::{entities::Kind, survival::Action},
+        item::{ItemId, ToolItem, ToolKind, ToolTier},
+    };
+    let root = Owned::new();
+    let (mut w, _) = death_fixture(&root, "PartialDeath");
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    w.survival_action(Action::Confirm).unwrap();
+    w.visit_layer(-1, -65, -65).unwrap();
+    let inv = &mut w.survival.as_mut().unwrap().player.inventory;
+    inv.add(ItemId::Wood, crate::item::MAX_STACK - 1);
+    for _ in 0..26 {
+        inv.add_tool(ToolItem::new(ToolKind::Axe, ToolTier::Wood))
+            .unwrap();
+    }
+    w.survival_action(Action::Tick).unwrap();
+    let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(chest.inventory.count(ItemId::Wood), 730);
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Wood),
+        crate::item::MAX_STACK
+    );
+    assert_eq!(
+        chest
+            .inventory
+            .slots()
+            .iter()
+            .filter(|s| s.item == ItemId::WateringCan)
+            .count(),
+        3
+    );
+    for _ in 0..10 {
+        w.survival_action(Action::Tick).unwrap();
+    }
+    let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(chest.inventory.count(ItemId::Wood), 730);
+    w.checkpoint().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(
+        w.survival().unwrap().player.inventory.count(ItemId::Wood),
+        crate::item::MAX_STACK
+    );
+    let page = w.entity_page(Key::at_depth(-1, -65, -65)).unwrap();
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(chest.inventory.count(ItemId::Wood), 730);
+}
+
+#[test]
+fn death_and_retrieval_publication_faults_keep_a_single_inventory_owner() {
+    use crate::experimental::infdev::{entities::Kind, survival::Action};
+    let root = Owned::new();
+    let (mut w, owned) = death_fixture(&root, "FaultDeath");
+    let dir = w.directory.clone();
+    let before = fs::read(dir.join("checkpoint.json")).unwrap();
+    assert!(w.act_with_entities(Action::DiagnosticDeath).unwrap());
+    w.set_cell(
+        -65,
+        -65,
+        Cell {
+            ground: Ground::Dirt,
+            data: 731,
+        },
+    )
+    .unwrap();
+    assert!(
+        w.commit_with_hook(|| Err("kill before death pointer publish".into()))
+            .is_err()
+    );
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), before);
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    assert_eq!(w.cell(-65, -65).unwrap().data, 0);
+    let key = Key::at_depth(-1, -65, -65);
+    assert!(w.entity_page(key).unwrap().entities.is_empty());
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    w.survival_action(Action::Confirm).unwrap();
+    w.visit_layer(-1, -65, -65).unwrap();
+    let before = fs::read(dir.join("checkpoint.json")).unwrap();
+    assert!(w.act_with_entities(Action::Tick).unwrap());
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    assert!(
+        w.commit_with_hook(|| Err("kill before retrieval pointer publish".into()))
+            .is_err()
+    );
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), before);
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
+    let page = w.entity_page(key).unwrap();
+    let Kind::DeathChest(chest) = &page.entities[0].kind;
+    assert_eq!(chest.inventory, owned);
+    w.collect_garbage().unwrap();
+}
+
+#[test]
+fn corrupt_death_entity_rolls_back_entire_player_root_and_pins_gc() {
+    use crate::experimental::infdev::survival::Action;
+    let root = Owned::new();
+    let (mut w, owned) = death_fixture(&root, "CorruptDeath");
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    let key = Key::at_depth(-1, -65, -65);
+    let object = w.find(w.saved.entity_root, key).unwrap().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    fs::write(
+        objects::path(&dir, objects::Domain::Entities, object),
+        b"torn chest object",
+    )
+    .unwrap();
+    let mut w = World::open(&dir, 1).unwrap();
+    assert!(w.recovered_backup());
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    assert!(w.entity_page(key).unwrap().entities.is_empty());
+    assert!(w.collect_garbage().is_err());
+    assert!(dir.join("gc-recovery.hold").exists());
+}
+
+#[test]
+fn blocked_full_expired_and_legacy_deaths_keep_all_valid_items() {
+    use crate::{
+        experimental::infdev::{
+            entities::{Kind, Page, Position},
+            survival::{DeathRule, State},
+        },
+        item::ItemId,
+    };
+    let at = Position {
+        depth: -1,
+        x: -65,
+        y: -65,
+    };
+    let mut page = Page::empty(at.key());
+    let mut s = State::new(42);
+    s.player.inventory.add(ItemId::Wood, 731);
+    s.player.health = 0;
+    page.record_death(&mut s, at, false);
+    assert!(s.death_retained);
+    assert_eq!(s.player.inventory.count(ItemId::Wood), 731);
+    assert!(page.entities.is_empty());
+    s.death_recorded = false;
+    s.death_retained = false;
+    s.death_rule = DeathRule::KeepInventory;
+    page.record_death(&mut s, at, true);
+    assert!(!s.death_recorded);
+    assert_eq!(s.player.inventory.count(ItemId::Wood), 731);
+    s.death_rule = DeathRule::ChestNormal;
+    for _ in 0..64 {
+        s.death_recorded = false;
+        s.player.inventory.add(ItemId::Wood, 1);
+        page.record_death(&mut s, at, true);
+    }
+    s.death_recorded = false;
+    s.player.inventory.add(ItemId::Wood, 23);
+    page.record_death(&mut s, at, true);
+    assert!(s.death_retained);
+    assert_eq!(s.player.inventory.count(ItemId::Wood), 23);
+    assert_eq!(page.entities.len(), 64);
+    for e in &mut page.entities {
+        let Kind::DeathChest(c) = &mut e.kind;
+        c.remaining = 1;
+    }
+    let other = Position { x: at.x - 1, ..at };
+    page.tick(other, &mut s.player.inventory);
+    assert_eq!(page.entities.len(), 64);
+    assert!(page.entities.iter().all(|e| {
+        let Kind::DeathChest(c) = &e.kind;
+        c.remaining == 0
+    }));
+    page.interact(at, &mut s.player.inventory);
+    assert!(page.entities.is_empty());
+    assert_eq!(s.player.inventory.count(ItemId::Wood), 818);
+    // 732 in first chest + 63 other chests + 23 retained on player.
+}
+
+#[test]
+fn entity_pages_evict_across_signed_depth_keys_and_gc_retains_backups() {
+    use crate::{
+        experimental::infdev::{
+            entities::{Kind, Page, Position},
+            survival::State,
+        },
+        item::ItemId,
+    };
+    let root = Owned::new();
+    let mut w = World::create_survival(&root.0, "EntityPages", 42, 1).unwrap();
+    let mut places = Vec::new();
+    for i in 0..128_i64 {
+        let at = Position {
+            depth: -(i % 5) as i8,
+            x: if i == 0 {
+                i64::MIN
+            } else if i == 1 {
+                i64::MAX
+            } else {
+                -i * 64 - 1
+            },
+            y: i * 64,
+        };
+        let key = at.key();
+        let mut page = w.entity_page(key).unwrap();
+        assert!(page.entities.is_empty());
+        let mut s = State::new(42);
+        s.player.inventory.add(ItemId::Wood, (i + 1) as u16);
+        page.record_death(&mut s, at, true);
+        let cached = w.entity_cache.get_mut(&key).unwrap();
+        cached.page = page;
+        cached.dirty = true;
+        w.survival.as_mut().unwrap().entity_pages_present = true;
+        places.push((at, (i + 1) as u16));
+        assert_eq!(w.entity_cache.len(), 1);
+    }
+    w.unload_all().unwrap();
+    w.collect_garbage().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    for (at, count) in places {
+        let page = w.entity_page(at.key()).unwrap();
+        let Kind::DeathChest(c) = &page.entities[0].kind;
+        assert_eq!(c.inventory.count(ItemId::Wood), count);
+        assert_eq!(page.position(&page.entities[0]), at);
+    }
+    assert!(
+        Page::empty(Key {
+            depth: 1,
+            x: 0,
+            y: 0
+        })
+        .validate()
+        .is_err()
+    );
+    w.collect_garbage().unwrap();
+}
+
+#[test]
+fn missing_entity_root_or_write_failure_cannot_silently_empty_player_inventory() {
+    use crate::experimental::infdev::{entities::Kind, survival::Action};
+    let root = Owned::new();
+    let (mut w, owned) = death_fixture(&root, "EntityWriteFailure");
+    let dir = w.directory.clone();
+    let previous = fs::read(dir.join("checkpoint.json")).unwrap();
+    // A controlled I/O obstruction belongs exclusively to this test directory.
+    fs::write(dir.join("entities"), b"not a directory").unwrap();
+    assert!(w.survival_action(Action::DiagnosticDeath).is_err());
+    assert_eq!(fs::read(dir.join("checkpoint.json")).unwrap(), previous);
+    assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
+    let key = Key::at_depth(-1, -65, -65);
+    let page = w.entity_page(key).unwrap();
+    let Kind::DeathChest(c) = &page.entities[0].kind;
+    assert_eq!(
+        c.inventory, owned,
+        "RAM still has exactly one owner after save failure"
+    );
+    drop(w);
+    let mut w = World::open(&dir, 1).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    fs::remove_file(dir.join("entities")).unwrap();
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    let complete = fs::read(dir.join("checkpoint.json")).unwrap();
+    let mut missing: serde_json::Value = serde_json::from_slice(&complete).unwrap();
+    missing.as_object_mut().unwrap().remove("entity_root");
+    drop(w);
+    fs::write(
+        dir.join("checkpoint.json"),
+        serde_json::to_vec(&missing).unwrap(),
+    )
+    .unwrap();
+    let w = World::open(&dir, 1).unwrap();
+    assert!(w.recovered_backup());
+    assert_eq!(
+        w.survival().unwrap().player.inventory,
+        owned,
+        "missing root is corruption, not an empty entity world"
+    );
+}
+
+#[test]
+fn gc_retains_pre_retrieval_chest_and_unknown_inventory_fields_are_refused() {
+    use crate::experimental::infdev::{entities::Kind, survival::Action};
+    let root = Owned::new();
+    let (mut w, owned) = death_fixture(&root, "EntityBackup");
+    w.survival_action(Action::DiagnosticDeath).unwrap();
+    let key = Key::at_depth(-1, -65, -65);
+    let chest = w.find(w.saved.entity_root, key).unwrap().unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(
+        &objects::read(&w.directory, objects::Domain::Entities, chest).unwrap(),
+    )
+    .unwrap();
+    value["entities"][0]["kind"]["DeathChest"]["inventory"]["future_owned_instance"] =
+        serde_json::json!(731);
+    let unknown = objects::write(
+        &w.directory,
+        objects::Domain::Entities,
+        &serde_json::to_vec(&value).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        w.read_entity_object(key, unknown).is_err(),
+        "nested inventory data must never be silently ignored"
+    );
+    w.survival_action(Action::Confirm).unwrap();
+    w.visit_layer(-1, -65, -65).unwrap();
+    w.survival_action(Action::Tick).unwrap();
+    assert_eq!(w.survival().unwrap().player.inventory, owned);
+    w.collect_garbage().unwrap();
+    assert!(
+        objects::read(&w.directory, objects::Domain::Entities, chest).is_ok(),
+        "backup still owns its pre-retrieval chest object"
+    );
+    let current = w.find(w.saved.entity_root, key).unwrap().unwrap();
+    let dir = w.directory.clone();
+    drop(w);
+    fs::write(
+        objects::path(&dir, objects::Domain::Entities, current),
+        b"corrupt empty page",
+    )
+    .unwrap();
+    let mut w = World::open(&dir, 1).unwrap();
+    assert!(w.recovered_backup());
+    assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
+    let page = w.entity_page(key).unwrap();
+    let Kind::DeathChest(c) = &page.entities[0].kind;
+    assert_eq!(c.inventory, owned);
 }

@@ -2,6 +2,7 @@
 //! Windows writer lock covers saving, validation and reachability collection.
 #[doc(hidden)]
 pub mod diagnostics;
+mod entities;
 mod objects;
 #[cfg(test)]
 mod tests;
@@ -55,7 +56,7 @@ impl Key {
             y: y.div_euclid(64),
         }
     }
-    fn valid(self, layered: bool) -> bool {
+    pub(super) fn valid(self, layered: bool) -> bool {
         let bounds = i64::MIN / 64..=i64::MAX / 64;
         bounds.contains(&self.x)
             && bounds.contains(&self.y)
@@ -98,6 +99,8 @@ struct Checkpoint {
     sequence: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     session: Option<Object>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    entity_root: Option<Object>,
 }
 
 struct Cached {
@@ -111,6 +114,7 @@ pub struct World {
     _lock: File,
     saved: Checkpoint,
     survival: Option<Box<super::survival::State>>,
+    entity_cache: BTreeMap<Key, entities::CachedEntities>,
     resident: BTreeMap<Key, Cached>,
     nodes: BTreeMap<Object, (Node, u64)>,
     capacity: usize,
@@ -159,12 +163,9 @@ impl World {
         &mut self,
         action: super::survival::Action,
     ) -> Result<(), String> {
-        // Keep the previous complete session available to eviction checkpoints.
-        // Actions read/load first and make at most one map write, LAST; no IO
-        // follows that write before installing the new session in memory.
-        let mut state = self.survival.clone().ok_or("not a Survival world")?;
-        state.act(self, action)?;
-        self.survival = Some(state);
+        if self.act_with_entities(action)? {
+            self.checkpoint()?;
+        }
         Ok(())
     }
     pub fn resident_count(&self) -> usize {
@@ -282,7 +283,9 @@ impl World {
                 root: None,
                 sequence: 0,
                 session: None,
+                entity_root: None,
             },
+            entity_cache: BTreeMap::new(),
             resident: BTreeMap::new(),
             nodes: BTreeMap::new(),
             capacity,
@@ -369,6 +372,7 @@ impl World {
                 _lock: handle.try_clone().map_err(|e| e.to_string())?,
                 saved,
                 survival: None,
+                entity_cache: BTreeMap::new(),
                 resident: BTreeMap::new(),
                 nodes: BTreeMap::new(),
                 capacity,
@@ -378,6 +382,7 @@ impl World {
             };
             let valid: Result<(), String> = (|| {
                 w.validate_root(w.saved.root)?;
+                w.validate_entity_root(w.saved.entity_root)?;
                 w.survival = w.read_session(&w.saved)?;
                 let p = w.position();
                 if w.find(w.saved.root, Key::at_depth(w.depth(), p.0, p.1))?
@@ -412,10 +417,12 @@ impl World {
         let saved: Checkpoint = serde_json::from_str(text).map_err(|e| e.to_string())?;
         let contract = match (saved.format.as_str(), saved.generator) {
             (FORMAT, Generator::LegacyHeightV1 | Generator::JavaSurfaceV1) => {
-                saved.depth == 0 && saved.session.is_none()
+                saved.depth == 0 && saved.session.is_none() && saved.entity_root.is_none()
             }
             (LAYERED_FORMAT, Generator::JavaLayersV1) => {
-                (-4..=0).contains(&saved.depth) && saved.session.is_none()
+                (-4..=0).contains(&saved.depth)
+                    && saved.session.is_none()
+                    && saved.entity_root.is_none()
             }
             (SURVIVAL_FORMAT, Generator::JavaLayersV1) => {
                 (-4..=0).contains(&saved.depth) && saved.session.is_some()
@@ -434,7 +441,9 @@ impl World {
         };
         let format = value.get("format").and_then(|v| v.as_str());
         let generator = value.get("generator").and_then(|v| v.as_str());
-        if (format == Some(SURVIVAL_FORMAT) && value.get("session").is_none_or(|v| v.is_null()))
+        if (format != Some(SURVIVAL_FORMAT)
+            && value.get("entity_root").is_some_and(|v| !v.is_null()))
+            || (format == Some(SURVIVAL_FORMAT) && value.get("session").is_none_or(|v| v.is_null()))
             || (matches!(format, Some(FORMAT | LAYERED_FORMAT))
                 && value.get("session").is_some_and(|v| !v.is_null()))
             || format.is_some_and(|f| f != FORMAT && f != LAYERED_FORMAT && f != SURVIVAL_FORMAT)
@@ -566,6 +575,7 @@ impl World {
     pub fn unload_all(&mut self) -> Result<(), String> {
         self.checkpoint()?;
         self.resident.clear();
+        self.entity_cache.clear();
         Ok(())
     }
 
@@ -626,6 +636,7 @@ impl World {
             .filter(|(_, c)| c.dirty)
             .map(|(&k, c)| (k, c.cells.clone()))
             .collect();
+        let entity_root = self.write_entity_pages()?;
         if dirty.is_empty() && self.directory.join("checkpoint.json").exists() {
             let old = crate::saveload::storage::read_text_limited(
                 &self.directory.join("checkpoint.json"),
@@ -633,8 +644,12 @@ impl World {
             )?;
             let mut desired = self.saved.clone();
             desired.session = session;
+            desired.entity_root = entity_root;
             if Self::parse_checkpoint(&old)? == desired {
                 before_publish()?;
+                for page in self.entity_cache.values_mut() {
+                    page.dirty = false;
+                }
                 return Ok(());
             }
         }
@@ -646,6 +661,7 @@ impl World {
         let mut next = self.saved.clone();
         next.root = root;
         next.session = session;
+        next.entity_root = entity_root;
         next.sequence = next
             .sequence
             .checked_add(1)
@@ -662,6 +678,9 @@ impl World {
             atomic_write(&primary, &bytes)?;
         }
         self.saved = next;
+        for page in self.entity_cache.values_mut() {
+            page.dirty = false;
+        }
         for chunk in self.resident.values_mut() {
             chunk.dirty = false;
         }

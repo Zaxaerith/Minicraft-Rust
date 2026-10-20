@@ -16,6 +16,7 @@ pub(super) enum Domain {
     Nodes,
     Chunks,
     Sessions,
+    Entities,
 }
 impl Domain {
     fn name(self) -> &'static str {
@@ -23,6 +24,7 @@ impl Domain {
             Self::Nodes => "nodes",
             Self::Chunks => "chunks",
             Self::Sessions => "sessions",
+            Self::Entities => "entities",
         }
     }
     fn suffix(self) -> &'static str {
@@ -30,12 +32,13 @@ impl Domain {
             Self::Nodes => "node",
             Self::Chunks => "chunk",
             Self::Sessions => "session",
+            Self::Entities => "entity",
         }
     }
     fn limit(self) -> usize {
         match self {
             Self::Nodes => 1024,
-            Self::Sessions => 256 * 1024,
+            Self::Sessions | Self::Entities => 256 * 1024,
             Self::Chunks => 8 + 4096 * 3,
         }
     }
@@ -434,16 +437,17 @@ impl World {
         root: Option<Object>,
     ) -> Result<HashSet<(Domain, Object)>, String> {
         let mut marked = HashSet::new();
-        self.walk(root, None, None, 0, &mut marked)?;
+        self.walk(root, None, None, 0, &mut marked, Domain::Chunks)?;
         Ok(marked)
     }
-    fn walk(
+    pub(super) fn walk(
         &mut self,
         root: Option<Object>,
         lower: Option<Key>,
         upper: Option<Key>,
         depth: u8,
         marked: &mut HashSet<(Domain, Object)>,
+        domain: Domain,
     ) -> Result<(u8, u64), String> {
         let Some(r) = root else {
             return Ok((0, 0));
@@ -456,11 +460,14 @@ impl World {
             return Err("index key order/cycle violation".into());
         }
         marked.insert((Domain::Nodes, r));
-        if marked.insert((Domain::Chunks, n.chunk)) {
+        if domain == Domain::Entities {
+            self.read_entity_object(n.key, n.chunk)?;
+            marked.insert((domain, n.chunk));
+        } else if marked.insert((domain, n.chunk)) {
             self.read_chunk(n.chunk)?;
         }
-        let (lh, lc) = self.walk(n.left, lower, Some(n.key), depth + 1, marked)?;
-        let (rh, rc) = self.walk(n.right, Some(n.key), upper, depth + 1, marked)?;
+        let (lh, lc) = self.walk(n.left, lower, Some(n.key), depth + 1, marked, domain)?;
+        let (rh, rc) = self.walk(n.right, Some(n.key), upper, depth + 1, marked, domain)?;
         let count = lc
             .checked_add(rc)
             .and_then(|n| n.checked_add(1))
@@ -482,6 +489,9 @@ impl World {
                 let state: super::super::survival::State =
                     serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
                 state.validate()?;
+                if state.entity_pages_present != cp.entity_root.is_some() {
+                    return Err("entity root/session ownership receipt mismatch".into());
+                }
                 let source: serde_json::Value =
                     serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
                 if source != serde_json::to_value(&state).map_err(|e| e.to_string())? {
@@ -495,7 +505,7 @@ impl World {
             .transpose()
     }
     pub fn collect_garbage(&mut self) -> Result<Collection, String> {
-        if self.resident.values().any(|c| c.dirty) {
+        if self.entity_cache.values().any(|c| c.dirty) || self.resident.values().any(|c| c.dirty) {
             return Err("save dirty chunks before collection".into());
         }
         if let Some(state) = &self.survival {
@@ -558,7 +568,10 @@ impl World {
                 if let Some(session) = saved.session {
                     live.insert((Domain::Sessions, session));
                 }
-                if validated_roots.insert(saved.root) {
+                if validated_roots.insert((Domain::Entities, saved.entity_root)) {
+                    live.extend(self.validate_entity_root(saved.entity_root)?);
+                }
+                if validated_roots.insert((Domain::Chunks, saved.root)) {
                     live.extend(self.validate_root(saved.root)?);
                 }
                 if self
@@ -583,7 +596,10 @@ impl World {
             }
         }
         // Also retain the live in-memory root, including publication-error state.
-        if validated_roots.insert(self.saved.root) {
+        if validated_roots.insert((Domain::Entities, self.saved.entity_root)) {
+            live.extend(self.validate_entity_root(self.saved.entity_root)?);
+        }
+        if validated_roots.insert((Domain::Chunks, self.saved.root)) {
             live.extend(self.validate_root(self.saved.root)?);
         }
         self.read_session(&self.saved)?;
@@ -596,12 +612,20 @@ impl World {
             ..Default::default()
         };
         let domains = if self.is_survival() {
-            &[Domain::Nodes, Domain::Chunks, Domain::Sessions][..]
+            &[
+                Domain::Nodes,
+                Domain::Chunks,
+                Domain::Sessions,
+                Domain::Entities,
+            ][..]
         } else {
             &[Domain::Nodes, Domain::Chunks][..]
         };
         for &domain in domains {
             let directory = self.directory.join(domain.name());
+            if domain == Domain::Entities && !directory.try_exists().map_err(|e| e.to_string())? {
+                continue;
+            }
             real_path(&directory, true)?;
             for bucket in fs::read_dir(&directory).map_err(|e| e.to_string())? {
                 let bucket = bucket.map_err(|e| e.to_string())?;

@@ -1,6 +1,15 @@
 //! Diagnostic autopilot: sends only the public GUI Input adapter. No inventory
 //! injection, teleports, terrain edits, or alternate game-action implementation.
 use super::*;
+mod death;
+pub(super) fn run_death(
+    h: &mut Host,
+    e: &mut Explorer,
+    root: &Path,
+    mode: &str,
+) -> Result<(), String> {
+    death::run(h, e, root, mode)
+}
 use crate::{
     experimental::infdev::survival::{self, Loot, StationKind},
     item::{ItemId, ToolKind},
@@ -216,6 +225,14 @@ fn path(
             {
                 continue;
             }
+            if e.entity_pages().any(|page| {
+                page.entities.iter().any(|entity| {
+                    let at = page.position(entity);
+                    (at.x, at.y) == next && at.depth == e.depth()
+                })
+            }) {
+                continue;
+            } // Approach death chests deliberately; do not auto-loot on the route.
             let weight = match c.ground {
                 Ground::Tree => 16,
                 Ground::Rock => 40,

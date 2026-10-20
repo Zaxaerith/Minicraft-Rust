@@ -261,6 +261,7 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             }
             let keys = needed_at(state.depth, state.position);
             state.chunks.retain(|key, _| keys.contains(key));
+            state.entities.retain(|key, _| keys.contains(key));
             if !touched_chunk
                 && !failed_load
                 && let Some(key) = keys
@@ -279,11 +280,37 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                 }
                 changed = true;
             }
-            state.ready = state.chunks.contains_key(&Key::at_depth(
-                state.depth,
-                state.position.0,
-                state.position.1,
-            ));
+            if world.is_survival() {
+                for &key in state.chunks.keys() {
+                    match world.entity_page(key) {
+                        Ok(page) => {
+                            if state
+                                .entities
+                                .get(&key)
+                                .is_none_or(|old| old.as_ref() != &page)
+                            {
+                                state.entities.insert(key, Arc::new(page));
+                            }
+                        }
+                        Err(e) => {
+                            state.entities.remove(&key);
+                            state.status = format!("ENTITY LOAD FAILED: {e}");
+                            failed_load = true;
+                        }
+                    }
+                }
+            }
+            state.ready = (!world.is_survival()
+                || state.entities.contains_key(&Key::at_depth(
+                    state.depth,
+                    state.position.0,
+                    state.position.1,
+                )))
+                && state.chunks.contains_key(&Key::at_depth(
+                    state.depth,
+                    state.position.0,
+                    state.position.1,
+                ));
             if !state.save_failed
                 && let Some(warning) = world.collection_warning()
             {

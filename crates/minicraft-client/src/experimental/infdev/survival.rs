@@ -36,6 +36,21 @@ impl FoodRules {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum DeathRule {
+    #[default]
+    KeepInventory,
+    ChestNormal,
+}
+impl DeathRule {
+    fn is_keep(&self) -> bool {
+        *self == Self::KeepInventory
+    }
+}
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) enum StationKind {
     #[default]
@@ -104,6 +119,16 @@ pub(crate) enum Panel {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default, skip_serializing_if = "DeathRule::is_keep")]
+    pub death_rule: DeathRule,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub entity_pages_present: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub death_recorded: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub death_retained: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub death_site: Option<super::entities::Position>,
     #[serde(default, skip_serializing_if = "FoodRules::is_legacy")]
     pub food_rules: FoodRules,
     pub player: Player,
@@ -121,6 +146,7 @@ pub(crate) struct State {
 #[derive(Clone, Copy)]
 pub(crate) enum Action {
     Tick,
+    DiagnosticDeath, // Only the explicit native-window diagnostic sends this.
     Move(i32, i32),
     Attack,
     Interact,
@@ -211,6 +237,11 @@ impl State {
             },
         );
         Self {
+            death_rule: DeathRule::ChestNormal,
+            entity_pages_present: false,
+            death_recorded: false,
+            death_retained: false,
+            death_site: None,
             food_rules: FoodRules::JavaNormal,
             player: template.player,
             spawn: (0, 0),
@@ -237,6 +268,13 @@ impl State {
             || self.stations.len() > MAX_STATIONS
         {
             return Err("invalid bounded Survival player/session".into());
+        }
+        if self.death_retained && !self.death_recorded
+            || self
+                .death_site
+                .is_some_and(|p| !(-4..=0).contains(&p.depth))
+        {
+            return Err("invalid death receipt".into());
         }
         validate_inventory(&p.inventory)?;
         for drop in &self.drops {
@@ -279,7 +317,7 @@ impl State {
             Direction::Right => (1, 0),
         }
     }
-    fn target(&self, w: &World) -> Result<(i64, i64), String> {
+    pub(super) fn target(&self, w: &World) -> Result<(i64, i64), String> {
         let (x, y) = w.position();
         let (dx, dy) = self.facing();
         x.checked_add(dx)
@@ -340,6 +378,8 @@ impl State {
                 w.visit_layer(0, self.spawn.0, self.spawn.1)?;
                 self.player.x = 8;
                 self.player.y = 8;
+                self.death_recorded = false;
+                self.death_retained = false;
                 self.player.health = 10;
                 self.player.stamina = 10;
                 if self.food_rules == FoodRules::JavaNormal {
@@ -350,6 +390,7 @@ impl State {
         }
         match action {
             Action::Tick => self.tick(w)?,
+            Action::DiagnosticDeath => self.player.health = 0,
             Action::Inventory => {
                 self.panel = Panel::Inventory;
                 self.selection = 0;
@@ -461,6 +502,9 @@ impl State {
         if cell.ground == Ground::Lava && self.ticks.is_multiple_of(30) {
             self.hurt();
         }
+        if self.player.health == 0 {
+            return Ok(());
+        } // Dead players cannot collect more loot.
         for d in &mut self.drops {
             d.delay = d.delay.saturating_sub(1);
             if d.delay == 0 && d.depth == w.depth() && d.x.abs_diff(x) <= 1 && d.y.abs_diff(y) <= 1
@@ -831,7 +875,7 @@ impl State {
     }
 }
 
-fn validate_inventory(i: &Inventory) -> Result<(), String> {
+pub(super) fn validate_inventory(i: &Inventory) -> Result<(), String> {
     i.validate_instances()?;
     for s in i.slots() {
         validate_loot(Loot::Stack(*s))?;

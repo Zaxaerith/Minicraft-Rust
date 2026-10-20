@@ -362,6 +362,7 @@ fn food_metabolism_pause_heal_starve_and_legacy_session_contracts() {
     }
     assert_eq!(s.player.health, 3, "Normal starvation floor, not Hardcore");
     s.food_rules = FoodRules::Legacy;
+    s.death_rule = crate::experimental::infdev::survival::DeathRule::KeepInventory;
     s.panel = Panel::Closed;
     s.stations.push(Station {
         depth: 0,

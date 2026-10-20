@@ -231,11 +231,17 @@ fn explore_layers(host: &mut Host, explorer: &mut Explorer, root: &Path) -> Resu
 pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
     if !matches!(
         mode,
-        "create" | "reopen" | "survival-create" | "survival-reopen"
+        "create"
+            | "reopen"
+            | "survival-create"
+            | "survival-reopen"
+            | "death-create"
+            | "death-recover"
+            | "death-reopen"
     ) {
         return Err("window smoke mode must be create or reopen".into());
     }
-    let survival = mode.starts_with("survival-");
+    let survival = mode.starts_with("survival-") || mode.starts_with("death-");
     let creating = mode.ends_with("create");
     let assets = Assets::load(&[])?;
     let mut window = Window::new(
@@ -346,6 +352,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
                 })
             })
     })?;
+    if mode.starts_with("death-") {
+        return survival::run_death(&mut host, &mut explorer, &root, mode);
+    }
     if survival {
         return survival::run(&mut host, &mut explorer, &root, creating);
     }

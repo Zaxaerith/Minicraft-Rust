@@ -32,6 +32,7 @@ struct Snapshot {
     save_failed: bool,
     survival: Option<super::survival::State>,
     action_serial: u64,
+    entities: BTreeMap<Key, Arc<super::entities::Page>>,
 }
 
 impl Snapshot {
@@ -117,6 +118,14 @@ impl Explorer {
     }
     pub(crate) fn survival_state(&self) -> Option<&super::survival::State> {
         self.snapshot.survival.as_ref()
+    }
+    pub(crate) fn diagnostic_death(&mut self) {
+        let _ = self
+            .commands
+            .try_send(Command::Survival(super::survival::Action::DiagnosticDeath));
+    }
+    pub(crate) fn entity_pages(&self) -> impl Iterator<Item = &super::entities::Page> {
+        self.snapshot.entities.values().map(|p| p.as_ref())
     }
     pub fn is_survival(&self) -> bool {
         self.snapshot.survival.is_some()

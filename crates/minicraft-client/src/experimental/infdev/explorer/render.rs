@@ -223,6 +223,28 @@ fn draw_survival(
             );
         }
     }
+    for page in explorer.entity_pages() {
+        for entity in &page.entities {
+            let at = page.position(entity);
+            if let Some((x, y)) = point(at.x, at.y) {
+                let super::super::entities::Kind::DeathChest(chest) = &entity.kind;
+                assets
+                    .furniture_linked(crate::entity::furniture::FurnitureKind::Chest)
+                    .render(assets.sheets(), screen, x, y, 0, false, 0);
+                screen.text_colored(
+                    assets.font(),
+                    &format!("{}S", chest.remaining / 60),
+                    x,
+                    y - 8,
+                    if chest.remaining < 1800 {
+                        0xff7777
+                    } else {
+                        0xffffff
+                    },
+                );
+            }
+        }
+    }
     for drop in &s.drops {
         if drop.depth == explorer.depth()
             && let Some((x, y)) = point(drop.x, drop.y)
@@ -381,9 +403,32 @@ fn draw_survival(
         }
         Panel::Closed => (),
     }
+    if s.panel == Panel::Closed
+        && let Some(at) = s.death_site
+    {
+        screen.text(
+            assets.font(),
+            &format!("LAST DEATH D:{} X:{} Y:{}", at.depth, at.x, at.y)
+                .chars()
+                .take(35)
+                .collect::<String>(),
+            4,
+            HEIGHT as i32 - 49,
+        );
+    }
     if s.player.health == 0 {
         screen.rect(8, 65, WIDTH as i32 - 16, 40, 0xFF281820);
         screen.text(assets.font(), "DEAD - ENTER TO RESPAWN", 12, 72);
-        screen.text(assets.font(), "EXPERIMENT: KEEP INVENTORY", 12, 85);
+        screen.text(
+            assets.font(),
+            if s.death_rule == super::super::survival::DeathRule::KeepInventory || s.death_retained
+            {
+                "INVENTORY SAFELY RETAINED"
+            } else {
+                "ITEMS IN DEATH CHEST"
+            },
+            12,
+            85,
+        );
     }
 }

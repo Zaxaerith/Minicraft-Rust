@@ -4,6 +4,7 @@ Only the invocation's exclusively created temporary fixtures are ever removed.
 import subprocess
 import tempfile
 import argparse
+import sys
 from pathlib import Path
 
 repo = Path(__file__).resolve().parents[2]
@@ -16,9 +17,13 @@ output.mkdir(parents=True, exist_ok=True)
 
 def run(args, commands, check=True):
     result = subprocess.run([str(binary), *map(str,args)], input=commands, text=True,
-                            encoding="utf-8", capture_output=True, timeout=30, check=check)
+                            encoding="utf-8", capture_output=True, timeout=30, check=False)
     print(result.stdout, end="")
-    if not check:
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if check:
+        result.check_returncode()
+    else:
         assert result.returncode != 0, "expected safe refusal"
     return result.stdout
 
