@@ -1,15 +1,19 @@
 //! Actual naturally spawned pigs, earned drops and food through normal Input.
 use super::*;
 use crate::experimental::infdev::{
-    entities::{Kind, dynamic::Birth},
+    entities::dynamic::Birth,
     paged::{self, Key},
 };
 use std::collections::BTreeSet;
-fn pigs(e: &Explorer) -> Vec<(Birth, Point)> {
+fn animals(e: &Explorer, species: crate::entity::mob::NaturalMob) -> Vec<(Birth, Point)> {
     e.entity_pages()
-        .flat_map(|p| {
+        .flat_map(move |p| {
             p.entities.iter().filter_map(move |entity| {
-                if !matches!(entity.kind, Kind::Pig(_)) {
+                if !entity
+                    .kind
+                    .animal()
+                    .is_some_and(|a| a.mob.species == species)
+                {
                     return None;
                 }
                 let pos = p.position(entity);
@@ -69,19 +73,30 @@ pub(in crate::app::infdev_window_smoke) fn run(
             "HUNT earned natural axe at {:?}; bench {bench:?}",
             e.position()
         );
-        for attempt in 0_usize..80 {
+        for attempt in 0_usize..320 {
             keys.extend(e.entity_pages().map(|p| p.key));
-            if count(e, ItemId::RawPork) > 0 {
+            let wool: u16 = crate::item::dye::DyeColor::ALL
+                .into_iter()
+                .map(|c| count(e, c.wool_item()))
+                .sum();
+            if count(e, ItemId::RawPork) > 0 && count(e, ItemId::Leather) > 0 && wool > 0 {
                 earned = count(e, ItemId::RawPork);
                 break;
             }
-            if pigs(e).is_empty() {
+            let species = if count(e, ItemId::RawPork) == 0 {
+                crate::entity::mob::NaturalMob::Pig
+            } else if count(e, ItemId::Leather) == 0 {
+                crate::entity::mob::NaturalMob::Cow
+            } else {
+                crate::entity::mob::NaturalMob::Sheep
+            };
+            if animals(e, species).is_empty() {
                 // Exploration is part of the test: do not wait indefinitely
                 // for a naturally spawned animal outside this viewport.
                 for _ in 0..60 {
                     h.frame(e)?;
                 }
-                if pigs(e).is_empty() {
+                if animals(e, species).is_empty() {
                     let d = DIRS[(attempt / 4) % DIRS.len()];
                     let goal = (e.position().0 + d.0 * 16, e.position().1 + d.1 * 16);
                     println!("HUNT exploring natural animal habitat toward {goal:?}");
@@ -89,7 +104,7 @@ pub(in crate::app::infdev_window_smoke) fn run(
                     continue;
                 }
             }
-            let (_, pig) = pigs(e)
+            let (_, pig) = animals(e, species)
                 .into_iter()
                 .min_by_key(|(_, p)| p.0.abs_diff(e.position().0) + p.1.abs_diff(e.position().1))
                 .unwrap();
@@ -122,15 +137,18 @@ pub(in crate::app::infdev_window_smoke) fn run(
                         })
                     })
                     .min_by_key(|p| p.0.abs_diff(e.position().0) + p.1.abs_diff(e.position().1))
-                    .ok_or("no reachable natural pig approach")?;
+                    .ok_or("no reachable natural animal approach")?;
                 navigate(h, e, goal, &mut samples)?;
             }
             if attempt.is_multiple_of(10) {
-                println!("HUNT chasing natural pig {pig:?} from {:?}", e.position());
+                println!(
+                    "HUNT chasing natural {species:?} {pig:?} from {:?}",
+                    e.position()
+                );
             }
         }
         if earned == 0 {
-            return Err("did not obtain naturally hunted Raw Pork".into());
+            return Err("did not obtain naturally hunted pork, leather and wool".into());
         }
         h.frame(e)?;
         h.screen.save_png(&root.join("infdev-hunt.png"))?;
@@ -190,7 +208,7 @@ pub(in crate::app::infdev_window_smoke) fn run(
         }
         fs_write_evidence(
             &root.join("hunt-expect.json"),
-            serde_json::json!({"inventory":disk.survival().unwrap().player.inventory,"position":disk.position(),"earnedPork":earned,"atePork":1,"pages":pages}),
+            serde_json::json!({"inventory":disk.survival().unwrap().player.inventory,"position":disk.position(),"earnedPork":earned,"atePork":1,"leather":disk.survival().unwrap().player.inventory.count(ItemId::Leather),"wool":crate::item::dye::DyeColor::ALL.into_iter().map(|c| disk.survival().unwrap().player.inventory.count(c.wool_item())).sum::<u16>(),"pages":pages}),
         )?;
     }
     disk.collect_garbage()?;

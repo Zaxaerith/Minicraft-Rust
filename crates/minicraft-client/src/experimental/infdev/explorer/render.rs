@@ -191,7 +191,7 @@ fn draw_survival(
     screen: &mut Screen,
     assets: &Assets,
 ) {
-    use super::super::survival::{Loot, Panel, recipes};
+    use super::super::survival::{Loot, Panel, recipes_for};
     use crate::{
         item::{RecipeOutput, recipe_can_craft},
         world::{GameMode, hud, inventory_ui},
@@ -245,7 +245,7 @@ fn draw_survival(
                             },
                         );
                     }
-                    Kind::Pig(pig) => {
+                    Kind::Pig(pig) | Kind::Animal(pig) => {
                         let d = if pig.mob.x_move < 0 {
                             2
                         } else if pig.mob.x_move > 0 {
@@ -257,10 +257,21 @@ fn draw_survival(
                         };
                         assets
                             .mob_linked(
-                                crate::entity::mob::NaturalMob::Pig,
+                                pig.mob.species,
                                 d,
                                 ((pig.mob.walk_distance >> 3) % 2) as usize,
-                                false,
+                                pig.mob.sheared,
+                            )
+                            .set_white_tint(
+                                if pig.mob.species == crate::entity::mob::NaturalMob::Sheep {
+                                    crate::item::dye::DyeColor::from_index(u16::from(
+                                        pig.mob.sheep_color,
+                                    ))
+                                    .unwrap()
+                                    .packed_color()
+                                } else {
+                                    0xffffffff
+                                },
                             )
                             .render(
                                 assets.sheets(),
@@ -395,7 +406,7 @@ fn draw_survival(
             screen.text(assets.font(), "C: EQUIP / ESC: CLOSE", 12, 138);
         }
         Panel::Crafting(b) => {
-            let recipes = recipes(b);
+            let recipes = recipes_for(s.entity_rules, b);
             let entries = recipes
                 .iter()
                 .map(|r| {

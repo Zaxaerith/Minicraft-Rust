@@ -37,7 +37,23 @@ pub(crate) struct DeathChest {
 pub(crate) enum Kind {
     DeathChest(DeathChest),
     Pig(dynamic::Pig),
+    Animal(dynamic::Animal),
     Drop(dynamic::ItemDrop),
+}
+
+impl Kind {
+    pub fn animal(&self) -> Option<&dynamic::Animal> {
+        match self {
+            Self::Pig(a) | Self::Animal(a) => Some(a),
+            _ => None,
+        }
+    }
+    pub fn animal_mut(&mut self) -> Option<&mut dynamic::Animal> {
+        match self {
+            Self::Pig(a) | Self::Animal(a) => Some(a),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +100,17 @@ impl Page {
             match &e.kind {
                 Kind::Pig(p) => {
                     p.validate()?;
+                    if p.mob.species != crate::entity::mob::NaturalMob::Pig
+                        || p.knock_x != 0
+                        || p.knock_y != 0
+                        || p.idle != 0
+                    {
+                        return Err("PigV1 state changed meaning".into());
+                    }
+                    continue;
+                }
+                Kind::Animal(a) => {
+                    a.validate()?;
                     continue;
                 }
                 Kind::Drop(d) => {

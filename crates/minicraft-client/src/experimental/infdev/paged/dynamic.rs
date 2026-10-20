@@ -4,7 +4,7 @@ use super::*;
 use crate::experimental::infdev::{
     entities::{
         Kind, Page, Position,
-        dynamic::{ItemDrop, Pig, pig_drop, take_drop},
+        dynamic::{ItemDrop, Pig, animal_drops, pig_drop, take_drop},
     },
     survival::{self, Action, Loot, Panel, State},
 };
@@ -98,14 +98,15 @@ impl World {
             pages.get(&target.key()).unwrap().reserve(3)?;
             pages.get(&at.key()).unwrap().reserve(1)?;
         }
+        let mut grazes = Vec::new();
         if !was_dead && state.panel == Panel::Closed && matches!(action, Action::Tick) {
-            self.tick_pigs(&mut state, &mut pages, at)?;
-            self.spawn_pig(&mut state, &mut pages, at)?;
+            grazes = self.tick_animals(&mut state, &mut pages, at)?;
+            self.spawn_animal(&mut state, &mut pages, at)?;
         }
         let hit = !was_dead
             && state.panel == Panel::Closed
             && matches!(action, Action::Attack)
-            && hit_pig(&mut state, &mut pages, target)?;
+            && hit_animal(&mut state, &mut pages, target)?;
         let undo = if matches!(action, Action::Attack) && !hit {
             Some(self.cell_at(target.depth, target.x, target.y)?)
         } else {
@@ -189,12 +190,25 @@ impl World {
             let migrated = pages
                 .iter()
                 .any(|(k, p)| p.entities.len() != before[k].entities.len());
-            let critical = migrated
+            let critical = !grazes.is_empty()
+                || migrated
                 || produced
                 || taken
                 || hit
                 || death_change
                 || !receipt && state.death_recorded;
+            // Grazing and regrowth join the SAME publication as the animal.
+            for pos in grazes {
+                let chunk = self
+                    .resident
+                    .get_mut(&pos.key())
+                    .expect("loaded grazing tile; no later terrain IO on tick");
+                chunk.cells[Key::local(pos.x, pos.y)] = Cell {
+                    ground: Ground::Dirt,
+                    data: 0,
+                };
+                chunk.dirty = true;
+            }
             for (key, page) in pages {
                 if page != before[&key] {
                     state.entity_pages_present = true;
@@ -242,12 +256,14 @@ impl World {
         }
         Ok(())
     }
-    pub(super) fn tick_pigs(
+    pub(super) fn tick_animals(
         &self,
         state: &mut State,
         pages: &mut Pages,
         at: Position,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<Position>, String> {
+        let full = state.entity_rules == survival::EntityRules::PassiveV1;
+        let mut grazes = Vec::new();
         // Iterate a snapshot once: a migrant is never updated again by its
         // destination page in this tick. At most9 nearby resident terrain pages.
         let todo: Vec<_> = pages
@@ -255,7 +271,7 @@ impl World {
             .flat_map(|(&key, p)| {
                 p.entities
                     .iter()
-                    .filter(|e| matches!(e.kind, Kind::Pig(_)))
+                    .filter(|e| e.kind.animal().is_some())
                     .map(move |e| (key, e.id))
             })
             .collect();
@@ -267,21 +283,33 @@ impl World {
                 .unwrap();
             let mut entity = pages[&key].entities[index].clone();
             let mut pos = pages[&key].position(&entity);
-            let Kind::Pig(pig) = &mut entity.kind else {
-                unreachable!()
+            let pig = entity.kind.animal_mut().unwrap();
+            pig.age = if full {
+                pig.age.saturating_add(1)
+            } else {
+                pig.age.wrapping_add(1)
             };
-            pig.age = pig.age.wrapping_add(1);
+            if full && super::passive::despawn(pig, pos, at, &state.player, &mut state.random) {
+                pages.get_mut(&key).unwrap().entities.remove(index);
+                continue;
+            }
             pig.mob.hurt_time = pig.mob.hurt_time.saturating_sub(1);
-            if !pig.age.is_multiple_of(2) && pig.mob.hurt_time == 0 {
+            let knocked = full && (pig.knock_x != 0 || pig.knock_y != 0);
+            let motion = if knocked {
+                (i32::from(pig.knock_x / 2), i32::from(pig.knock_y / 2))
+            } else {
+                (pig.mob.x_move, pig.mob.y_move)
+            };
+            if full {
+                pig.knock_x -= pig.knock_x.signum();
+                pig.knock_y -= pig.knock_y.signum();
+            }
+            if knocked || (!pig.age.is_multiple_of(2) && pig.mob.hurt_time == 0) {
                 if pig.mob.x_move != 0 || pig.mob.y_move != 0 {
                     pig.mob.walk_distance = pig.mob.walk_distance.wrapping_add(1);
                 }
                 for axis in [true, false] {
-                    let (dx, dy) = if axis {
-                        (pig.mob.x_move, 0)
-                    } else {
-                        (0, pig.mob.y_move)
-                    };
+                    let (dx, dy) = if axis { (motion.0, 0) } else { (0, motion.1) };
                     let (px, py) = (i32::from(pig.px) + dx, i32::from(pig.py) + dy);
                     let Some((x, y)) = pos
                         .x
@@ -328,7 +356,18 @@ impl World {
                                 && !matches!(c.ground, Ground::Hole | Ground::Water | Ground::Lava)
                         })
                         && !state.station_at(next.depth, x, y)
-                        && !(x == at.x && y == at.y);
+                        && if full {
+                            !super::passive::blocked(
+                                pages,
+                                entity.birth,
+                                next,
+                                px.rem_euclid(16),
+                                py.rem_euclid(16),
+                                Some((at, state.player.x, state.player.y)),
+                            )
+                        } else {
+                            !(x == at.x && y == at.y)
+                        };
                     if legal {
                         pos = next;
                         pig.px = px.rem_euclid(16) as u8;
@@ -341,10 +380,26 @@ impl World {
                 }
             }
             pig.reroll(&mut state.random);
+            let grazed =
+                full && matches!(
+                    pig.mob.species,
+                    crate::entity::mob::NaturalMob::Cow | crate::entity::mob::NaturalMob::Sheep
+                ) && !grazes.contains(&pos)
+                    && self
+                        .loaded_cell(pos)
+                        .is_some_and(|c| c.ground == Ground::Grass)
+                    && state.random.next_int(1000) == 0;
+            if grazed {
+                pig.mob.sheared = false;
+            }
             entity.x = pos.x.rem_euclid(64) as u8;
             entity.y = pos.y.rem_euclid(64) as u8;
+            let accepted = pos.key() == key || pages[&pos.key()].reserve(1).is_ok();
+            if grazed && accepted {
+                grazes.push(pos);
+            }
             if pos.key() != key {
-                if pages[&pos.key()].reserve(1).is_ok() {
+                if accepted {
                     pages.get_mut(&pos.key()).unwrap().insert(
                         pos,
                         entity.kind.clone(),
@@ -356,16 +411,21 @@ impl World {
                 pages.get_mut(&key).unwrap().entities[index] = entity;
             }
         }
-        Ok(())
+        Ok(grazes)
     }
-    fn spawn_pig(&self, state: &mut State, pages: &mut Pages, at: Position) -> Result<(), String> {
+    pub(super) fn spawn_animal(
+        &self,
+        state: &mut State,
+        pages: &mut Pages,
+        at: Position,
+    ) -> Result<(), String> {
         if at.depth != 0 {
             return Ok(());
         }
         let count = pages
             .values()
             .flat_map(|p| &p.entities)
-            .filter(|e| matches!(e.kind, Kind::Pig(_)))
+            .filter(|e| e.kind.animal().is_some())
             .count();
         let max = crate::world::spawn::max_mob_count(0, 1);
         let skip = crate::world::spawn::spawn_skip_chance(count, max);
@@ -411,20 +471,26 @@ impl World {
             if occupied || page.reserve(1).is_err() {
                 continue;
             }
-            // The first legal candidate ends Java's attempt even when it
-            // selected an unsupported Cow/Sheep. Do not reroll until Pig.
-            if crate::world::spawn::choose_passive(false, roll)
-                != crate::entity::mob::NaturalMob::Pig
-            {
+            let species = crate::world::spawn::choose_passive(false, roll);
+            let full = state.entity_rules == survival::EntityRules::PassiveV1;
+            if !full && species != crate::entity::mob::NaturalMob::Pig {
                 break;
             }
-            let mut pig = Pig::new();
+            let mut pig = if full { Pig::of(species) } else { Pig::new() };
+            if species == crate::entity::mob::NaturalMob::Sheep {
+                pig.mob.sheep_color = crate::world::spawn::sheep_color(state.random.next_double());
+            }
             pig.px = state.player.x as u8;
             pig.py = state.player.y as u8;
-            pages
-                .get_mut(&pos.key())
-                .unwrap()
-                .insert(pos, Kind::Pig(pig), None)?;
+            pages.get_mut(&pos.key()).unwrap().insert(
+                pos,
+                if full {
+                    Kind::Animal(pig)
+                } else {
+                    Kind::Pig(pig)
+                },
+                None,
+            )?;
             break;
         }
         Ok(())
@@ -442,24 +508,69 @@ fn death_contents(page: &Page) -> Vec<(u64, crate::item::Inventory)> {
         })
         .collect()
 }
-fn hit_pig(state: &mut State, pages: &mut Pages, target: Position) -> Result<bool, String> {
-    if state.player.attack_time > 0
-        || state.player.stamina == 0
-        || matches!(state.player.active_item, Some(ActiveItem::Stack(_)))
-    {
+pub(super) fn hit_animal(
+    state: &mut State,
+    pages: &mut Pages,
+    target: Position,
+) -> Result<bool, String> {
+    use crate::{
+        entity::mob::NaturalMob,
+        item::{ItemStack, dye::DyeColor},
+    };
+    if state.player.attack_time > 0 || state.player.stamina == 0 {
         return Ok(false);
     }
+    let full = state.entity_rules == survival::EntityRules::PassiveV1;
     let page = pages.get_mut(&target.key()).unwrap();
-    let Some(e) = page.entities.iter_mut().find(|e| {
-        matches!(e.kind, Kind::Pig(_))
+    let Some(index) = page.entities.iter().position(|e| {
+        e.kind.animal().is_some()
             && e.x == target.x.rem_euclid(64) as u8
             && e.y == target.y.rem_euclid(64) as u8
     }) else {
         return Ok(false);
     };
-    let Kind::Pig(pig) = &mut e.kind else {
-        unreachable!()
-    };
+    let mut entity = page.entities[index].clone();
+    let pig = entity.kind.animal_mut().unwrap();
+    if full && pig.mob.species == NaturalMob::Sheep {
+        if let Some(ActiveItem::Stack(id)) = state.player.active_item
+            && let Some(color) = DyeColor::from_dye_item(id)
+        {
+            if !state.player.inventory.remove(id, 1) {
+                return Err("selected dye missing".into());
+            }
+            pig.mob.sheep_color = color as u8;
+            if state.player.inventory.count(id) == 0 {
+                state.player.active_item = None;
+            }
+            state.player.attack_time = 10;
+            page.entities[index] = entity;
+            return Ok(true);
+        }
+        if !pig.mob.sheared
+            && state
+                .tool()
+                .is_some_and(|t| t.kind == ToolKind::Shears && t.durability > 0)
+        {
+            let color = DyeColor::from_index(u16::from(pig.mob.sheep_color)).unwrap();
+            state.charge_tool(0).ok_or("depleted shears retained")?;
+            let count = (state.random.next_int(3) + 1) as u16;
+            pig.mob.sheared = true;
+            state.player.attack_time = 10;
+            page.entities[index] = entity;
+            page.insert(
+                target,
+                Kind::Drop(ItemDrop {
+                    loot: Loot::Stack(ItemStack::new(color.wool_item(), count)),
+                    delay: 0,
+                }),
+                None,
+            )?;
+            return Ok(true);
+        }
+    }
+    if matches!(state.player.active_item, Some(ActiveItem::Stack(_))) {
+        return Ok(false);
+    }
     if pig.mob.hurt_time > 0 {
         return Ok(true);
     }
@@ -479,11 +590,35 @@ fn hit_pig(state: &mut State, pages: &mut Pages, target: Position) -> Result<boo
     state.player.attack_time = 10;
     pig.mob.health = pig.mob.health.saturating_sub(damage);
     pig.mob.hurt_time = 10;
+    if full {
+        let (dx, dy) = state.facing();
+        pig.knock_x = (dx * 6) as i8;
+        pig.knock_y = (dy * 6) as i8;
+    }
     if pig.mob.health == 0 {
-        e.kind = Kind::Drop(ItemDrop {
-            loot: Loot::Stack(pig_drop(&mut state.random)),
+        let drops = if full {
+            animal_drops(pig, &mut state.random)
+        } else {
+            vec![pig_drop(&mut state.random)]
+        };
+        let mut drops = drops.into_iter();
+        entity.kind = Kind::Drop(ItemDrop {
+            loot: Loot::Stack(drops.next().expect("Normal passive drop")),
             delay: 0,
         });
+        page.entities[index] = entity;
+        for stack in drops {
+            page.insert(
+                target,
+                Kind::Drop(ItemDrop {
+                    loot: Loot::Stack(stack),
+                    delay: 0,
+                }),
+                None,
+            )?;
+        }
+    } else {
+        page.entities[index] = entity;
     }
     Ok(true)
 }

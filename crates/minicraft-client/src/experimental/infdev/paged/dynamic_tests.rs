@@ -11,6 +11,12 @@ use crate::{
     item::{ItemId, ItemStack, ToolItem, ToolKind, ToolTier},
 };
 
+fn pig_world(root: &std::path::Path, name: &str, seed: i64, cap: usize) -> Result<World, String> {
+    let mut w = World::create_survival(root, name, seed, cap)?;
+    w.survival.as_mut().unwrap().entity_rules = EntityRules::PigV1;
+    w.checkpoint()?;
+    Ok(w)
+}
 fn put(w: &mut World, page: Page) {
     page.validate().unwrap();
     w.survival.as_mut().unwrap().entity_pages_present = true;
@@ -35,7 +41,7 @@ fn grass(w: &mut World, x: i64, y: i64) {
     .unwrap();
 }
 fn crossing(root: &Owned) -> (World, Key, Key) {
-    let mut w = World::create_survival(&root.0, "Dynamic", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "Dynamic", 42, 4).unwrap();
     w.visit_layer(-1, -4, 2).unwrap();
     for x in -2..=1 {
         grass(&mut w, x, 0);
@@ -151,7 +157,7 @@ fn dynamic_full_destination_and_unknown_pig_state_never_delete_animal() {
 #[test]
 fn dynamic_paged_drops_exceed_session_limit_and_preserve_tool_water_across_layers() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "ManyDrops", 42, 1).unwrap();
+    let mut w = pig_world(&root.0, "ManyDrops", 42, 1).unwrap();
     let mut keys = Vec::new();
     for index in 0..17 {
         let at = Position {
@@ -227,7 +233,7 @@ fn dynamic_paged_drops_exceed_session_limit_and_preserve_tool_water_across_layer
 #[test]
 fn dynamic_actual_hunting_drop_pickup_food_and_disk_preserve_last_tool_use() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Hunt", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "Hunt", 42, 4).unwrap();
     w.visit(10, 10).unwrap();
     grass(&mut w, 10, 10);
     grass(&mut w, 10, 11);
@@ -292,7 +298,7 @@ fn dynamic_actual_hunting_drop_pickup_food_and_disk_preserve_last_tool_use() {
 #[test]
 fn dynamic_natural_pigs_spawn_only_on_loaded_surface_and_legacy_marker_stays_absent() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Natural", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "Natural", 42, 4).unwrap();
     assert!(w.survival().unwrap().entity_rules == EntityRules::PigV1);
     for _ in 0..180 {
         w.survival_action(Action::Tick).unwrap();
@@ -315,7 +321,7 @@ fn dynamic_natural_pigs_spawn_only_on_loaded_surface_and_legacy_marker_stays_abs
         "natural Seed42 must produce pigs without injected floor/entities"
     );
     // An actual historical empty state has no entity root or new marker.
-    let mut old = World::create_survival(&root.0, "Old", 42, 1).unwrap();
+    let mut old = pig_world(&root.0, "Old", 42, 1).unwrap();
     old.survival.as_mut().unwrap().entity_rules = EntityRules::Legacy;
     old.checkpoint().unwrap();
     let bytes = objects::read(
@@ -354,7 +360,7 @@ fn dynamic_original_java_pig_health_drops_and_120_ai_ticks_match() {
         );
     }
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "AI", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "AI", 42, 4).unwrap();
     w.visit(0, 0).unwrap();
     for y in 28..36 {
         for x in 28..36 {
@@ -375,7 +381,7 @@ fn dynamic_original_java_pig_health_drops_and_120_ai_ticks_match() {
     let mut s = (**w.survival.as_ref().unwrap()).clone();
     s.random = crate::level::noise::JavaRandom::new(42);
     for (tick, row) in oracle["walkSeed42"].as_array().unwrap().iter().enumerate() {
-        w.tick_pigs(
+        w.tick_animals(
             &mut s,
             &mut pages,
             Position {
@@ -410,7 +416,7 @@ fn dynamic_original_java_pig_health_drops_and_120_ai_ticks_match() {
 #[test]
 fn dynamic_full_bag_partial_pickup_and_interrupted_retrieval_keep_one_owner() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Partial", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "Partial", 42, 4).unwrap();
     w.visit_layer(-1, -65, -129).unwrap();
     let at = Position {
         depth: -1,
@@ -475,7 +481,7 @@ fn dynamic_full_bag_partial_pickup_and_interrupted_retrieval_keep_one_owner() {
 #[test]
 fn dynamic_new_rule_death_with_animals_drops_and_corrupt_pickup_recovers_whole_inventory() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "AnimalDeath", 42, 4).unwrap();
+    let mut w = pig_world(&root.0, "AnimalDeath", 42, 4).unwrap();
     w.visit_layer(-1, -65, -65).unwrap();
     w.set_cell(
         -65,

@@ -7,6 +7,9 @@ mod dynamic;
 mod dynamic_tests;
 mod entities;
 mod objects;
+mod passive;
+#[cfg(test)]
+mod passive_tests;
 #[cfg(test)]
 mod tests;
 

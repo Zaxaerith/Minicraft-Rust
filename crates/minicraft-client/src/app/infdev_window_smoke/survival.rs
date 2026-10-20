@@ -120,7 +120,7 @@ fn craft(
     if e.survival_state().unwrap().panel != survival::Panel::Crafting(bench) {
         return Err("actual workbench menu did not open".into());
     }
-    let i = survival::recipes(bench)
+    let i = survival::recipes_for(e.survival_state().unwrap().entity_rules, bench)
         .iter()
         .position(|r| r.product_name() == name)
         .ok_or("existing recipe missing")?;

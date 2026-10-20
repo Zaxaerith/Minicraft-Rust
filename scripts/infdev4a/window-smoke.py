@@ -68,6 +68,8 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
         print("PASS three native death windows: natural inventory, actual forced termination after atomic death, respawn/return/container retrieval, repeated interaction and disk GC/reopen")
 
     if options.hunt_only or not options.survival_only and not options.death_only:
+        evidence=json.loads((root/"hunt/hunt-expect.json").read_text(encoding="utf-8"))
+        assert evidence["leather"]>0 and evidence["wool"]>0 and evidence["earnedPork"]>0, "current passive-animal EXE/evidence required"
         shutil.copyfile(root/"hunt/hunt-expect.json",output/"infdev-hunt-result.json")
         shutil.copyfile(root/"hunt/infdev-hunt.png",output/"infdev-hunt.png")
-        print("PASS native hunt: naturally spawned pigs, earned axe, real combat/drop/pickup/food, chunk crossing, disk state restart and GC")
+        print("PASS native hunt: naturally spawned cow/pig/sheep, earned leather/wool/pork, axe, real combat/drop/pickup/food, chunk crossing, disk state restart and GC")

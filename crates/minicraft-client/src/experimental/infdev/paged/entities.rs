@@ -100,7 +100,7 @@ impl World {
     pub(super) fn act_with_entities(&mut self, action: Action) -> Result<bool, String> {
         if self
             .survival()
-            .is_some_and(|s| s.entity_rules == survival::EntityRules::PigV1)
+            .is_some_and(|s| s.entity_rules != survival::EntityRules::Legacy)
         {
             return self.act_dynamic(action);
         }

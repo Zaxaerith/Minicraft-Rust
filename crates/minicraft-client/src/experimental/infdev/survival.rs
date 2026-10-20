@@ -56,6 +56,7 @@ pub(crate) enum EntityRules {
     #[default]
     Legacy,
     PigV1,
+    PassiveV1,
 }
 impl EntityRules {
     fn is_legacy(&self) -> bool {
@@ -69,6 +70,7 @@ pub(crate) enum StationKind {
     Workbench,
     Furnace,
     Anvil,
+    DyeVat,
 }
 impl StationKind {
     fn is_workbench(&self) -> bool {
@@ -79,6 +81,7 @@ impl StationKind {
             Self::Workbench => FurnitureKind::Workbench,
             Self::Furnace => FurnitureKind::Furnace,
             Self::Anvil => FurnitureKind::Anvil,
+            Self::DyeVat => FurnitureKind::DyeVat,
         }
     }
     pub fn item(self) -> ItemId {
@@ -86,10 +89,11 @@ impl StationKind {
             Self::Workbench => ItemId::Workbench,
             Self::Furnace => ItemId::Furnace,
             Self::Anvil => ItemId::Anvil,
+            Self::DyeVat => ItemId::DyeVat,
         }
     }
     fn from_item(item: ItemId) -> Option<Self> {
-        [Self::Workbench, Self::Furnace, Self::Anvil]
+        [Self::Workbench, Self::Furnace, Self::Anvil, Self::DyeVat]
             .into_iter()
             .find(|k| k.item() == item)
     }
@@ -233,6 +237,26 @@ pub(crate) fn recipes(station: Option<StationKind>) -> Vec<RecipeView> {
         .collect()
 }
 
+pub(crate) fn recipes_for(rules: EntityRules, station: Option<StationKind>) -> Vec<RecipeView> {
+    let mut result = recipes(station);
+    if rules != EntityRules::PassiveV1 {
+        return result;
+    }
+    for r in recipe_views(station.map(StationKind::furniture)) {
+        let extra = match r.output {
+            RecipeOutput::Tool(t) => t.kind == ToolKind::Shears,
+            RecipeOutput::Stack(s) => {
+                s.item == ItemId::DyeVat
+                    || crate::item::dye::DyeColor::from_dye_item(s.item).is_some()
+            }
+        };
+        if extra {
+            result.push(r);
+        }
+    }
+    result
+}
+
 impl State {
     pub fn new(seed: i64) -> Self {
         // Use the existing no-map constructor's canonical empty Player defaults;
@@ -251,7 +275,7 @@ impl State {
             },
         );
         Self {
-            entity_rules: EntityRules::PigV1,
+            entity_rules: EntityRules::PassiveV1,
             death_rule: DeathRule::ChestNormal,
             entity_pages_present: false,
             death_recorded: false,
@@ -324,7 +348,7 @@ impl State {
             .iter()
             .any(|s| (s.depth, s.x, s.y) == (depth, x, y))
     }
-    fn facing(&self) -> (i64, i64) {
+    pub(super) fn facing(&self) -> (i64, i64) {
         match self.player.direction {
             Direction::Down => (0, 1),
             Direction::Up => (0, -1),
@@ -418,7 +442,7 @@ impl State {
             Action::Cursor(d) => {
                 let n = match self.panel {
                     Panel::Inventory => self.player.inventory.used_slots(),
-                    Panel::Crafting(b) => recipes(b).len(),
+                    Panel::Crafting(b) => recipes_for(self.entity_rules, b).len(),
                     Panel::Closed => 0,
                 };
                 if n > 0 {
@@ -578,6 +602,11 @@ impl State {
         let y = gy
             .checked_add(i64::from(py.div_euclid(16)))
             .ok_or("y overflow")?;
+        if self.entity_rules == EntityRules::PassiveV1
+            && w.animal_blocks_player(w.depth(), x, y, px.rem_euclid(16), py.rem_euclid(16))?
+        {
+            return Ok(());
+        }
         w.visit(x, y)?;
         self.player.x = px.rem_euclid(16);
         self.player.y = py.rem_euclid(16);
@@ -601,7 +630,9 @@ impl State {
                 self.panel = Panel::Closed;
             }
             Panel::Crafting(b) => {
-                let r = *recipes(b).get(self.selection).ok_or("no selected recipe")?;
+                let r = *recipes_for(self.entity_rules, b)
+                    .get(self.selection)
+                    .ok_or("no selected recipe")?;
                 let success = match r.output {
                     RecipeOutput::Stack(s) => Recipe {
                         output: s,
@@ -707,6 +738,9 @@ impl State {
         let mut drops = Vec::new();
         if let Some(ActiveItem::Stack(id)) = self.player.active_item {
             if let Some(kind) = StationKind::from_item(id) {
+                if kind == StationKind::DyeVat && self.entity_rules != EntityRules::PassiveV1 {
+                    return Err("DyeVat requires PassiveV1".into());
+                }
                 if self.stations.len() >= MAX_STATIONS {
                     return Err("workstation limit reached".into());
                 }
