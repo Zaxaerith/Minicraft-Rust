@@ -3,8 +3,9 @@
 [Minicraft-Rust](https://github.com/Zaxaerith/Minicraft-Rust) 是基于
 [Minicraft+](https://github.com/MinicraftPlus/minicraft-plus-revived) 的 Rust 游戏实现，
 目前只维护 **Windows x64（MSVC）**。以 Java 2.2.4 的兼容修复为基础，移植传统固定地图的
-**Java 2.3.0-dev2** 玩法，另有隔离的 Infdev 实验模式。现有 Windows 本地 RC 对应固定世界基线，
-尚未包含本分支的 Infdev 功能；本项目不是上游官方发行版。
+**Java 2.3.0-dev2** 玩法，另有隔离的 Infdev 实验模式。
+Windows 预览版与校验文件以仓库 [Releases](https://github.com/Zaxaerith/Minicraft-Rust/releases) 页面为准；
+历史本地 RC 仍是未包含 Infdev 的固定世界包。本项目不是上游官方发行版。
 
 ## 可以玩什么
 
@@ -33,12 +34,13 @@
 
 这不是完整 Infdev Survival：农业、装备、完整光源与敌怪系统、Boss、天空、船只和多人尚未接通。
 728 项 Release 测试及 Java/Infdev Oracle 有已验证基线，原生窗口采集/战斗/保存重开短流程通过；
-完整昼夜窗口长测因关闭消息中断，发送者 **UNKNOWN**，夜间重开未运行，真人试玩尚未完成。
+完整昼夜窗口长测因关闭消息中断，发送者 **UNKNOWN**，夜间重开未运行。
+用户已确认人工试玩并批准预览发布，这不等同于未完成的自动化首夜验收通过。
 历史偶发 `MoveFileW` 发布失败根因也仍为 **UNKNOWN**。版本、规则和验收边界见 [Infdev 说明](docs/infdev.md)。
 
 ## Windows 运行
 
-解压本地 RC 的整个目录，运行 `minicraft-rust.exe`。图像、音效和游戏数据已嵌入 EXE，
+解压 Windows x64 预览版或本地 RC 的整个目录，运行 `minicraft-rust.exe`。图像、音效和游戏数据已嵌入 EXE，
 不需要 Java、Rust、仓库或 `.reference`。请保留随包提供的运行库、许可证和说明。
 
 默认配置与存档目录是 `%APPDATA%\playminicraft\mods\Minicraft_Rust`。
@@ -154,6 +156,14 @@ pwsh -NoProfile -File .\scripts\package-windows-rc.ps1
 脚本使用现有 Release 产物，输出
 `target\rc\java230-dev2\Minicraft-Rust-java230-dev2-windows-x64-rc.zip`、SHA-256 和文件清单，
 不自动构建、上传或发布。RC 不包含测试存档、Oracle、Java 参考源码或构建缓存。
+制作独立的版本化预览包时，显式传入未占用的预览版本，例如：
+
+```powershell
+pwsh -NoProfile -File .\scripts\package-windows-rc.ps1 -PreviewVersion v0.1.0-preview.1
+```
+
+输出为 `target\rc\v0.1.0-preview.1\`，拒绝覆盖同名包或使用 `-Replace`；不会覆盖历史 RC，也不会自动发布。
+Rust 预览 Tag 与 Cargo 中保留的 `2.2.4` 内容元数据分开，存档格式标识不随发行名改变。
 工程记录见 [文档索引](docs/README.md)。日常完整验证可运行
 `pwsh -NoProfile -File scripts/validate-windows.ps1`；加 `-JavaOracle` 可重新执行固定源码 Oracle。
 验证日志复用 `target/validation/current/`，不再按开发阶段累积重复目录。
@@ -169,5 +179,5 @@ Rust 项目保留这些来源及资源署名，按 **GPL-3.0-only** 提供，完
 [资源说明](assets/expansion230/README.md) 与同目录 manifest。
 Rust 依赖及运行库的版权和分发说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-本地 RC 未自动公开分发。向他人提供二进制时，应同时提供该精确构建修订的对应源码、资源和构建材料，
+打包脚本不自动公开分发。向他人提供二进制时，应同时提供该精确构建修订的对应源码、资源和构建材料，
 并遵守 GPL-3.0 第 6 条及第三方条款；未 Push 的本地提交不能假称已在远程仓库可下载。

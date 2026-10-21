@@ -1,6 +1,7 @@
 #requires -Version 7.0
 param(
     [string]$RuntimeDll,
+    [string]$PreviewVersion,
     [switch]$Replace
 )
 # Build separately. This script only packages an existing, clean Windows build.
@@ -10,6 +11,15 @@ if (-not $IsWindows) { throw 'This RC supports Windows x64 only.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $output = Join-Path $repo 'target/rc/java230-dev2'
 $stem = 'Minicraft-Rust-java230-dev2-windows-x64-rc'
+$preview = -not [string]::IsNullOrWhiteSpace($PreviewVersion)
+if ($preview) {
+    if ($PreviewVersion -notmatch '^v\d+\.\d+\.\d+-preview\.[1-9]\d*$') {
+        throw 'PreviewVersion must be an explicit vX.Y.Z-preview.N version.'
+    }
+    if ($Replace) { throw 'Public preview assets must never be replaced.' }
+    $output = Join-Path $repo "target/rc/$PreviewVersion"
+    $stem = "Minicraft-Rust-$PreviewVersion-windows-x64"
+}
 $archivePath = Join-Path $output "$stem.zip"
 $binary = Join-Path $repo 'target/release/minicraft-rust.exe'
 $revision = (& git -C $repo rev-parse HEAD).Trim()
@@ -17,7 +27,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
 $changes = @(& git -C $repo status --porcelain)
 if ($LASTEXITCODE -ne 0 -or $changes.Count) { throw 'Commit or preserve working changes before packaging a clean RC.' }
 if (Test-Path -LiteralPath $archivePath) {
+    if ($preview) { throw "Preview already exists; replacement refused: $archivePath" }
     if (-not $Replace) { throw "RC already exists: $archivePath (use -Replace explicitly)." }
+}
+if ($preview) {
+    foreach ($name in @("$stem.files.json", "$stem.zip.sha256")) {
+        if (Test-Path -LiteralPath (Join-Path $output $name)) { throw "Preview metadata already exists: $name" }
+    }
 }
 
 function Assert-X64Pe([string]$Path) {
@@ -106,6 +122,7 @@ function Add-Text([string]$Name, [string]$Text) {
 Add-File 'minicraft-rust.exe' $binary
 Add-File 'vcruntime140.dll' $runtime
 foreach ($name in @('LICENSE','README.md','THIRD_PARTY_NOTICES.md')) { Add-File $name (Join-Path $repo $name) }
+if ($preview) { Add-File 'docs/infdev.md' (Join-Path $repo 'docs/infdev.md') }
 Add-File 'CREDITS.txt' (Join-Path $repo 'assets/assets/books/credits.txt')
 Add-File 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt' (Join-Path $repo 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt')
 Add-File 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.docx' (Join-Path $repo 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.docx')
@@ -114,15 +131,69 @@ Add-File 'licenses/UPSTREAM-RESOURCES.md' (Join-Path $repo 'assets/expansion230/
 Add-File 'licenses/EXPANSION230-MANIFEST.json' (Join-Path $repo 'assets/expansion230/manifest.json')
 $lockHash = Get-Digest ([IO.File]::ReadAllBytes((Join-Path $repo 'Cargo.lock')))
 $build = @(
-    'label=java230-dev2-local-rc', 'platform=windows-x64-msvc', "source_revision=$revision",
+    $(if ($preview) { "label=$PreviewVersion" } else { 'label=java230-dev2-local-rc' }),
+    'platform=windows-x64-msvc', "source_revision=$revision",
     "cargo_lock_sha256=$lockHash", "binary_sha256=$(Get-Digest $files['minicraft-rust.exe'])",
     "vcruntime_file_version=$($runtimeInfo.FileVersion)", "vcruntime_sha256=$(Get-Digest $files['vcruntime140.dll'])",
     "rustc=$(& rustc -V)", "imports=$($imports -join ',')",
     'assets=embedded 2.2.4 originals and selected fixed dev2 expansion resources',
     'cargo_version=2.2.4 (unchanged; content label does not alter save formats)',
-    'private_local_rc=true; no automatic publication or source-availability claim'
+    $(if ($preview) { 'distribution=github-prerelease; publication is a separate validated operation' }
+      else { 'private_local_rc=true; no automatic publication or source-availability claim' })
 ) -join "`n"
 Add-Text 'BUILD-INFO.txt' ($build + "`n")
+if ($preview) {
+    Add-Text 'PREVIEW-README.txt' @"
+Minicraft-Rust $PreviewVersion - Windows x64 - Infdev Experimental
+
+Extract the complete folder. Run minicraft-rust.exe to open the title screen.
+Requires Windows 10/11 x64 and a working graphics driver. Keep vcruntime140.dll
+beside the EXE. Assets/audio are embedded; no Java, Rust or repository is needed.
+
+Play opens the original fixed-world game (Java224 / Java230-dev2 content).
+For the separate experiment choose Infdev (Experimental), then
+New Layered World (v3) for flight or New Survival World (v4) for Survival.
+Existing experimental worlds show [v2], [v3] or [v4]. See docs/infdev.md.
+
+Default data: %APPDATA%\playminicraft\mods\Minicraft_Rust
+For an isolated trial in PowerShell:
+  .\minicraft-rust.exe --savedir ".\portable-data"
+Self-check (no game window):
+  .\minicraft-rust.exe --self-check --savedir ".\selfcheck-data"
+Fixed saves use saves/; experiments use experiments/infdev-v2, infdev-v3 and
+infdev-survival-v4. Existing rules are preserved; there is no automatic upgrade.
+Back up complete save directories. Older EXEs may not read new saves.
+
+This is a PRE-RELEASE, not complete Infdev parity. Sky, other enemies, Bosses,
+boats and multiplayer are unfinished. The native first-night long test was
+interrupted by WM_CLOSE (sender UNKNOWN); its night restart was not run.
+Short native acquisition/combat/save/restart and clock/disk tests passed.
+Historical intermittent Windows MoveFileW publication failures remain UNKNOWN.
+The user approved preview publication after manual playtesting; that does not
+turn incomplete automated long tests into PASS. See GitHub release notes.
+
+Release tag and Cargo's legacy 2.2.4 content metadata are separate; save format
+identifiers are unchanged. GPL-3.0-only source/assets: preserve LICENSE, credits,
+SOURCE.txt and THIRD_PARTY_NOTICES.md. This is not an official upstream release.
+"@
+    Add-Text 'SOURCE.txt' @"
+Minicraft-Rust $PreviewVersion, exact corresponding source revision:
+https://github.com/Zaxaerith/Minicraft-Rust/tree/$revision
+Source archive for this revision:
+https://github.com/Zaxaerith/Minicraft-Rust/archive/$revision.zip
+Release tag: $PreviewVersion
+
+The matching public Git revision includes project source, embedded assets,
+Cargo.lock, licenses and build/package scripts. Build instructions: README.md.
+The runtime ZIP deliberately contains no test saves, reference Java or cache.
+The publisher must verify that the public revision and tag match BUILD-INFO.txt
+before publishing the binaries. See GPL v3 section 6 and third-party terms.
+Original Minicraft: Markus Persson; upstream Minicraft+ Revived contributors:
+https://github.com/MinicraftPlus/minicraft-plus-revived
+Microsoft runtime license: licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt and .docx.
+Rust library notices: licenses/RUST-COPYRIGHT-library.html.
+"@
+} else {
 Add-Text 'RC-README.txt' @'
 Minicraft-Rust — Java 2.3.0-dev2 content, Windows x64 local RC
 
@@ -157,6 +228,7 @@ Microsoft runtime terms are in licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt.
 Official redist guidance: https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
 Runtime license source: https://aka.ms/VCRedistLicense
 "@
+}
 $manifest = @($files.GetEnumerator() | ForEach-Object { "$(Get-Digest $_.Value)  $($_.Key)" }) -join "`n"
 Add-Text 'MANIFEST.sha256' ($manifest + "`n")
 

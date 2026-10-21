@@ -1,4 +1,4 @@
-# Third-party notices — Windows x64 RC
+# Third-party notices — Windows x64
 
 ## Game and resources
 
@@ -25,22 +25,29 @@ recipe definitions come from commit `4dc00332e24a727b96be7b885d5cbbdd9c85263c`;
 They remain covered by the upstream GPL-3.0 license and attribution. No Java
 reference sources or JVM libraries are included in the Windows runtime ZIP.
 
-This RC is assembled for local use and is not automatically published. If the
-binary is redistributed, provide the exact corresponding project source,
+Infdev terrain, biome and entity rules reference the fixed upstream commit
+`42ba9192fcc229bcf615453a6504d415c777feaf`, also under the upstream GPL terms.
+The original OpenSimplex2 attribution to K.jpg is retained in the source.
+No additional Java runtime or reference checkout is shipped in the game ZIP.
+
+Packaging does not automatically publish a release. When binaries are
+redistributed, provide the exact corresponding project source,
 embedded resources and build materials in accordance with GPL v3 section 6,
 together with these notices. `BUILD-INFO.txt` identifies the actual local
-revision. A link to a remote repository does not claim that an unpushed local
-revision is already available there. The following permissive dependency
+revision. Public preview packages include fixed-revision source links in
+`SOURCE.txt`; the publisher verifies that revision is public before release.
+A local RC does not imply its unpushed revision is available online.
+The following permissive dependency
 licenses do not replace the game's GPL terms.
 
 ## Windows runtime
 
-The RC includes `vcruntime140.dll` from the licensed Microsoft Visual C++ x64
+The Windows package includes `vcruntime140.dll` from the licensed Microsoft Visual C++ x64
 Redistributable installed with the local Visual Studio toolchain. This DLL is
 Microsoft software, not GPL-licensed project code. The package includes its
 applicable Microsoft runtime license text at
 `licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt`; preserve it when
-copying the RC. Windows system DLLs are supplied by Windows and are not copied
+copying the package. Windows system DLLs are supplied by Windows and are not copied
 into the archive. SDL2 is not a Windows runtime dependency of this build.
 The actual DLL identity and hash are recorded in the package manifest.
 The unmodified official DOCX is retained beside its readable paragraph-text

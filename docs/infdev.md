@@ -7,16 +7,16 @@ Phase 4A历史说明见[归档记录](history/infdev4a.md)。
 
 ## 整合准备与验证状态
 
-Phase 4A～4L功能冻结点为`fc87f12a4f671ef9a6cbf88a21e55aa723d76996`；当前只准备审查和整合，
-没有将Experimental提升为正式模式。现有Java dev2 Windows RC仍是固定世界包，不包含这些新实验功能。
+Phase 4A～4L功能冻结点为`fc87f12a4f671ef9a6cbf88a21e55aa723d76996`，现已快进整合到main，
+仍保留Experimental。版本化Windows预览包使用独立产物目录；历史Java dev2 Windows RC保持固定世界包，不包含这些实验功能。
 
 | 检查 | 实际结论与边界 |
 |---|---|
-| Release Workspace / Java与Infdev Oracle | 生产基线`4168194`的728项及Oracle PASS；后续`fc87f12`只改诊断，整合准备不重跑全量 |
+| Release Workspace / Java与Infdev Oracle | 既有728项及Oracle基线PASS；预览发行前按main HEAD重跑门禁，最终修订和实际结果以current记录为准 |
 | Phase 4L原生窗口短流程 | PASS：空包采集/制火把、地下自然Slime/Zombie、Esc保存、独立进程恢复全部6个实体页/库存/时钟，菜单暂停及GC |
 | 完整昼夜原生窗口长测 | 收到WM_CLOSE中断，未到首夜，返回码1；不是控制脚本超时或主动kill；发送者UNKNOWN |
 | 夜间保存及独立窗口恢复 | NOT RUN：前置长测中断后停止，不自动重试 |
-| Phase 4真人键盘/鼠标试玩 | 尚未完成；程序Input窗口测试不等同真人试玩 |
+| Phase 4真人试玩 | 用户已确认试玩并批准预览发布；不将此声明扩展为未完成的自动化首夜长测PASS |
 | 历史偶发MoveFileW发布失败 | 根因UNKNOWN；已增加现场诊断，受控锁冲突回归不能证明历史原因 |
 
 详细证据保留在`target/validation/current/infdev-final-validation.md`、`validation.txt`、
@@ -519,7 +519,7 @@ i64极限属于Rust边界/恢复测试，不能当作Java完整极限坐标Oracl
 
 新增回归覆盖部分拾回、满包、工具/不同水量实例、重复死亡、受阻/满页、过期保留、128实体页LRU、
 正负i64边界、五层、磁盘恢复、死亡/拾回发布前中断、写入失败、损坏整体回退及GC备份保护。
-完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，现有728项Release测试基线保留；本次文档整合准备未重复运行。
+完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，现有728项Release测试基线保留；发行结果按记录中的main修订核实。
 最终结果复用`target/validation/current/infdev-final-validation.md`及同目录日志，不另建阶段日志树。
 冶炼/食物配方依据固定世界`item/recipe.rs`及固定Infdev的`item/Recipes.java`；苹果与食物规则依据
 `level/tile/TreeTile.java:149-168`、`item/FoodItem.java:47-54`和`entity/mob/Player.java:398-450`。
