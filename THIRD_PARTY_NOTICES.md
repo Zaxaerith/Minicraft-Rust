@@ -42,20 +42,23 @@ licenses do not replace the game's GPL terms.
 
 ## Windows runtime
 
-The Windows package includes `vcruntime140.dll` from the licensed Microsoft Visual C++ x64
-Redistributable installed with the local Visual Studio toolchain. This DLL is
-Microsoft software, not GPL-licensed project code. The package includes its
+Validated preview builds link the Microsoft Visual C++ CRT statically and do not
+require a separate `vcruntime140.dll`. Legacy dynamically linked RC packages include
+that DLL from the licensed Microsoft Visual C++ x64 Redistributable installed with
+the Visual Studio toolchain. Microsoft runtime code is Microsoft software, not
+GPL-licensed project code. Both configurations retain the
 applicable Microsoft runtime license text at
 `licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt`; preserve it when
 copying the package. Windows system DLLs are supplied by Windows and are not copied
 into the archive. SDL2 is not a Windows runtime dependency of this build.
-The actual DLL identity and hash are recorded in the package manifest.
+The linkage mode is recorded in BUILD-INFO.txt; when a DLL is needed, its identity
+and hash are recorded in the package manifest.
 The unmodified official DOCX is retained beside its readable paragraph-text
 companion in `licenses/MICROSOFT-VC-RUNTIME-LICENSE.docx`. These are from the official
 [Microsoft runtime terms](https://aka.ms/VCRedistLicense), last updated
 October 1, 2025. The original document is
 <https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx>.
-The unmodified DLL comes from the VS `VC/Redist/MSVC` release x64 directory,
+When required, the unmodified DLL comes from the VS `VC/Redist/MSVC` release x64 directory,
 under [Microsoft redistribution terms](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution).
 
 Rust's standard library is distributed under MIT OR Apache-2.0, with third-party
