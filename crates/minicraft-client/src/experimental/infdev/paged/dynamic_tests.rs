@@ -14,6 +14,7 @@ use crate::{
 fn pig_world(root: &std::path::Path, name: &str, seed: i64, cap: usize) -> Result<World, String> {
     let mut w = World::create_survival(root, name, seed, cap)?;
     w.survival.as_mut().unwrap().entity_rules = EntityRules::PigV1;
+    w.survival.as_mut().unwrap().enemy_rules = super::super::survival::EnemyRules::None;
     w.checkpoint()?;
     Ok(w)
 }

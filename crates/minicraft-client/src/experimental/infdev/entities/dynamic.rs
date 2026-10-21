@@ -40,9 +40,12 @@ impl Animal {
         Self::of(NaturalMob::Pig)
     }
     pub fn of(species: NaturalMob) -> Self {
+        Self::of_level(species, 1)
+    }
+    pub fn of_level(species: NaturalMob, level: u8) -> Self {
         let mut arena = EntityArena::default();
         arena
-            .spawn_mob_level(species, 1, 1, false, 0, 0)
+            .spawn_mob_level(species, level, 1, false, 0, 0)
             .expect("valid passive species");
         let EntityKind::Mob(mob) = arena.entities()[0].kind.clone() else {
             unreachable!()
@@ -58,17 +61,29 @@ impl Animal {
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        let m = &self.mob;
         if !matches!(
-            m.species,
+            self.mob.species,
             NaturalMob::Pig | NaturalMob::Cow | NaturalMob::Sheep
-        ) || m.level != 1
-            || m.difficulty != 1
+        ) || self.mob.level != 1
+        {
+            return Err("invalid passive species/level".into());
+        }
+        self.validate_body()
+    }
+    pub fn validate_enemy(&self) -> Result<(), String> {
+        if self.mob.species != NaturalMob::Zombie || !(1..=3).contains(&self.mob.level) {
+            return Err("unsupported enemy species/level".into());
+        }
+        self.validate_body()
+    }
+    fn validate_body(&self) -> Result<(), String> {
+        let m = &self.mob;
+        if m.difficulty != 1
             || m.max_health
-                != crate::entity::stats::mob_health_at_level(m.species, 1, 1).unwrap_or(0)
+                != crate::entity::stats::mob_health_at_level(m.species, m.level, 1).unwrap_or(0)
             || !(1..=m.max_health).contains(&m.health)
             || m.hurt_time > 10
-            || m.walk_time > 45
+            || m.walk_time > if m.species.hostile() { 60 } else { 45 }
             || !(-1..=1).contains(&m.x_move)
             || !(-1..=1).contains(&m.y_move)
             || self.px > 15
@@ -82,7 +97,7 @@ impl Animal {
             || m.attack_time != 0
             || m.phase != 0
         {
-            return Err("invalid persistent passive animal state".into());
+            return Err("invalid persistent mob state".into());
         }
         Ok(())
     }

@@ -5,6 +5,9 @@ pub mod diagnostics;
 mod dynamic;
 #[cfg(test)]
 mod dynamic_tests;
+mod enemy;
+#[cfg(test)]
+mod enemy_tests;
 mod entities;
 mod objects;
 mod passive;

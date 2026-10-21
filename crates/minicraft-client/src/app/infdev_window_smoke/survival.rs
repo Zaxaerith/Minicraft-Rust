@@ -1,6 +1,7 @@
 //! Diagnostic autopilot: sends only the public GUI Input adapter. No inventory
 //! injection, teleports, terrain edits, or alternate game-action implementation.
 use super::*;
+pub(super) mod combat;
 mod death;
 pub(super) mod hunt;
 pub(super) fn run_death(
@@ -120,7 +121,10 @@ fn craft(
     if e.survival_state().unwrap().panel != survival::Panel::Crafting(bench) {
         return Err("actual workbench menu did not open".into());
     }
-    let i = survival::recipes_for(e.survival_state().unwrap().entity_rules, bench)
+    let i = e
+        .survival_state()
+        .unwrap()
+        .recipes(bench)
         .iter()
         .position(|r| r.product_name() == name)
         .ok_or("existing recipe missing")?;
@@ -292,6 +296,9 @@ fn mine(
     face(h, e, d)?;
     let p = (e.position().0 + d.0, e.position().1 + d.1);
     for _ in 0..200 {
+        if h.auto_combat {
+            combat::defend(h, e)?;
+        }
         h.wait(e, |e| e.visible_cell(p.0, p.1).is_some())?;
         if e.visible_cell(p.0, p.1).unwrap().ground != g {
             samples.push((e.depth(), p));
@@ -335,7 +342,11 @@ fn walk(
         if matches!(c.ground, Ground::Tree | Ground::Rock) {
             mine(h, e, d, c.ground, samples)?;
         }
+        let mut stalled = 0;
         loop {
+            if h.auto_combat {
+                combat::defend(h, e)?;
+            }
             let p = &e.survival_state().unwrap().player;
             let (x, y) = e.position();
             if (x, y) == next && p.x == 8 && p.y == 8 {
@@ -350,7 +361,19 @@ fn walk(
             } else {
                 (0, -1)
             };
+            let before = (e.position(), p.x, p.y);
             face(h, e, d)?;
+            let p = &e.survival_state().unwrap().player;
+            if (e.position(), p.x, p.y) == before {
+                stalled += 1;
+            } else {
+                stalled = 0;
+            }
+            // Moving entities can invalidate a planned route. Replan through
+            // the same Input path instead of looping against their bodies.
+            if stalled >= 16 {
+                return Ok(());
+            }
             if e.survival_state().unwrap().player.health == 0 {
                 return Err("autopilot died while walking".into());
             }

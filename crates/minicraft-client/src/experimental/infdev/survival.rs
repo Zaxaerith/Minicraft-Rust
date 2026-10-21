@@ -64,6 +64,18 @@ impl EntityRules {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum EnemyRules {
+    #[default]
+    None,
+    UndergroundZombieV1,
+}
+impl EnemyRules {
+    fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) enum StationKind {
     #[default]
@@ -137,6 +149,8 @@ pub(crate) enum Panel {
 pub(crate) struct State {
     #[serde(default, skip_serializing_if = "EntityRules::is_legacy")]
     pub entity_rules: EntityRules,
+    #[serde(default, skip_serializing_if = "EnemyRules::is_none")]
+    pub enemy_rules: EnemyRules,
     #[serde(default, skip_serializing_if = "DeathRule::is_keep")]
     pub death_rule: DeathRule,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -258,6 +272,19 @@ pub(crate) fn recipes_for(rules: EntityRules, station: Option<StationKind>) -> V
 }
 
 impl State {
+    pub fn recipes(&self, station: Option<StationKind>) -> Vec<RecipeView> {
+        let mut result = recipes_for(self.entity_rules, station);
+        if self.enemy_rules == EnemyRules::UndergroundZombieV1 {
+            result.extend(
+                recipe_views(station.map(StationKind::furniture))
+                    .into_iter()
+                    .filter(
+                        |r| matches!(r.output, RecipeOutput::Tool(t) if t.kind==ToolKind::Sword),
+                    ),
+            );
+        }
+        result
+    }
     pub fn new(seed: i64) -> Self {
         // Use the existing no-map constructor's canonical empty Player defaults;
         // this neither generates a fixed world nor loads any player's files.
@@ -276,6 +303,7 @@ impl State {
         );
         Self {
             entity_rules: EntityRules::PassiveV1,
+            enemy_rules: EnemyRules::UndergroundZombieV1,
             death_rule: DeathRule::ChestNormal,
             entity_pages_present: false,
             death_recorded: false,
@@ -442,7 +470,7 @@ impl State {
             Action::Cursor(d) => {
                 let n = match self.panel {
                     Panel::Inventory => self.player.inventory.used_slots(),
-                    Panel::Crafting(b) => recipes_for(self.entity_rules, b).len(),
+                    Panel::Crafting(b) => self.recipes(b).len(),
                     Panel::Closed => 0,
                 };
                 if n > 0 {
@@ -630,7 +658,8 @@ impl State {
                 self.panel = Panel::Closed;
             }
             Panel::Crafting(b) => {
-                let r = *recipes_for(self.entity_rules, b)
+                let r = *self
+                    .recipes(b)
                     .get(self.selection)
                     .ok_or("no selected recipe")?;
                 let success = match r.output {

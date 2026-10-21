@@ -18,6 +18,8 @@ struct Host {
     assets: Assets,
     screen: Screen,
     deadline: Instant,
+    auto_combat: bool,
+    saw_enemy_hit: bool,
 }
 
 impl Host {
@@ -240,14 +242,22 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             | "death-reopen"
             | "hunt-create"
             | "hunt-reopen"
+            | "combat-create"
+            | "combat-death"
+            | "combat-recover"
     ) {
         return Err("window smoke mode must be create or reopen".into());
     }
-    let survival =
-        mode.starts_with("survival-") || mode.starts_with("death-") || mode.starts_with("hunt-");
+    let survival = mode.starts_with("survival-")
+        || mode.starts_with("death-")
+        || mode.starts_with("hunt-")
+        || mode.starts_with("combat-");
     let creating = mode.ends_with("create");
     if mode == "hunt-reopen" {
         survival::hunt::preflight(&root)?;
+    }
+    if mode == "combat-death" {
+        survival::combat::preflight(&root)?;
     }
     let assets = Assets::load(&[])?;
     let mut window = Window::new(
@@ -267,6 +277,8 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         presenter,
         assets,
         screen: Screen::new(),
+        auto_combat: false,
+        saw_enemy_hit: false,
         deadline: Instant::now() + Duration::from_secs(if survival { 480 } else { 90 }),
     };
     let locale = Localization::load("en-us", &[]);
@@ -358,6 +370,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
                 })
             })
     })?;
+    if mode.starts_with("combat-") {
+        return survival::combat::run(&mut host, &mut explorer, &root, mode);
+    }
     if mode.starts_with("hunt-") {
         return survival::hunt::run(&mut host, &mut explorer, &root, creating);
     }

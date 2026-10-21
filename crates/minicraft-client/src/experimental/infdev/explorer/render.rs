@@ -191,7 +191,7 @@ fn draw_survival(
     screen: &mut Screen,
     assets: &Assets,
 ) {
-    use super::super::survival::{Loot, Panel, recipes_for};
+    use super::super::survival::{Loot, Panel};
     use crate::{
         item::{RecipeOutput, recipe_can_craft},
         world::{GameMode, hud, inventory_ui},
@@ -245,7 +245,7 @@ fn draw_survival(
                             },
                         );
                     }
-                    Kind::Pig(pig) | Kind::Animal(pig) => {
+                    Kind::Pig(pig) | Kind::Animal(pig) | Kind::Enemy(pig) => {
                         let d = if pig.mob.x_move < 0 {
                             2
                         } else if pig.mob.x_move > 0 {
@@ -256,8 +256,9 @@ fn draw_survival(
                             0
                         };
                         assets
-                            .mob_linked(
+                            .mob_linked_level(
                                 pig.mob.species,
+                                pig.mob.level,
                                 d,
                                 ((pig.mob.walk_distance >> 3) % 2) as usize,
                                 pig.mob.sheared,
@@ -406,7 +407,7 @@ fn draw_survival(
             screen.text(assets.font(), "C: EQUIP / ESC: CLOSE", 12, 138);
         }
         Panel::Crafting(b) => {
-            let recipes = recipes_for(s.entity_rules, b);
+            let recipes = s.recipes(b);
             let entries = recipes
                 .iter()
                 .map(|r| {

@@ -38,10 +38,23 @@ pub(crate) enum Kind {
     DeathChest(DeathChest),
     Pig(dynamic::Pig),
     Animal(dynamic::Animal),
+    Enemy(dynamic::Animal),
     Drop(dynamic::ItemDrop),
 }
 
 impl Kind {
+    pub fn mover(&self) -> Option<&dynamic::Animal> {
+        match self {
+            Self::Enemy(e) => Some(e),
+            _ => self.animal(),
+        }
+    }
+    pub fn mover_mut(&mut self) -> Option<&mut dynamic::Animal> {
+        match self {
+            Self::Enemy(e) => Some(e),
+            _ => self.animal_mut(),
+        }
+    }
     pub fn animal(&self) -> Option<&dynamic::Animal> {
         match self {
             Self::Pig(a) | Self::Animal(a) => Some(a),
@@ -107,6 +120,10 @@ impl Page {
                     {
                         return Err("PigV1 state changed meaning".into());
                     }
+                    continue;
+                }
+                Kind::Enemy(e) => {
+                    e.validate_enemy()?;
                     continue;
                 }
                 Kind::Animal(a) => {

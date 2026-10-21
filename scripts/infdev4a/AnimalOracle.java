@@ -1,4 +1,4 @@
-// GPL-3.0. Observer of the unmodified fixed Infdev Pig/PassiveMob/MobAi.
+// GPL-3.0. Observer of unmodified fixed Infdev passive mobs and Zombie/MobAi.
 package minicraft.entity.mob;
 import minicraft.core.Game;
 import minicraft.core.io.Settings;
@@ -17,7 +17,8 @@ public final class AnimalOracle {
     static class Observed extends Level {
         int pork;
         final TreeMap<String,Integer> loot=new TreeMap<>();
-        Observed(){super(128,128,42L,0,null,false);}
+        Observed(){this(0);}
+        Observed(int depth){super(128,128,42L,depth,null,false);}
         @Override public ItemEntity dropItem(int x,int y,Item item){
             int n=item instanceof StackableItem?((StackableItem)item).count:1;
             loot.merge(item.getName(),n,Integer::sum);
@@ -51,6 +52,7 @@ public final class AnimalOracle {
         JSONObject result=new JSONObject().put("healthByDifficulty",health).put("normalDrops",drops).put("walkSeed42",walk);
         Files.writeString(out.resolve("animals.json"),result.toString(2)+"\n");
         passive(out);
+        hostile(out);
         System.out.println("PASS original Infdev Pig: actual constructor health, seeded Normal death drops and120 real AI ticks");
     }
     static void passive(Path out)throws Exception {
@@ -139,6 +141,48 @@ public final class AnimalOracle {
         result.put("expiredAwayRemoved",expired.isRemoved());
         Files.writeString(out.resolve("passive-animals.json"),result.toString(2)+"\n");
         System.out.println("PASS original Cow/Sheep health, drops, 16 dye/shear interactions, 120 AI ticks, grazing and despawn observations");
+    }
+
+    static void hostile(Path out)throws Exception {
+        JSONObject result=new JSONObject();JSONArray health=new JSONArray(),contact=new JSONArray(),drops=new JSONArray();
+        Observed floor=new Observed(-1);for(int x=0;x<64;x++)for(int y=0;y<64;y++)floor.setTile(x,y,Tiles.get("Dirt"));
+        Player p=new Player(null,null);Game.player=p;floor.add(p,560,560);floor.tick(false);
+        for(int d=0;d<3;d++){
+            Settings.getEntry("diff").setSelection(d);JSONArray levels=new JSONArray();
+            for(int level=1;level<=3;level++){
+                Zombie z=new Zombie(level);levels.put(z.maxHealth);z.setLevel(floor,512,512);seed(z,42);
+                p.health=10;p.hurtTime=0;z.touchedBy(p);
+                contact.put(new JSONObject().put("difficulty",d).put("level",level).put("health",p.health).put("hurtTime",p.hurtTime));
+            }
+            health.put(levels);
+        }
+        Settings.getEntry("diff").setSelection(1);
+        for(int input=0;input<128;input++){
+            Zombie z=new Zombie(1);z.setLevel(floor,512,512);seed(z,input);floor.loot.clear();z.die();
+            drops.put(new JSONObject().put("seed",input).put("loot",new JSONObject(floor.loot)));
+        }
+        JSONObject walks=new JSONObject();
+        for(int distance:new int[]{48,300}){
+            p.x=512+distance;p.y=512+distance;p.health=10;p.hurtTime=0;
+            Zombie z=new Zombie(1);z.setLevel(floor,512,512);seed(z,42);JSONArray walk=new JSONArray();
+            for(int tick=0;tick<80;tick++){z.tick();walk.put(new JSONArray(new int[]{z.x,z.y,z.xmov,z.ymov,z.randomWalkTime,z.walkDist}));}
+            walks.put(Integer.toString(distance),walk);
+        }
+        result.put("healthByDifficultyLevel",health).put("contact",contact).put("normalDrops",drops).put("walkSeed42",walks);
+        minicraft.core.Updater.changeTimeOfDay(minicraft.core.Updater.Time.Day);
+        Field random=Level.class.getDeclaredField("random");random.setAccessible(true);
+        java.lang.reflect.Method spawn=Level.class.getDeclaredMethod("trySpawn");spawn.setAccessible(true);
+        JSONArray spawns=new JSONArray();
+        for(int depth=-1;depth>=-3;depth--){for(int input=0;input<16;input++){
+            Observed habitat=new Observed(depth);for(int x=-64;x<64;x++)for(int y=-64;y<64;y++)habitat.setTile(x,y,Tiles.get("Dirt"));
+            Player observer=new Player(null,null);Game.player=observer;habitat.add(observer,8,8);habitat.tick(false);((Random)random.get(habitat)).setSeed(input);
+            spawn.invoke(habitat);habitat.tick(false);JSONArray found=new JSONArray();
+            for(Entity e:habitat.getEntityArray())if(e instanceof EnemyMob){EnemyMob enemy=(EnemyMob)e;found.put(new JSONObject().put("kind",e.getClass().getSimpleName()).put("level",enemy.lvl).put("health",enemy.health).put("x",e.x).put("y",e.y));}
+            spawns.put(new JSONObject().put("depth",depth).put("seed",input).put("enemies",found));
+        }}
+        result.put("undergroundFirstSpawn",spawns);
+        Files.writeString(out.resolve("enemies.json"),result.toString(2)+"\n");
+        System.out.println("PASS original Zombie: three difficulties/levels, actual contact/drops/AI and private underground trySpawn (all original species retained)");
     }
 
 }

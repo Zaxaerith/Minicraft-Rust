@@ -5,7 +5,7 @@ use crate::experimental::infdev::entities::{
     dynamic::{Animal, Birth},
 };
 use crate::{level::noise::JavaRandom, world::Player};
-fn delta(a: i64, ap: i32, b: i64, bp: i32) -> i64 {
+pub(super) fn delta(a: i64, ap: i32, b: i64, bp: i32) -> i64 {
     ((i128::from(a) - i128::from(b)) * 16 + i128::from(ap - bp)).clamp(-1281, 1281) as i64
 }
 pub(super) fn blocked(
@@ -30,7 +30,7 @@ pub(super) fn blocked(
                 return false;
             }
             e.kind
-                .animal()
+                .mover()
                 .is_some_and(|a| overlaps(p.position(e), i32::from(a.px), i32::from(a.py)))
         })
     })

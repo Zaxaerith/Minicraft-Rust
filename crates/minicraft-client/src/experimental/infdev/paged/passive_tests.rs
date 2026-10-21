@@ -164,7 +164,7 @@ fn passive_original_java_health_drops_and_16_actual_dye_shear_interactions() {
 #[test]
 fn passive_original_cow_sheep_ai_and_grazing_are_transactional() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Walk", 42, 4).unwrap();
+    let mut w = passive_world(&root.0, "Walk", 42, 4).unwrap();
     w.visit(0, 0).unwrap();
     for x in 27..38 {
         for y in 27..38 {
@@ -283,7 +283,7 @@ fn passive_original_cow_sheep_ai_and_grazing_are_transactional() {
 #[test]
 fn passive_natural_species_share_bounded_pages_and_restart_without_respawn() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Natural", 42, 16).unwrap();
+    let mut w = passive_world(&root.0, "Natural", 42, 16).unwrap();
     assert!(w.survival().unwrap().entity_rules == EntityRules::PassiveV1);
     // Real generated habitat, no injected terrain or animals.
     for x in -1..=1 {
@@ -410,7 +410,7 @@ fn passive_body_collision_extremes_despawn_and_unloaded_lifetime_are_bounded() {
 #[test]
 fn passive_cross_page_knockback_full_destination_keeps_identity_and_color() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Cross", 42, 4).unwrap();
+    let mut w = passive_world(&root.0, "Cross", 42, 4).unwrap();
     w.visit_layer(-1, -4, 2).unwrap();
     for x in -2..=2 {
         for y in -1..=1 {
@@ -512,7 +512,7 @@ fn passive_real_shears_and_dye_recipes_keep_legacy_menu_and_original_costs() {
 #[test]
 fn passive_shear_full_inventory_interruption_and_pickup_keep_single_wool_owner() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "FullBag", 42, 4).unwrap();
+    let mut w = passive_world(&root.0, "FullBag", 42, 4).unwrap();
     w.visit_layer(-1, 0, 0).unwrap();
     for x in -1..=1 {
         for y in -1..=2 {
@@ -627,7 +627,7 @@ fn passive_shear_full_inventory_interruption_and_pickup_keep_single_wool_owner()
 #[test]
 fn passive_original_java_try_spawn_32_seed_first_candidates_and_colors_match() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "SpawnOracle", 42, 8).unwrap();
+    let mut w = passive_world(&root.0, "SpawnOracle", 42, 8).unwrap();
     w.visit(0, 0).unwrap();
     for x in -64..64 {
         for y in -64..64 {
@@ -669,4 +669,18 @@ fn passive_original_java_try_spawn_32_seed_first_candidates_and_colors_match() {
             row["seed"]
         );
     }
+}
+
+// Preserve the exact historical v4 fixture rule, independent of new-world defaults.
+fn passive_world(
+    root: &std::path::Path,
+    name: &str,
+    seed: i64,
+    capacity: usize,
+) -> Result<World, String> {
+    let mut w = World::create_survival(root, name, seed, capacity)?;
+    w.survival.as_mut().unwrap().enemy_rules =
+        crate::experimental::infdev::survival::EnemyRules::None;
+    w.checkpoint()?;
+    Ok(w)
 }

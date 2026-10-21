@@ -12,7 +12,7 @@ use crate::{item::ToolKind, world::ActiveItem};
 
 type Pages = BTreeMap<Key, Page>;
 impl World {
-    fn loaded_cell(&self, at: Position) -> Option<Cell> {
+    pub(super) fn loaded_cell(&self, at: Position) -> Option<Cell> {
         self.resident
             .get(&at.key())
             .map(|c| c.cells[Key::local(at.x, at.y)])
@@ -78,6 +78,8 @@ impl World {
         let mut pages = self.dynamic_pages(at, target)?;
         let before = pages.clone();
         let was_dead = state.player.health == 0;
+        let health_before = state.player.health;
+        let hurt_before = state.player.hurt_time;
         let receipt = state.death_recorded;
         let cell = self.cell_at(at.depth, at.x, at.y)?;
         let can_place =
@@ -102,6 +104,9 @@ impl World {
         if !was_dead && state.panel == Panel::Closed && matches!(action, Action::Tick) {
             grazes = self.tick_animals(&mut state, &mut pages, at)?;
             self.spawn_animal(&mut state, &mut pages, at)?;
+            if state.enemy_rules == survival::EnemyRules::UndergroundZombieV1 {
+                self.spawn_enemy(&mut state, &mut pages, at)?;
+            }
         }
         let hit = !was_dead
             && state.panel == Panel::Closed
@@ -190,7 +195,9 @@ impl World {
             let migrated = pages
                 .iter()
                 .any(|(k, p)| p.entities.len() != before[k].entities.len());
-            let critical = !grazes.is_empty()
+            let critical = (state.enemy_rules == survival::EnemyRules::UndergroundZombieV1
+                && (state.player.health != health_before || state.player.hurt_time > hurt_before))
+                || !grazes.is_empty()
                 || migrated
                 || produced
                 || taken
@@ -271,7 +278,7 @@ impl World {
             .flat_map(|(&key, p)| {
                 p.entities
                     .iter()
-                    .filter(|e| e.kind.animal().is_some())
+                    .filter(|e| e.kind.mover().is_some())
                     .map(move |e| (key, e.id))
             })
             .collect();
@@ -283,13 +290,18 @@ impl World {
                 .unwrap();
             let mut entity = pages[&key].entities[index].clone();
             let mut pos = pages[&key].position(&entity);
-            let pig = entity.kind.animal_mut().unwrap();
+            let pig = entity.kind.mover_mut().unwrap();
             pig.age = if full {
                 pig.age.saturating_add(1)
             } else {
                 pig.age.wrapping_add(1)
             };
-            if full && super::passive::despawn(pig, pos, at, &state.player, &mut state.random) {
+            let hostile = pig.mob.species.hostile();
+            if if hostile {
+                super::enemy::expired(pig, pos, at, &state.player)
+            } else {
+                full && super::passive::despawn(pig, pos, at, &state.player, &mut state.random)
+            } {
                 pages.get_mut(&key).unwrap().entities.remove(index);
                 continue;
             }
@@ -323,7 +335,7 @@ impl World {
                         x,
                         y,
                     };
-                    let legal = pages.contains_key(&next.key())
+                    let terrain_legal = pages.contains_key(&next.key())
                         && [(-4, -3), (4, -3), (-4, 3), (4, 3)]
                             .into_iter()
                             .all(|(bx, by)| {
@@ -355,7 +367,21 @@ impl World {
                             !survival::tile(c).solid(c.data)
                                 && !matches!(c.ground, Ground::Hole | Ground::Water | Ground::Lava)
                         })
-                        && !state.station_at(next.depth, x, y)
+                        && !state.station_at(next.depth, x, y);
+                    if terrain_legal
+                        && (dx != 0 || dy != 0)
+                        && hostile
+                        && super::enemy::touches(
+                            next,
+                            px.rem_euclid(16),
+                            py.rem_euclid(16),
+                            at,
+                            &state.player,
+                        )
+                    {
+                        super::enemy::hurt_player(state, pig.mob.level);
+                    }
+                    let legal = terrain_legal
                         && if full {
                             !super::passive::blocked(
                                 pages,
@@ -379,7 +405,11 @@ impl World {
                     }
                 }
             }
-            pig.reroll(&mut state.random);
+            if hostile {
+                super::enemy::think(pig, pos, at, &state.player, &mut state.random);
+            } else {
+                pig.reroll(&mut state.random);
+            }
             let grazed =
                 full && matches!(
                     pig.mob.species,
@@ -523,14 +553,14 @@ pub(super) fn hit_animal(
     let full = state.entity_rules == survival::EntityRules::PassiveV1;
     let page = pages.get_mut(&target.key()).unwrap();
     let Some(index) = page.entities.iter().position(|e| {
-        e.kind.animal().is_some()
+        e.kind.mover().is_some()
             && e.x == target.x.rem_euclid(64) as u8
             && e.y == target.y.rem_euclid(64) as u8
     }) else {
         return Ok(false);
     };
     let mut entity = page.entities[index].clone();
-    let pig = entity.kind.animal_mut().unwrap();
+    let pig = entity.kind.mover_mut().unwrap();
     if full && pig.mob.species == NaturalMob::Sheep {
         if let Some(ActiveItem::Stack(id)) = state.player.active_item
             && let Some(color) = DyeColor::from_dye_item(id)
@@ -596,7 +626,15 @@ pub(super) fn hit_animal(
         pig.knock_y = (dy * 6) as i8;
     }
     if pig.mob.health == 0 {
-        let drops = if full {
+        let drops = if pig.mob.species.hostile() {
+            crate::entity::stats::mob_drops_at_level(
+                pig.mob.species,
+                pig.mob.level,
+                1,
+                false,
+                &mut state.random,
+            )
+        } else if full {
             animal_drops(pig, &mut state.random)
         } else {
             vec![pig_drop(&mut state.random)]

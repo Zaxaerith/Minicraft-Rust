@@ -132,7 +132,7 @@ fn station_craft(w: &mut World, p: (i64, i64), kind: StationKind, name: &str) {
 #[test]
 fn natural_resources_to_furnace_iron_anvil_tools_and_food_restore() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Smelt", 42, 4).unwrap();
+    let mut w = passive_world(&owned.0, "Smelt", 42, 4).unwrap();
     gather(&mut w, Ground::Tree, ItemId::Wood, 40);
     craft(&mut w, false, "Workbench");
     let bench = place_station(&mut w, ItemId::Workbench);
@@ -263,7 +263,7 @@ fn natural_resources_to_furnace_iron_anvil_tools_and_food_restore() {
 #[test]
 fn smelting_failures_and_station_pickup_do_not_consume_or_duplicate_items() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "FullSmelt", 42, 2).unwrap();
+    let mut w = passive_world(&owned.0, "FullSmelt", 42, 2).unwrap();
     let mut s = w.survival().unwrap().clone();
     s.player.inventory.add(ItemId::IronOre, 31);
     s.player.inventory.add(ItemId::Coal, 11);
@@ -314,7 +314,7 @@ fn smelting_failures_and_station_pickup_do_not_consume_or_duplicate_items() {
 #[test]
 fn food_metabolism_pause_heal_starve_and_legacy_session_contracts() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Food", 42, 2).unwrap();
+    let mut w = passive_world(&owned.0, "Food", 42, 2).unwrap();
     let mut s = w.survival().unwrap().clone();
     s.player.inventory.add(ItemId::Apple, 2);
     s.player.active_item = Some(ActiveItem::Stack(ItemId::Apple));
@@ -401,7 +401,7 @@ fn food_metabolism_pause_heal_starve_and_legacy_session_contracts() {
 #[test]
 fn natural_empty_inventory_harvest_workbench_tools_and_disk_restore() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Play", 42, 4).unwrap();
+    let mut w = passive_world(&owned.0, "Play", 42, 4).unwrap();
     assert_eq!(w.survival().unwrap().player.inventory.used_slots(), 0);
     gather(&mut w, Ground::Tree, ItemId::Wood, 24);
     craft(&mut w, false, "Workbench");
@@ -444,7 +444,7 @@ fn natural_empty_inventory_harvest_workbench_tools_and_disk_restore() {
 #[test]
 fn inventory_and_tool_transactions_preserve_full_bags_and_last_durability() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Full", 42, 4).unwrap();
+    let mut w = passive_world(&owned.0, "Full", 42, 4).unwrap();
     let tree = target(&mut w, Ground::Tree);
     let mut s = w.survival().unwrap().clone();
     let mut axe = ToolItem::new(ToolKind::Axe, crate::item::ToolTier::Wood);
@@ -493,7 +493,7 @@ fn inventory_and_tool_transactions_preserve_full_bags_and_last_durability() {
 #[test]
 fn collision_blocks_solids_and_missing_materials_do_not_create_items() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Collision", 42, 4).unwrap();
+    let mut w = passive_world(&owned.0, "Collision", 42, 4).unwrap();
     let p = target(&mut w, Ground::Tree);
     let start = w.position();
     for _ in 0..32 {
@@ -511,7 +511,7 @@ fn collision_blocks_solids_and_missing_materials_do_not_create_items() {
 #[test]
 fn exhausted_stamina_recharges_and_native_drop_instances_round_trip() {
     let owned = Owned::new();
-    let mut w = World::create_survival(&owned.0, "Drop", 42, 2).unwrap();
+    let mut w = passive_world(&owned.0, "Drop", 42, 2).unwrap();
     let mut s = w.survival().unwrap().clone();
     s.player.stamina = 0;
     for _ in 0..55 {
@@ -569,4 +569,17 @@ fn exhausted_stamina_recharges_and_native_drop_instances_round_trip() {
         restored.player.stamina_recharge, 0,
         "swimming cannot bank partial land recharge"
     );
+}
+
+// Preserve the exact historical v4 fixture rule, independent of new-world defaults.
+fn passive_world(
+    root: &std::path::Path,
+    name: &str,
+    seed: i64,
+    capacity: usize,
+) -> Result<World, String> {
+    let mut w = World::create_survival(root, name, seed, capacity)?;
+    w.passive_fixture();
+    w.checkpoint()?;
+    Ok(w)
 }

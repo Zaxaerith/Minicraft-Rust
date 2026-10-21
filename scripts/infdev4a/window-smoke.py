@@ -16,6 +16,7 @@ group=parser.add_mutually_exclusive_group()
 group.add_argument("--survival-only",action="store_true")
 group.add_argument("--death-only",action="store_true")
 group.add_argument("--hunt-only",action="store_true")
+group.add_argument("--combat-only",action="store_true")
 options=parser.parse_args()
 
 repo = Path(__file__).resolve().parents[2]
@@ -25,31 +26,41 @@ exe = repo / "target/release/minicraft-rust.exe"
 with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as owned:
     root = Path(owned).resolve()
     assert root.is_relative_to(output.resolve()) and root.name.startswith("infdev-owned-window-")
-    modes=("hunt-create","hunt-reopen") if options.hunt_only else ("survival-create","survival-reopen") if options.survival_only else (("death-create","death-recover","death-reopen") if options.death_only else ("create","reopen","survival-create","survival-reopen","death-create","death-recover","death-reopen","hunt-create","hunt-reopen"))
+    modes=("combat-create","combat-death","combat-recover") if options.combat_only else ("hunt-create","hunt-reopen") if options.hunt_only else ("survival-create","survival-reopen") if options.survival_only else (("death-create","death-recover","death-reopen") if options.death_only else ("create","reopen","survival-create","survival-reopen","death-create","death-recover","death-reopen","hunt-create","hunt-reopen"))
     for mode in modes:
-        session_root=root/"hunt" if mode.startswith("hunt-") else root/"death" if mode.startswith("death-") else root/"survival" if mode.startswith("survival-") else root
+        session_root=root/"combat" if mode.startswith("combat-") else root/"hunt" if mode.startswith("hunt-") else root/"death" if mode.startswith("death-") else root/"survival" if mode.startswith("survival-") else root
         with subprocess.Popen([str(exe), "--infdev-window-smoke", mode, str(session_root)],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8") as process:
             outcome={"forced":False}
             def forward():
                 for line in process.stdout:
                     print(line, end="", flush=True)
-                    if mode=="death-create" and line.strip()=="READY_FOR_FORCED_DEATH_TERMINATION":
+                    if (mode=="death-create" and line.strip()=="READY_FOR_FORCED_DEATH_TERMINATION") or (mode=="combat-death" and line.strip()=="READY_FOR_FORCED_COMBAT_TERMINATION"):
                         outcome["forced"]=True
                         process.kill()
             reader=threading.Thread(target=forward,daemon=True)
             reader.start()
             try:
-                process.wait(timeout=510 if mode.startswith(("survival-","death-","hunt-")) else 110)
+                process.wait(timeout=510 if mode.startswith(("survival-","death-","hunt-","combat-")) else 110)
             except subprocess.TimeoutExpired:
                 process.kill();process.wait()
                 raise
             finally:
                 reader.join(timeout=5)
-            if mode=="death-create" and not outcome["forced"]:
+            if mode in ("death-create","combat-death") and not outcome["forced"]:
                 raise RuntimeError("Native death did not reach the durable-checkpoint kill marker")
             if process.returncode and not outcome["forced"]:
+                for name in ("combat-failure.json","combat-expect.json","combat-death-expect.json"):
+                    if (session_root/name).is_file():
+                        shutil.copyfile(session_root/name,output/name)
                 raise RuntimeError(f"Real window {mode} failed: exit={process.returncode}")
+    if options.combat_only:
+        evidence=json.loads((root/"combat/combat-expect.json").read_text(encoding="utf-8"))
+        assert evidence["hurt"] and evidence["cloth"]>0
+        for name in ("combat-expect.json","combat-result.json","infdev-combat.png","infdev-combat-death.png"):
+            shutil.copyfile(root/"combat"/name,output/name)
+        print("PASS native combat: earned sword, natural underground zombie, injury/kill/drop, chunk crossing, exact pre-tick restart and fatal enemy contact/chest recovery after forced termination")
+        raise SystemExit(0)
     if not options.survival_only and not options.death_only and not options.hunt_only:
         evidence = json.loads((root / "gui-expect.json").read_text(encoding="utf-8"))
         shutil.copyfile(root / "infdev-window.png", output / "infdev-window.png")
