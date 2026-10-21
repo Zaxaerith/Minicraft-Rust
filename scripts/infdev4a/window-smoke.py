@@ -10,6 +10,9 @@ import subprocess
 import tempfile
 import argparse
 import threading
+import time
+import hashlib
+from datetime import datetime, timezone
 
 parser=argparse.ArgumentParser(description=__doc__)
 group=parser.add_mutually_exclusive_group()
@@ -18,36 +21,66 @@ group.add_argument("--death-only",action="store_true")
 group.add_argument("--hunt-only",action="store_true")
 group.add_argument("--combat-only",action="store_true")
 group.add_argument("--environment-only",action="store_true")
+parser.add_argument("--environment-night",action="store_true", help="after the independent short PASS, wait for first night at the original clock rate once, then reopen again")
 options=parser.parse_args()
+if options.environment_night and not options.environment_only:
+    parser.error("--environment-night requires --environment-only")
 
 repo = Path(__file__).resolve().parents[2]
 output = repo / "target/validation/current"
 output.mkdir(parents=True, exist_ok=True)
 exe = repo / "target/release/minicraft-rust.exe"
+trace=[]
+exe_hash=hashlib.sha256(exe.read_bytes()).hexdigest() if options.environment_only else None
 with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as owned:
     root = Path(owned).resolve()
     assert root.is_relative_to(output.resolve()) and root.name.startswith("infdev-owned-window-")
     modes=("environment-create","environment-reopen") if options.environment_only else ("combat-create","combat-death","combat-recover") if options.combat_only else ("hunt-create","hunt-reopen") if options.hunt_only else ("survival-create","survival-reopen") if options.survival_only else (("death-create","death-recover","death-reopen") if options.death_only else ("create","reopen","survival-create","survival-reopen","death-create","death-recover","death-reopen","hunt-create","hunt-reopen"))
+    if options.environment_night:
+        modes+=("environment-night","environment-night-reopen")
+    if options.environment_only:
+        (output/"environment-processes.json").write_text(json.dumps({"requestedModes":modes,"processes":[],"status":"running"},indent=2),encoding="utf-8")
     for mode in modes:
         session_root=root/"environment" if mode.startswith("environment-") else root/"combat" if mode.startswith("combat-") else root/"hunt" if mode.startswith("hunt-") else root/"death" if mode.startswith("death-") else root/"survival" if mode.startswith("survival-") else root
         with subprocess.Popen([str(exe), "--infdev-window-smoke", mode, str(session_root)],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8") as process:
-            outcome={"forced":False}
+            started=time.monotonic()
+            outcome={"mode":mode,"pid":process.pid,"startedUtc":datetime.now(timezone.utc).isoformat(),
+                     "exeSha256":exe_hash,"forced":False,"timeout":False,"lastOutput":None}
+            print(f"START {mode} pid={process.pid} utc={outcome['startedUtc']}",flush=True)
             def forward():
                 for line in process.stdout:
-                    print(line, end="", flush=True)
+                    outcome["lastOutput"]=line.strip()
+                    print(f"[{mode} +{time.monotonic()-started:.1f}s] {line}", end="", flush=True)
                     if (mode=="death-create" and line.strip()=="READY_FOR_FORCED_DEATH_TERMINATION") or (mode=="combat-death" and line.strip()=="READY_FOR_FORCED_COMBAT_TERMINATION"):
                         outcome["forced"]=True
                         process.kill()
             reader=threading.Thread(target=forward,daemon=True)
             reader.start()
             try:
-                process.wait(timeout=1830 if mode.startswith("environment-") else 510 if mode.startswith(("survival-","death-","hunt-","combat-")) else 110)
+                process.wait(timeout=1230 if mode=="environment-night" else 510 if mode.startswith(("environment-","survival-","death-","hunt-","combat-")) else 110)
             except subprocess.TimeoutExpired:
+                outcome["timeout"]=True
+                print(f"SCRIPT_TIMEOUT {mode}: explicit controller termination",flush=True)
                 process.kill();process.wait()
                 raise
             finally:
                 reader.join(timeout=5)
+                if mode.startswith("environment-"):
+                    outcome.update({"exitCode":process.returncode,"elapsedSeconds":round(time.monotonic()-started,3),
+                                    "endedUtc":datetime.now(timezone.utc).isoformat(),
+                                    "pass":process.returncode==0 and not outcome["forced"] and not outcome["timeout"]})
+                    trace.append(outcome)
+                    (output/"environment-processes.json").write_text(json.dumps({"requestedModes":modes,"processes":trace},indent=2),encoding="utf-8")
+                    # Keep compact evidence even if the long wait is interrupted;
+                    # never copy a world or recycle a player's directory.
+                    for artifact in session_root.glob("environment-*"):
+                        if artifact.is_file() and artifact.suffix in (".json",".png"):
+                            name=f"{mode}-{artifact.name}" if "failure" in artifact.name else artifact.name
+                            shutil.copyfile(artifact,output/name)
+                    print(f"END {mode}: exit={process.returncode} timeout={outcome['timeout']} elapsed={outcome['elapsedSeconds']}s",flush=True)
+                    if mode=="environment-reopen" and outcome["pass"]:
+                        print("PASS SHORT native acquisition/battle -> normal Escape Save & Quit -> independent process: exact pre-tick clock/inventory/position/ALL entity pages; menu pause and GC",flush=True)
             if mode in ("death-create","combat-death") and not outcome["forced"]:
                 raise RuntimeError("Native death did not reach the durable-checkpoint kill marker")
             if process.returncode and not outcome["forced"]:
@@ -56,9 +89,13 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
                         shutil.copyfile(session_root/name,output/name)
                 raise RuntimeError(f"Real window {mode} failed: exit={process.returncode}")
     if options.environment_only:
-        for name in ("environment-expect.json","environment-result.json","environment-day.png","environment-night.png","environment-underground.png"):
-            shutil.copyfile(root/"environment"/name,output/name)
-        print("PASS native calendar/torch/slime: earned gear and fuel/light, natural battle/drop, real-time day/night, isolated Save/Quit/restart, exact pre-tick clock/inventory/light and GC")
+        assert [entry["mode"] for entry in trace if entry["pass"]]==list(modes)
+        if options.environment_night:
+            evidence=json.loads((output/"environment-night-time.json").read_text(encoding="utf-8"))
+            assert evidence["naturalClock"] and evidence["after"]["day_tick"]>=48600
+            print("PASS SEPARATE native original-rate day/evening/night, normal Save & Quit and independent night restart")
+        else:
+            print("Night waiting NOT RUN by this short-only command; use --environment-night explicitly")
         raise SystemExit(0)
     if options.combat_only:
         evidence=json.loads((root/"combat/combat-expect.json").read_text(encoding="utf-8"))

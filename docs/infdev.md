@@ -288,11 +288,18 @@ Slime使用现有Mob/等级/物品模型，Normal三级生命2/8/18，接触伤�
 新流最初在Night/首日/Seed6首次不同：误沿用白天20格排斥得到Pig(568,536)，Java为Cow(-264,168)；
 按PassiveMob原夜间15格规则修复后64例全部通过，没有修改Java预期来掩盖差异。
 
-`python -X utf8 scripts/infdev4a/window-smoke.py --environment-only`运行独占新世界与独立重开进程：
-空包采集、制作工具/木剑与火把，地下自然Slime/Zombie战斗并真实拾回掉落、放置光源、返回地表，
-以原速等待首夜并保存重开；在worker启动前比较完整计数/库存/火把身份，再检查菜单暂停和GC。
-等待首夜需要约13.5分钟活动时间，没有注入物品、怪物或时钟；这是程序Input驱动原生窗口，不是人类试玩。
-实际结果以`target/validation/current/infdev-final-validation.md`和同目录日志为准。
+`python -X utf8 scripts/infdev4a/window-smoke.py --environment-only`运行独占新世界的短流程：
+空包采集、制作工具/木剑与火把，地下自然Slime/Zombie战斗并拾取掉落、放置光源、返回地表，
+经普通Esc输入Save & Quit，再启动独立进程。在worker启动前准确比较完整时钟、库存、位置及全部已保存实体页，
+随后验证菜单暂停、再次保存与GC；短流程不等待夜晚。
+
+显式追加`--environment-night`，在短流程独立通过后，用第三进程原速等待首夜，记录白天/傍晚/夜晚画面和墙钟耗时，
+再用第四进程检查夜间保存恢复。同一天仍为原64,800 tick，首夜48,600 tick；不注入时间、不加速或缩短一天。
+只尝试一次长等待，关闭或超时后直接失败并保留短流程结果，不自动重跑。
+窗口标题显示等待进度，`environment-processes.json`记录各PID、起止时间、返回码、超时/强制终止标记及EXE哈希。
+失败时保留实际窗口状态、游戏快照和渲染图；旧`Window smoke interrupted by window close`只证明窗口收到关闭消息，
+没有来源证据时保留UNKNOWN，不将其归因于用户或游戏自行关闭。
+这是程序Input驱动的原生窗口，不是人类键盘试玩。实际结果以`target/validation/current/infdev-final-validation.md`和同目录日志为准。
 
 ## Windows发布与工作站长期存储
 

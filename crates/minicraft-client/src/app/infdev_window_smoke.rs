@@ -22,6 +22,7 @@ struct Host {
     saw_enemy_hit: bool,
     watch_enemy_death: bool,
     last_alive: Option<crate::item::Inventory>,
+    started: Instant,
 }
 
 impl Host {
@@ -266,6 +267,8 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             | "combat-recover"
             | "environment-create"
             | "environment-reopen"
+            | "environment-night"
+            | "environment-night-reopen"
     ) {
         return Err("window smoke mode must be create or reopen".into());
     }
@@ -278,8 +281,8 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
     if mode == "hunt-reopen" {
         survival::hunt::preflight(&root)?;
     }
-    if mode == "environment-reopen" {
-        survival::environment::preflight(&root)?;
+    if mode.starts_with("environment-") && !creating {
+        survival::environment::preflight(&root, mode)?;
     }
     if mode == "combat-death" {
         survival::combat::preflight(&root)?;
@@ -306,6 +309,7 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         saw_enemy_hit: false,
         watch_enemy_death: false,
         last_alive: None,
+        started: Instant::now(),
         deadline: Instant::now()
             + Duration::from_secs(if mode.starts_with("environment-") {
                 1800
@@ -405,7 +409,25 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             })
     })?;
     if mode.starts_with("environment-") {
-        return survival::environment::run(&mut host, &mut explorer, &root, creating);
+        let outcome = survival::environment::run(&mut host, &mut explorer, &root, mode);
+        if let Err(error) = &outcome {
+            // Capture the actual last observation before the owned fixture is
+            // cleaned up. A close message does not identify its sender.
+            let evidence = serde_json::json!({
+                "mode":mode,"error":error,"windowOpen":host.window.is_open(),
+                "windowHandle":host.window.get_window_handle() as usize,
+                "elapsedMs":host.started.elapsed().as_millis(),
+                "deadlineExceeded":Instant::now()>host.deadline,
+                "position":explorer.position(),"depth":explorer.depth(),
+                "status":explorer.status(),"state":explorer.survival_state(),
+                "closeSender":"UNKNOWN"
+            });
+            if let Err(e) = fs_write_evidence(&root.join("environment-failure.json"), evidence) {
+                eprintln!("Cannot retain environment failure: {e}");
+            }
+            let _ = host.screen.save_png(&root.join("environment-failure.png"));
+        }
+        return outcome;
     }
     if mode.starts_with("combat-") {
         return survival::combat::run(&mut host, &mut explorer, &root, mode);
