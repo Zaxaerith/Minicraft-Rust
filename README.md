@@ -3,9 +3,12 @@
 [Minicraft-Rust](https://github.com/Zaxaerith/Minicraft-Rust) 是基于
 [Minicraft+](https://github.com/MinicraftPlus/minicraft-plus-revived) 的 Rust 游戏实现，
 目前只维护 **Windows x64（MSVC）**。以 Java 2.2.4 的兼容修复为基础，移植传统固定地图的
-**Java 2.3.0-dev2** 玩法；这是开发版、本地 RC，不是上游官方发行版。
+**Java 2.3.0-dev2** 玩法，另有隔离的 Infdev 实验模式。现有 Windows 本地 RC 对应固定世界基线，
+尚未包含本分支的 Infdev 功能；本项目不是上游官方发行版。
 
 ## 可以玩什么
+
+以下为默认的固定世界模式：
 
 - 128、256、512 方形有限世界，地表、天空、地下和黑曜石地牢；Survival、Creative、Hardcore、Score。
 - 采矿、种植、钓鱼、合成、装备、战斗、家具、箱子、死亡箱、任务、教程及配方解锁。
@@ -16,6 +19,22 @@
 正常新建世界使用显式的 `Java230World` 规则，包含层 Seed、楼梯、建筑、宝箱和初始实体。
 旧世界优先读取已保存地图；`Legacy224`、`Java230Flora` 历史规则继续保留。
 固定场景已用实际 Java 源码进行逐格与持久状态对照，不代表所有 Seed、主题或 AI 都完全一致。
+
+## Infdev（Experimental）
+
+使用当前源码构建后，从主菜单明确选择 **Infdev (Experimental)**。
+**New Layered World (v3)** 是五层自由飞行探索，**New Survival World (v4)** 是基础生存实验；
+普通 **Play** 和新建世界仍使用固定地图，指定 `--infdev-root` 也不会自动切换模式。
+
+实验支持 64×64 区块按需加载、负坐标、楼梯跨层、保存恢复及安全 GC；Survival 已接通采集、背包、
+工作台/熔炉/铁砧、工具、食物/饥饿、死亡箱、牛猪羊、Slime/Zombie，以及新规则的昼夜和火把照明。
+实验存档分别位于存档根 `experiments/` 下的 `infdev-v2`、`infdev-v3`、`infdev-survival-v4`，
+不与普通 `saves` 混用。旧 v4 按各自已保存的规则运行，缺失规则字段采用历史默认值，不自动升级。
+
+这不是完整 Infdev Survival：农业、装备、完整光源与敌怪系统、Boss、天空、船只和多人尚未接通。
+728 项 Release 测试及 Java/Infdev Oracle 有已验证基线，原生窗口采集/战斗/保存重开短流程通过；
+完整昼夜窗口长测因关闭消息中断，发送者 **UNKNOWN**，夜间重开未运行，真人试玩尚未完成。
+历史偶发 `MoveFileW` 发布失败根因也仍为 **UNKNOWN**。版本、规则和验收边界见 [Infdev 说明](docs/infdev.md)。
 
 ## Windows 运行
 
@@ -93,7 +112,7 @@ Java 官方 Save 没有保存的羊色及瞬时 AI/RNG 状态无法从存档恢�
 - Boss 房修复保护玩家放置的非竞技场方块及容器，和 Java 无条件覆盖房间的行为有意不同。
 - 高等级 Spawner 暂不能通过 PowerGlove 无损搬运，拾起会拒绝并保留原实体，不会降成 level 1。
 - 本地 JSON-lines 服务器仅提供连接、身份与玩家状态转发基础设施；不兼容 Java 联机协议，也不是完整多人世界同步或服务端权威战斗。
-- 普通游戏仍使用有限世界。主菜单的 [Infdev (Experimental)](docs/infdev.md) 提供五层区块飞行探索，以及独立的基础 Survival 检查点：碰撞移动、采集、背包、工作台/熔炉/铁砧、工具合成、苹果与饥饿、有限放置和保存恢复；尚无完整Survival、怪物、天空或船只。
+- Infdev 仍是独立 Experimental 模式；未完成机制和验证状态见上节，不代表固定世界功能已全部接入无限世界。
 
 ## Windows 开发与验证
 

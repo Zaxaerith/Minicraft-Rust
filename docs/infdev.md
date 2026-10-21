@@ -5,6 +5,40 @@
 `Legacy224`、`Java230Flora`、`Java230World`及既有存档不切换规则。
 Phase 4A历史说明见[归档记录](history/infdev4a.md)。
 
+## 整合准备与验证状态
+
+Phase 4A～4L功能冻结点为`fc87f12a4f671ef9a6cbf88a21e55aa723d76996`；当前只准备审查和整合，
+没有将Experimental提升为正式模式。现有Java dev2 Windows RC仍是固定世界包，不包含这些新实验功能。
+
+| 检查 | 实际结论与边界 |
+|---|---|
+| Release Workspace / Java与Infdev Oracle | 生产基线`4168194`的728项及Oracle PASS；后续`fc87f12`只改诊断，整合准备不重跑全量 |
+| Phase 4L原生窗口短流程 | PASS：空包采集/制火把、地下自然Slime/Zombie、Esc保存、独立进程恢复全部6个实体页/库存/时钟，菜单暂停及GC |
+| 完整昼夜原生窗口长测 | 收到WM_CLOSE中断，未到首夜，返回码1；不是控制脚本超时或主动kill；发送者UNKNOWN |
+| 夜间保存及独立窗口恢复 | NOT RUN：前置长测中断后停止，不自动重试 |
+| Phase 4真人键盘/鼠标试玩 | 尚未完成；程序Input窗口测试不等同真人试玩 |
+| 历史偶发MoveFileW发布失败 | 根因UNKNOWN；已增加现场诊断，受控锁冲突回归不能证明历史原因 |
+
+详细证据保留在`target/validation/current/infdev-final-validation.md`、`validation.txt`、
+`infdev-environment-acceptance.log`、`environment-processes.json`及关闭/发布失败现场；不清理这些日志或旧世界。
+源码与Oracle逐项对照仍有下文列出的非确定性和玩法边界，不能把以上各行合称“全部验收PASS”。
+
+## 存档与规则隔离速查
+
+默认实验根为`SAVEDIR/experiments`；显式`--infdev-root`可另指定根，只改变目录，不自动进入实验模式。
+
+| 目录 | 模式与契约 |
+|---|---|
+| `infdev-v2` | 已有单层飞行探索；保留原地表生成器/区块编码，GUI可以打开，不直接重解释成多层 |
+| `infdev-v3` | 五层飞行探索，`JavaLayersV1`；新建入口为New Layered World (v3) |
+| `infdev-survival-v4` | 独立Survival；新建入口为New Survival World (v4)，各代规则由保存字段区分 |
+
+普通固定世界仍在`SAVEDIR/saves`，保持`Legacy224`、`Java230Flora`、`Java230World`原契约。
+没有v2/v3→v4自动转换，也不承诺新存档可被旧EXE降级读取。旧v4不是统一的一套规则：
+按已有`food_rules`、`death_rule`、`entity_rules`、`enemy_rules`、`station_rules`及`environment`继续运行。
+缺失字段分别保留Legacy食物、KeepInventory、Legacy实体、无敌怪、Session工作站和无environment；
+已有PigV1/PassiveV1、死亡箱或Zombie标记不被回退或补成最新规则。新建v4才默认启用当前组合。
+
 ## 窗口试玩
 
 ```powershell
@@ -71,7 +105,7 @@ V/P面向工作台、熔炉或铁砧可拆回相应真实物品掉落；楼梯�
 旧v4缺少此字段时使用`Legacy`，保持原来不消耗饥饿、不自动回血的行为，没有自动升级。
 边界：目前没有装备或农业；普通动物为Cow/Pig/Sheep；旧敌怪规则仅地下Zombie，新环境规则支持Slime/Zombie。
 水中不回复耐力且持续消耗，耗尽后溺水伤害；熔岩造成伤害。死亡后按Enter回初始出生点，
-出生点被阻挡会拒绝重生。**新建v4使用死亡箱；旧v4仍保留库存**，具体规则见下节。
+出生点被阻挡会拒绝重生。**新建v4使用死亡箱；旧v4保留各自death_rule，缺失时才保留库存**，具体规则见下节。
 下矿前请准备足够工具，尚无Boss/地下家具生成。
 旧规则session最多保留512个掉落实例；新规则的普通掉落进入区块实体页，不再共用全世界512上限。
 新建世界的工作台/熔炉/铁砧及染缸进入区块实体页，旧世界仍用session的64个工作站上限。达到目的页上限时拒绝新增操作，物品不会被静默删除。掉落暂不自然过期。
@@ -191,7 +225,8 @@ PassiveV1按原Mob阈值处理活动动物：超过1280像素移除；空闲1800
 缺少字段的所有历史Legacy/PigV1/PassiveV1世界按`None`读取，再保存仍省略字段，不自动增加敌怪或武器菜单。
 已保存的地图、生成器版本、动物/物品ID和死亡箱规则不转换，不建立v5目录；新存档不保证被旧EXE读取。
 
-当前只接通原版Zombie，在-1/-2/-3层分别为level1/2/3，Normal生命10/40/90，接触伤害1/2/3；
+无environment的历史敌怪规则只接通原版Zombie；新环境规则另有Slime，见下节。
+Zombie在-1/-2/-3层分别为level1/2/3，Normal生命10/40/90，接触伤害1/2/3；
 玩家30tick受伤保护、Zombie10tick受击保护，复用原工具/武器近战与耐久、分页移动及4×3身体碰撞。
 新规则工作台/铁砧开放原Sword配方（Wood Sword为5Wood），不是赠送武器或修改材料成本。
 Zombie死亡按原Normal表掉1–3 Cloth，再独立抽取稀有Iron、彩色Clothes和Potato；使用原ItemStack，不丢弃稀有项。
@@ -338,7 +373,7 @@ LRU仅8页，保存重启和GC前后逐项比较完整页，另执行真实附�
 输出复用`infdev-mixed-storage.csv`（chunks列为测试构造的64/256区块，另保留初始出生区块）；记录打开完整校验、最后常驻批次保存、GC毫秒与实际文件字节数，
 不清OS缓存、不使用墙钟硬阈值，不把操作系统缓存差异当优化收益。每次运行均完整验证，未为性能跳过数据。
 
-本轮Windows Release实测（合成夹具；区块数不含初始出生区块，字节数含当前/备份对象）：
+工作站分页阶段的Windows Release测量（合成夹具；区块数不含初始出生区块，字节数含当前/备份对象；非本次重测）：
 
 | 测试区块 | 实体 / 工作站 | 打开校验 | 最后常驻批次保存 | GC | GC前 / 后文件字节数 |
 |---|---:|---:|---:|---:|---:|
@@ -480,13 +515,13 @@ i64极限属于Rust边界/恢复测试，不能当作Java完整极限坐标Oracl
 下矿后受控致死；在死亡检查点成功后强制终止进程，重开、复活并沿真实楼梯返回取物，
 再次Save & Quit、第三进程恢复和GC校验。受控条件只改变生命值，不注入库存、摆放资源或传送。
 自动输入经过实际菜单/窗口/worker/容器；这是原生窗口自动化，不是玩家真人验收。
-本次实测地下-1层`(-42,-24)`，工具与Acorn/Apple/Stone/Coal/Iron Ore均来自正常采集。
+该死亡箱历史窗口实测位于地下-1层`(-42,-24)`，工具与Acorn/Apple/Stone/Coal/Iron Ore均来自正常采集。
 
 新增回归覆盖部分拾回、满包、工具/不同水量实例、重复死亡、受阻/满页、过期保留、128实体页LRU、
 正负i64边界、五层、磁盘恢复、死亡/拾回发布前中断、写入失败、损坏整体回退及GC备份保护。
-完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，原720项基线全部保留。
+完整门禁继续用`scripts/validate-windows.ps1 -JavaOracle`，现有728项Release测试基线保留；本次文档整合准备未重复运行。
 最终结果复用`target/validation/current/infdev-final-validation.md`及同目录日志，不另建阶段日志树。
-本次配方依据固定世界`item/recipe.rs`及固定Infdev的`item/Recipes.java`；苹果与食物规则依据
+冶炼/食物配方依据固定世界`item/recipe.rs`及固定Infdev的`item/Recipes.java`；苹果与食物规则依据
 `level/tile/TreeTile.java:149-168`、`item/FoodItem.java:47-54`和`entity/mob/Player.java:398-450`。
 复用原ItemId/Inventory/ToolItem，无新增物品ID、Tile ID或世界命名空间；Java的树随机源与Rust会话RNG不同，
 这里对齐规则和数量，不宣称每次掉落的随机序列或全帧玩家更新顺序逐次相同。
