@@ -305,51 +305,73 @@ pub(in crate::app::infdev_window_smoke) fn run(
         return Ok(());
     }
     if mode == "combat-death" {
-        if e.depth() == 0 {
-            navigate(h, e, (-32, -20), &mut samples)?;
-            pulse(
-                h,
-                e,
-                Input {
-                    pickup: true,
-                    ..Default::default()
-                },
-            )?;
-        }
-        for step in 0usize..600 {
-            if advance(h, e, &mut samples)?.is_some() {
-                let before = e.survival_state().unwrap().player.inventory.clone();
-                let at = e.position();
-                fs_write_evidence(
-                    &root.join("combat-death-expect.json"),
-                    serde_json::json!({"inventory":before,"position":at,"depth":e.depth()}),
+        h.watch_enemy_death = true;
+        let outcome = (|| -> Result<(), String> {
+            if e.depth() == 0 {
+                navigate(h, e, (-32, -20), &mut samples)?;
+                pulse(
+                    h,
+                    e,
+                    Input {
+                        pickup: true,
+                        ..Default::default()
+                    },
                 )?;
-                h.wait(e, |e| {
-                    e.survival_state().unwrap().player.health == 0
-                        && e.survival_state().unwrap().death_recorded
-                })?;
-                if e.survival_state().unwrap().player.inventory.used_slots() != 0
-                    || corpse(e, at) != Some(before)
-                {
-                    return Err(
-                        "natural enemy death did not retain exactly one inventory owner".into(),
+            }
+            for step in 0usize..600 {
+                if e.survival_state().unwrap().player.health == 0 {
+                    return Ok(());
+                }
+                if advance(h, e, &mut samples)?.is_some() {
+                    h.wait(e, |e| {
+                        e.survival_state().unwrap().player.health == 0
+                            && e.survival_state().unwrap().death_recorded
+                    })?;
+                    return Ok(());
+                }
+                if step.is_multiple_of(50) {
+                    println!(
+                        "COMBAT looking for natural fatal contact at {:?}",
+                        e.position()
                     );
                 }
-                h.frame(e)?;
-                h.screen.save_png(&root.join("infdev-combat-death.png"))?;
-                println!("READY_FOR_FORCED_COMBAT_TERMINATION");
-                loop {
-                    h.frame(e)?;
-                }
             }
-            if step.is_multiple_of(50) {
-                println!(
-                    "COMBAT looking for natural fatal contact at {:?}",
-                    e.position()
-                );
-            }
+            Err("no natural enemy contact".into())
+        })();
+        h.watch_enemy_death = false;
+        if e.survival_state().unwrap().player.health != 0
+            || !e.survival_state().unwrap().death_recorded
+        {
+            return outcome.and(Err("no committed natural death".into()));
         }
-        return Err("no natural Zombie contact for death".into());
+        let before = h.last_alive.clone().ok_or("no observed living inventory")?;
+        let at = e.position();
+        if e.depth() != -1
+            || e.visible_cell(at.0, at.1)
+                .is_none_or(|c| matches!(c.ground, Ground::Water | Ground::Lava | Ground::Hole))
+            || !zombies(e)
+                .iter()
+                .any(|(_, q)| q.0.abs_diff(at.0).max(q.1.abs_diff(at.1)) <= 1)
+        {
+            return Err("fatal scene is not a dry natural Zombie contact".into());
+        }
+        if e.survival_state().unwrap().player.inventory.used_slots() != 0
+            || corpse(e, at) != Some(before.clone())
+        {
+            return Err(
+                "observed last living inventory does not equal the actual death chest".into(),
+            );
+        }
+        fs_write_evidence(
+            &root.join("combat-death-expect.json"),
+            serde_json::json!({"inventory":before,"position":at,"depth":e.depth(),"lastAliveObserved":true}),
+        )?;
+        h.frame(e)?;
+        h.screen.save_png(&root.join("infdev-combat-death.png"))?;
+        println!("READY_FOR_FORCED_COMBAT_TERMINATION");
+        loop {
+            h.frame(e)?;
+        }
     }
     let v: serde_json::Value = serde_json::from_slice(
         &std::fs::read(root.join("combat-death-expect.json")).map_err(|e| e.to_string())?,

@@ -240,7 +240,18 @@ fn path(
             } // Approach death chests deliberately; do not auto-loot on the route.
             let weight = match c.ground {
                 Ground::Tree => 16,
-                Ground::Rock => 40,
+                Ground::Rock
+                    if e.survival_state()
+                        .unwrap()
+                        .player
+                        .inventory
+                        .tools()
+                        .iter()
+                        .any(|t| t.kind == ToolKind::Pickaxe && t.durability > 0) =>
+                {
+                    40
+                }
+                Ground::Rock => continue,
                 Ground::Water if resource.is_none() => 8,
                 Ground::Water
                 | Ground::Lava

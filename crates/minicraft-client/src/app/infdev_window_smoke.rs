@@ -20,6 +20,8 @@ struct Host {
     deadline: Instant,
     auto_combat: bool,
     saw_enemy_hit: bool,
+    watch_enemy_death: bool,
+    last_alive: Option<crate::item::Inventory>,
 }
 
 impl Host {
@@ -33,9 +35,25 @@ impl Host {
         self.presenter
             .present(&mut self.window, self.screen.pixels())
     }
+    fn observe_alive(&mut self, explorer: &Explorer) {
+        if let Some(s) = explorer.survival_state()
+            && s.player.health > 0
+        {
+            self.last_alive = Some(s.player.inventory.clone());
+        }
+    }
     fn frame(&mut self, explorer: &mut Explorer) -> Result<(), String> {
         for _ in 0..6 {
+            self.observe_alive(explorer);
             explorer.tick(&Input::default());
+            self.observe_alive(explorer);
+            if self.watch_enemy_death
+                && explorer
+                    .survival_state()
+                    .is_some_and(|s| s.player.health == 0 && s.death_recorded)
+            {
+                return Err("observed natural fatal contact".into());
+            }
         }
         explorer.render(&mut self.screen, &self.assets);
         self.present()
@@ -46,6 +64,7 @@ impl Host {
         check: impl Fn(&Explorer) -> bool,
     ) -> Result<(), String> {
         loop {
+            self.observe_alive(explorer);
             if check(explorer) {
                 return Ok(());
             }
@@ -279,6 +298,8 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         screen: Screen::new(),
         auto_combat: false,
         saw_enemy_hit: false,
+        watch_enemy_death: false,
+        last_alive: None,
         deadline: Instant::now() + Duration::from_secs(if survival { 480 } else { 90 }),
     };
     let locale = Localization::load("en-us", &[]);
