@@ -1285,6 +1285,14 @@
       ]
     ]
   },
+  "overlapEscape": {
+    "enemyHealth": 10,
+    "playerX": 513,
+    "enemyY": 512,
+    "moved": true,
+    "enemyX": 512,
+    "playerY": 512
+  },
   "contact": [
     {
       "difficulty": 0,
@@ -1345,588 +1353,712 @@
     {
       "depth": -1,
       "seed": 0,
-      "enemies": [{
-        "level": 1,
-        "kind": "Zombie",
-        "x": 680,
-        "health": 10,
-        "y": -536
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Zombie",
+          "x": 680,
+          "health": 10,
+          "y": -536
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 1,
-      "enemies": [{
-        "level": 1,
-        "kind": "Skeleton",
-        "x": -824,
-        "health": 12,
-        "y": -184
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Skeleton",
+          "x": -824,
+          "health": 12,
+          "y": -184
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 2,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": -424,
-        "health": 2,
-        "y": 824
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": -424,
+          "health": 2,
+          "y": 824
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 3,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": 120,
-        "health": 2,
-        "y": -872
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": 120,
+          "health": 2,
+          "y": -872
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 4,
-      "enemies": [{
-        "level": 1,
-        "kind": "Zombie",
-        "x": 840,
-        "health": 10,
-        "y": 856
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Zombie",
+          "x": 840,
+          "health": 10,
+          "y": 856
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 5,
-      "enemies": [{
-        "level": 1,
-        "kind": "Skeleton",
-        "x": -664,
-        "health": 12,
-        "y": -840
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Skeleton",
+          "x": -664,
+          "health": 12,
+          "y": -840
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 6,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": -264,
-        "health": 2,
-        "y": 168
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": -264,
+          "health": 2,
+          "y": 168
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 7,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": 280,
-        "health": 2,
-        "y": 504
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": 280,
+          "health": 2,
+          "y": 504
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 8,
-      "enemies": [{
-        "level": 1,
-        "kind": "Zombie",
-        "x": 984,
-        "health": 10,
-        "y": 200
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Zombie",
+          "x": 984,
+          "health": 10,
+          "y": 200
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 9,
-      "enemies": [{
-        "level": 1,
-        "kind": "Skeleton",
-        "x": -504,
-        "health": 12,
-        "y": 552
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Skeleton",
+          "x": -504,
+          "health": 12,
+          "y": 552
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 10,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": -104,
-        "health": 2,
-        "y": -504
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": -104,
+          "health": 2,
+          "y": -504
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 11,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": 440,
-        "health": 2,
-        "y": -152
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": 440,
+          "health": 2,
+          "y": -152
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 12,
-      "enemies": [{
-        "level": 1,
-        "kind": "Zombie",
-        "x": -904,
-        "health": 10,
-        "y": -456
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Zombie",
+          "x": -904,
+          "health": 10,
+          "y": -456
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 13,
-      "enemies": [{
-        "level": 1,
-        "kind": "Skeleton",
-        "x": -344,
-        "health": 12,
-        "y": -120
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Skeleton",
+          "x": -344,
+          "health": 12,
+          "y": -120
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 14,
-      "enemies": [{
-        "level": 1,
-        "kind": "Slime",
-        "x": 40,
-        "health": 2,
-        "y": 888
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Slime",
+          "x": 40,
+          "health": 2,
+          "y": 888
+        }
+      ]
     },
     {
       "depth": -1,
       "seed": 15,
-      "enemies": [{
-        "level": 1,
-        "kind": "Zombie",
-        "x": 600,
-        "health": 10,
-        "y": -808
-      }]
+      "enemies": [
+        {
+          "level": 1,
+          "kind": "Zombie",
+          "x": 600,
+          "health": 10,
+          "y": -808
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 0,
-      "enemies": [{
-        "level": 2,
-        "kind": "Zombie",
-        "x": 680,
-        "health": 40,
-        "y": -536
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Zombie",
+          "x": 680,
+          "health": 40,
+          "y": -536
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 1,
-      "enemies": [{
-        "level": 2,
-        "kind": "Skeleton",
-        "x": -824,
-        "health": 48,
-        "y": -184
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Skeleton",
+          "x": -824,
+          "health": 48,
+          "y": -184
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 2,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": -424,
-        "health": 8,
-        "y": 824
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": -424,
+          "health": 8,
+          "y": 824
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 3,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": 120,
-        "health": 8,
-        "y": -872
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": 120,
+          "health": 8,
+          "y": -872
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 4,
-      "enemies": [{
-        "level": 2,
-        "kind": "Zombie",
-        "x": 840,
-        "health": 40,
-        "y": 856
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Zombie",
+          "x": 840,
+          "health": 40,
+          "y": 856
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 5,
-      "enemies": [{
-        "level": 2,
-        "kind": "Skeleton",
-        "x": -664,
-        "health": 48,
-        "y": -840
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Skeleton",
+          "x": -664,
+          "health": 48,
+          "y": -840
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 6,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": -264,
-        "health": 8,
-        "y": 168
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": -264,
+          "health": 8,
+          "y": 168
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 7,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": 280,
-        "health": 8,
-        "y": 504
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": 280,
+          "health": 8,
+          "y": 504
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 8,
-      "enemies": [{
-        "level": 2,
-        "kind": "Zombie",
-        "x": 984,
-        "health": 40,
-        "y": 200
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Zombie",
+          "x": 984,
+          "health": 40,
+          "y": 200
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 9,
-      "enemies": [{
-        "level": 2,
-        "kind": "Skeleton",
-        "x": -504,
-        "health": 48,
-        "y": 552
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Skeleton",
+          "x": -504,
+          "health": 48,
+          "y": 552
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 10,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": -104,
-        "health": 8,
-        "y": -504
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": -104,
+          "health": 8,
+          "y": -504
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 11,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": 440,
-        "health": 8,
-        "y": -152
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": 440,
+          "health": 8,
+          "y": -152
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 12,
-      "enemies": [{
-        "level": 2,
-        "kind": "Zombie",
-        "x": -904,
-        "health": 40,
-        "y": -456
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Zombie",
+          "x": -904,
+          "health": 40,
+          "y": -456
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 13,
-      "enemies": [{
-        "level": 2,
-        "kind": "Skeleton",
-        "x": -344,
-        "health": 48,
-        "y": -120
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Skeleton",
+          "x": -344,
+          "health": 48,
+          "y": -120
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 14,
-      "enemies": [{
-        "level": 2,
-        "kind": "Slime",
-        "x": 40,
-        "health": 8,
-        "y": 888
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Slime",
+          "x": 40,
+          "health": 8,
+          "y": 888
+        }
+      ]
     },
     {
       "depth": -2,
       "seed": 15,
-      "enemies": [{
-        "level": 2,
-        "kind": "Zombie",
-        "x": 600,
-        "health": 40,
-        "y": -808
-      }]
+      "enemies": [
+        {
+          "level": 2,
+          "kind": "Zombie",
+          "x": 600,
+          "health": 40,
+          "y": -808
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 0,
-      "enemies": [{
-        "level": 3,
-        "kind": "Zombie",
-        "x": 680,
-        "health": 90,
-        "y": -536
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Zombie",
+          "x": 680,
+          "health": 90,
+          "y": -536
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 1,
-      "enemies": [{
-        "level": 3,
-        "kind": "Skeleton",
-        "x": -824,
-        "health": 108,
-        "y": -184
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Skeleton",
+          "x": -824,
+          "health": 108,
+          "y": -184
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 2,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": -424,
-        "health": 18,
-        "y": 824
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": -424,
+          "health": 18,
+          "y": 824
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 3,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": 120,
-        "health": 18,
-        "y": -872
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": 120,
+          "health": 18,
+          "y": -872
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 4,
-      "enemies": [{
-        "level": 3,
-        "kind": "Zombie",
-        "x": 840,
-        "health": 90,
-        "y": 856
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Zombie",
+          "x": 840,
+          "health": 90,
+          "y": 856
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 5,
-      "enemies": [{
-        "level": 3,
-        "kind": "Skeleton",
-        "x": -664,
-        "health": 108,
-        "y": -840
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Skeleton",
+          "x": -664,
+          "health": 108,
+          "y": -840
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 6,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": -264,
-        "health": 18,
-        "y": 168
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": -264,
+          "health": 18,
+          "y": 168
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 7,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": 280,
-        "health": 18,
-        "y": 504
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": 280,
+          "health": 18,
+          "y": 504
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 8,
-      "enemies": [{
-        "level": 3,
-        "kind": "Zombie",
-        "x": 984,
-        "health": 90,
-        "y": 200
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Zombie",
+          "x": 984,
+          "health": 90,
+          "y": 200
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 9,
-      "enemies": [{
-        "level": 3,
-        "kind": "Skeleton",
-        "x": -504,
-        "health": 108,
-        "y": 552
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Skeleton",
+          "x": -504,
+          "health": 108,
+          "y": 552
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 10,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": -104,
-        "health": 18,
-        "y": -504
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": -104,
+          "health": 18,
+          "y": -504
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 11,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": 440,
-        "health": 18,
-        "y": -152
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": 440,
+          "health": 18,
+          "y": -152
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 12,
-      "enemies": [{
-        "level": 3,
-        "kind": "Zombie",
-        "x": -904,
-        "health": 90,
-        "y": -456
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Zombie",
+          "x": -904,
+          "health": 90,
+          "y": -456
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 13,
-      "enemies": [{
-        "level": 3,
-        "kind": "Skeleton",
-        "x": -344,
-        "health": 108,
-        "y": -120
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Skeleton",
+          "x": -344,
+          "health": 108,
+          "y": -120
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 14,
-      "enemies": [{
-        "level": 3,
-        "kind": "Slime",
-        "x": 40,
-        "health": 18,
-        "y": 888
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Slime",
+          "x": 40,
+          "health": 18,
+          "y": 888
+        }
+      ]
     },
     {
       "depth": -3,
       "seed": 15,
-      "enemies": [{
-        "level": 3,
-        "kind": "Zombie",
-        "x": 600,
-        "health": 90,
-        "y": -808
-      }]
+      "enemies": [
+        {
+          "level": 3,
+          "kind": "Zombie",
+          "x": 600,
+          "health": 90,
+          "y": -808
+        }
+      ]
     }
   ],
   "normalDrops": [
     {
       "seed": 0,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 1,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 2,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 3,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 4,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 5,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 6,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 7,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 8,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 9,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 10,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 11,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 12,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 13,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 14,
@@ -1937,47 +2069,69 @@
     },
     {
       "seed": 15,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 16,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 17,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 18,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 19,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 20,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 21,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 22,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 23,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 24,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 25,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 26,
@@ -1988,11 +2142,15 @@
     },
     {
       "seed": 27,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 28,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 29,
@@ -2003,135 +2161,201 @@
     },
     {
       "seed": 30,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 31,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 32,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 33,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 34,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 35,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 36,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 37,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 38,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 39,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 40,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 41,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 42,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 43,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 44,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 45,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 46,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 47,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 48,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 49,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 50,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 51,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 52,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 53,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 54,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 55,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 56,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 57,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 58,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 59,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 60,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 61,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 62,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 63,
@@ -2142,11 +2366,15 @@
     },
     {
       "seed": 64,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 65,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 66,
@@ -2157,51 +2385,75 @@
     },
     {
       "seed": 67,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 68,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 69,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 70,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 71,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 72,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 73,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 74,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 75,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 76,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 77,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 78,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 79,
@@ -2212,95 +2464,141 @@
     },
     {
       "seed": 80,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 81,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 82,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 83,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 84,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 85,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 86,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 87,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 88,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 89,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 90,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 91,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 92,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 93,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 94,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 95,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 96,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 97,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 98,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 99,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 100,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 101,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 102,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 103,
@@ -2311,43 +2609,63 @@
     },
     {
       "seed": 104,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 105,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 106,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 107,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 108,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 109,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 110,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 111,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 112,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 113,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 114,
@@ -2366,7 +2684,9 @@
     },
     {
       "seed": 116,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 117,
@@ -2377,39 +2697,57 @@
     },
     {
       "seed": 118,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 119,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 120,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 121,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 122,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 123,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 124,
-      "loot": {"Cloth": 3}
+      "loot": {
+        "Cloth": 3
+      }
     },
     {
       "seed": 125,
-      "loot": {"Cloth": 1}
+      "loot": {
+        "Cloth": 1
+      }
     },
     {
       "seed": 126,
-      "loot": {"Cloth": 2}
+      "loot": {
+        "Cloth": 2
+      }
     },
     {
       "seed": 127,

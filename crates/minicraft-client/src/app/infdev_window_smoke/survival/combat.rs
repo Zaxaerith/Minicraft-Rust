@@ -130,12 +130,15 @@ pub(super) fn defend(h: &mut Host, e: &mut Explorer) -> Result<bool, String> {
         face(h, e, d)?;
         return Ok(true);
     }
-    tool(h, e, ToolKind::Sword)?;
+    let player = &e.survival_state().unwrap().player;
+    if player.attack_time > 0 || player.stamina == 0 {
+        return Ok(false);
+    }
+    let sword = matches!(player.active_item,Some(ActiveItem::Tool(i)) if player.inventory.tools().get(i).is_some_and(|t|t.kind==ToolKind::Sword));
+    if !sword {
+        tool(h, e, ToolKind::Sword)?;
+    }
     face(h, e, (q.0 - e.position().0, q.1 - e.position().1))?;
-    h.wait(e, |e| {
-        e.survival_state().unwrap().player.attack_time == 0
-            && e.survival_state().unwrap().player.stamina > 0
-    })?;
     pulse(
         h,
         e,
@@ -144,7 +147,7 @@ pub(super) fn defend(h: &mut Host, e: &mut Explorer) -> Result<bool, String> {
             ..Default::default()
         },
     )?;
-    Ok(true)
+    Ok(false)
 }
 pub(in crate::app::infdev_window_smoke) fn preflight(root: &Path) -> Result<(), String> {
     let value: serde_json::Value = serde_json::from_slice(

@@ -181,6 +181,13 @@ public final class AnimalOracle {
             spawns.put(new JSONObject().put("depth",depth).put("seed",input).put("enemies",found));
         }}
         result.put("undergroundFirstSpawn",spawns);
+        Observed arrival=new Observed(-1);for(int x=30;x<35;x++)for(int y=30;y<35;y++)arrival.setTile(x,y,Tiles.get("Dirt"));
+        Player incoming=new Player(null,null);Game.player=incoming;arrival.add(incoming,512,512);
+        Zombie occupant=new Zombie(1);arrival.add(occupant,512,512);arrival.tick(false);
+        boolean escaped=incoming.move(1,0);
+        result.put("overlapEscape",new JSONObject().put("moved",escaped).put("playerX",incoming.x).put("playerY",incoming.y)
+            .put("enemyX",occupant.x).put("enemyY",occupant.y).put("enemyHealth",occupant.health));
+
         Files.writeString(out.resolve("enemies.json"),result.toString(2)+"\n");
         System.out.println("PASS original Zombie: three difficulties/levels, actual contact/drops/AI and private underground trySpawn (all original species retained)");
     }

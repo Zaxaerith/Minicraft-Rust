@@ -296,8 +296,23 @@ fn mine(
     face(h, e, d)?;
     let p = (e.position().0 + d.0, e.position().1 + d.1);
     for _ in 0..200 {
+        if h.auto_combat && combat::defend(h, e)? {
+            continue;
+        }
         if h.auto_combat {
-            combat::defend(h, e)?;
+            let wanted = if g == Ground::Tree {
+                ToolKind::Axe
+            } else {
+                ToolKind::Pickaxe
+            };
+            let player = &e.survival_state().unwrap().player;
+            if !matches!(player.active_item,Some(ActiveItem::Tool(i)) if player.inventory.tools().get(i).is_some_and(|t|t.kind==wanted))
+            {
+                tool(h, e, wanted)?;
+            }
+        }
+        if p.0.abs_diff(e.position().0) + p.1.abs_diff(e.position().1) != 1 {
+            return Ok(());
         }
         h.wait(e, |e| e.visible_cell(p.0, p.1).is_some())?;
         if e.visible_cell(p.0, p.1).unwrap().ground != g {
@@ -344,8 +359,8 @@ fn walk(
         }
         let mut stalled = 0;
         loop {
-            if h.auto_combat {
-                combat::defend(h, e)?;
+            if h.auto_combat && combat::defend(h, e)? {
+                continue;
             }
             let p = &e.survival_state().unwrap().player;
             let (x, y) = e.position();

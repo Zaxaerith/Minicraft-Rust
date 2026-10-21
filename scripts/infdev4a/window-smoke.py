@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
     if options.combat_only:
         evidence=json.loads((root/"combat/combat-expect.json").read_text(encoding="utf-8"))
         assert evidence["hurt"] and evidence["cloth"]>0
-        for name in ("combat-expect.json","combat-result.json","infdev-combat.png","infdev-combat-death.png"):
+        for name in ("combat-expect.json","combat-death-expect.json","combat-result.json","infdev-combat.png","infdev-combat-death.png"):
             shutil.copyfile(root/"combat"/name,output/name)
         print("PASS native combat: earned sword, natural underground zombie, injury/kill/drop, chunk crossing, exact pre-tick restart and fatal enemy contact/chest recovery after forced termination")
         raise SystemExit(0)

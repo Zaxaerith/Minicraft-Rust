@@ -500,3 +500,64 @@ fn zombie_kill_full_bag_last_tool_and_corrupt_pickup_keep_exact_loot_owner() {
     );
     assert!(objects::path(&dir, objects::Domain::Entities, current).exists());
 }
+#[test]
+fn zombie_occupied_natural_stair_allows_escape_without_deleting_or_moving_enemy() {
+    let observation = oracle()["overlapEscape"].clone();
+    assert_eq!(observation["moved"], true);
+    assert_eq!(observation["playerX"], 513);
+    assert_eq!(observation["enemyX"], 512);
+    assert_eq!(observation["enemyHealth"], 10);
+    let root = Owned::new();
+    let mut w = World::create_survival(&root.0, "Arrival", 42, 16).unwrap();
+    let stair = (-32, -20);
+    w.visit(stair.0, stair.1).unwrap();
+    assert_eq!(w.cell(stair.0, stair.1).unwrap().ground, Ground::StairsDown);
+    assert_eq!(
+        w.cell_at(-1, stair.0, stair.1).unwrap().ground,
+        Ground::StairsUp
+    );
+    let at = Position {
+        depth: -1,
+        x: stair.0,
+        y: stair.1,
+    };
+    let mut p = Page::empty(at.key());
+    p.insert(
+        at,
+        Kind::Enemy(Animal::of_level(NaturalMob::Zombie, 1)),
+        None,
+    )
+    .unwrap();
+    let enemy = p.clone();
+    put(&mut w, p);
+    w.checkpoint().unwrap();
+    w.survival_action(Action::Pickup).unwrap();
+    assert_eq!(w.depth(), -1);
+    let dir = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        .into_iter()
+        .find(|d| {
+            let c = w
+                .cell(stair.0 + i64::from(d.0), stair.1 + i64::from(d.1))
+                .unwrap();
+            !super::super::survival::tile(c).solid(c.data)
+                && !matches!(c.ground, Ground::Water | Ground::Lava | Ground::Hole)
+        })
+        .unwrap();
+    for _ in 0..16 {
+        w.survival_action(Action::Move(dir.0, dir.1)).unwrap();
+    }
+    assert_ne!(
+        w.position(),
+        stair,
+        "arrival overlap must allow walking out; never remove the enemy to clear the stair"
+    );
+    assert!(w.entity_page(at.key()).unwrap() == enemy);
+    let pos = w.position();
+    let directory = w.directory.clone();
+    w.unload_all().unwrap();
+    w.collect_garbage().unwrap();
+    drop(w);
+    let mut w = World::open(&directory, 1).unwrap();
+    assert_eq!(w.position(), pos);
+    assert!(w.entity_page(at.key()).unwrap() == enemy);
+}

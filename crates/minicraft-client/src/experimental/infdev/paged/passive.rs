@@ -76,6 +76,37 @@ impl World {
                 }
             }
         }
+        if let Some(state) = self
+            .survival
+            .as_ref()
+            .filter(|s| s.enemy_rules == super::super::survival::EnemyRules::UndergroundZombieV1)
+        {
+            let (ox, oy) = self.position();
+            let old = Position {
+                depth,
+                x: ox,
+                y: oy,
+            };
+            // Entity.java's wasInside policy: entering a populated layer must
+            // permit escaping an existing overlap, never delete the occupant.
+            // Preserve historical PassiveV1 collision thresholds and behavior.
+            let overlaps = |q: Position, bx: i32, by: i32, t: Position, tx: i32, ty: i32| {
+                q.depth == t.depth
+                    && delta(q.x, bx, t.x, tx).abs() < 8
+                    && delta(q.y, by, t.y, ty).abs() < 6
+            };
+            return Ok(pages.values().any(|page| {
+                page.entities.iter().any(|e| {
+                    let Some(body) = e.kind.mover() else {
+                        return false;
+                    };
+                    let q = page.position(e);
+                    let (bx, by) = (i32::from(body.px), i32::from(body.py));
+                    overlaps(q, bx, by, at, px, py)
+                        && !overlaps(q, bx, by, old, state.player.x, state.player.y)
+                })
+            }));
+        }
         Ok(blocked(&pages, None, at, px, py, None))
     }
 }
