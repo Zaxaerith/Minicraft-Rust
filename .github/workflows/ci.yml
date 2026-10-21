@@ -34,12 +34,7 @@ jobs:
           rustup default stable
       # Windows hosted runners include x64 MSVC and the Windows SDK rc.exe
       # used by build.rs. No physical audio device is needed for self-check.
-      - run: cargo fmt --all -- --check
-      - run: cargo build --workspace --locked
-      # The 15s two-day simulation budget measures the shipped optimized game.
-      # The first real Windows run took 123s in debug and failed that budget;
-      # run the entire suite in release instead of weakening/skipping the test.
-      - run: cargo test --release --workspace --locked
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Embedded resource and PCM smoke check
-        run: cargo run --locked -p minicraft-rust -- --self-check --savedir test-data/ci-smoke
+      # The same stable path remapping, optimized tests, privacy preflight and
+      # self-check used for local releases; no packaging or automatic publishing.
+      - name: Windows release validation
+        run: pwsh -NoProfile -NonInteractive -File scripts/validate-windows.ps1

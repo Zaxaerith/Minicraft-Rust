@@ -56,6 +56,17 @@ function Get-Digest([byte[]]$Bytes) {
     finally { $sha.Dispose() }
 }
 Assert-X64Pe $binary
+if ($preview) {
+    . "$PSScriptRoot/release-build.ps1"
+    $proof = Get-Content -Raw (Join-Path $repo 'target/validation/current/release-build.json') | ConvertFrom-Json
+    $validation = Get-Content (Join-Path $repo 'target/validation/current/validation.txt')
+    if ($proof.revision -ne $revision -or $proof.dirty -or $proof.config -ne $releaseConfigHash -or
+        $proof.binary_sha256 -ne (Get-Digest ([IO.File]::ReadAllBytes($binary))) -or
+        $validation -notcontains 'status=pass' -or $validation -notcontains "revision=$revision" -or
+        $validation -notcontains 'dirty=False') { throw 'Preview requires a matching clean validation/build/configuration proof.' }
+    & python "$PSScriptRoot/release-privacy.py" $binary --report (Join-Path $repo 'target/validation/current/privacy-binary.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Binary privacy preflight failed.' }
+}
 
 # Select only release x64 redist files, never a DLL copied from System32.
 if (-not $RuntimeDll) {
@@ -246,6 +257,10 @@ try {
             try { $content.Write($entry.Value, 0, $entry.Value.Length) } finally { $content.Dispose() }
         }
     } finally { $zip.Dispose(); $stream.Dispose() }
+    if ($preview) {
+        & python "$PSScriptRoot/release-privacy.py" $temporary --report (Join-Path $output 'privacy-package.json')
+        if ($LASTEXITCODE -ne 0) { throw 'Package privacy preflight failed; no preview asset published.' }
+    }
     [IO.File]::Move($temporary, $archivePath, $Replace.IsPresent)
 } finally {
     # Delete only this exact exclusively-created temporary file, never a tree.

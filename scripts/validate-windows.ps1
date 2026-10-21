@@ -3,6 +3,7 @@ param([switch]$JavaOracle)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot/..").Path
 Set-Location $repo
+. "$PSScriptRoot/release-build.ps1"
 $output = Join-Path $repo 'target/validation/current'
 New-Item -ItemType Directory -Force $output | Out-Null
 # Replace a previous PASS before work begins, so an interrupted run cannot
@@ -23,6 +24,8 @@ Invoke-Check 'fmt' { cargo fmt --all -- --check }
 Invoke-Check 'clippy' { cargo clippy --workspace --all-targets --locked -- -D warnings }
 Invoke-Check 'workspace-tests' { cargo test --release --workspace --locked }
 Invoke-Check 'build' { cargo build --release --workspace --locked }
+Invoke-Check 'privacy-tests' { python scripts/test-release-privacy.py }
+Invoke-Check 'privacy-binary' { python scripts/release-privacy.py target/release/minicraft-rust.exe --report target/validation/current/privacy-binary.json }
 Invoke-Check 'selfcheck' { & ./target/release/minicraft-rust.exe --self-check --savedir target/validation/selfcheck }
 if ($JavaOracle) {
     Invoke-Check 'oracle224' { & pwsh -NoProfile -NonInteractive -File scripts/parity224/run.ps1 }
@@ -36,5 +39,8 @@ if ($JavaOracle) {
 $revision = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify validated revision' }
 $dirty = [bool](& git status --porcelain)
+@{ revision=$revision; dirty=$dirty; config=$releaseConfigHash;
+    binary_sha256=(Get-FileHash target/release/minicraft-rust.exe -Algorithm SHA256).Hash.ToLowerInvariant() } |
+    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-build.json') -Encoding utf8
 @('status=pass', "revision=$revision", "dirty=$dirty", "java_oracle=$JavaOracle", "completed_utc=$([DateTime]::UtcNow.ToString('o'))") |
     Set-Content -LiteralPath (Join-Path $output 'validation.txt') -Encoding utf8

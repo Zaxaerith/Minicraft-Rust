@@ -167,6 +167,12 @@ Rust 预览 Tag 与 Cargo 中保留的 `2.2.4` 内容元数据分开，存档格
 工程记录见 [文档索引](docs/README.md)。日常完整验证可运行
 `pwsh -NoProfile -File scripts/validate-windows.ps1`；加 `-JavaOracle` 可重新执行固定源码 Oracle。
 验证日志复用 `target/validation/current/`，不再按开发阶段累积重复目录。
+发行验证与 Windows CI 共用 `scripts/release-build.ps1` 的稳定 Rust 路径重映射，
+保留已有环境编译参数，将本机项目、Cargo、用户目录和工具链路径映射为相对源码名。
+版本化预览打包要求当前干净提交的验证记录、相同编译配置及 EXE 哈希，
+并对 EXE、ZIP 全部文件和内嵌 DOCX 做隐私预检；发现本机路径或可识别密钥即拒绝发布。
+报告仅保留类别、偏移和哈希。Rust 官方 `/rustc/<提交哈希>/library/` 虚拟源码名
+与已确认的非路径机器码候选另行记录，不代表本机目录。模式扫描不能保证发现任意未知秘密。
 
 ## 来源、署名与许可证
 
