@@ -68,6 +68,17 @@ if ($preview) {
     if ($LASTEXITCODE -ne 0) { throw 'Binary privacy preflight failed.' }
 }
 
+# Inspect before selecting an optional dynamic CRT. Current validated previews
+# link the CRT statically; legacy local RC builds can still need the redist.
+$dumpbin = (Get-Command dumpbin.exe -ErrorAction Stop).Source
+$dependencyReport = @(& $dumpbin /nologo /dependents $binary)
+if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect executable imports.' }
+$imports = @($dependencyReport | ForEach-Object {
+    if ($_ -match '^\s*([\w.-]+\.dll)\s*$') { $Matches[1].ToLowerInvariant() }
+} | Sort-Object -Unique)
+$requiresRuntime = $imports -contains 'vcruntime140.dll'
+if (-not $requiresRuntime -and $RuntimeDll) { throw 'This build does not use a dynamic CRT.' }
+if ($requiresRuntime) {
 # Select only release x64 redist files, never a DLL copied from System32.
 if (-not $RuntimeDll) {
     $compiler = (Get-Command cl.exe -ErrorAction Stop).Source
@@ -94,15 +105,10 @@ if ($runtimeInfo.IsDebug -or $runtimeInfo.IsPreRelease -or $signature.Status -ne
     $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
     throw 'Runtime must be an unmodified, signed Microsoft release DLL.'
 }
+}
 
 # Fail closed when a future build introduces another non-system DLL dependency.
-$dumpbin = (Get-Command dumpbin.exe -ErrorAction Stop).Source
-$dependencyReport = @(& $dumpbin /nologo /dependents $binary)
-if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect executable imports.' }
-$imports = @($dependencyReport | ForEach-Object {
-    if ($_ -match '^\s*([\w.-]+\.dll)\s*$') { $Matches[1].ToLowerInvariant() }
-} | Sort-Object -Unique)
-if (-not $imports.Count -or $imports -notcontains 'vcruntime140.dll') { throw 'Unexpected dependency report.' }
+if (-not $imports.Count) { throw 'Unexpected dependency report.' }
 $systemDlls = @('kernel32.dll','ntdll.dll','oleaut32.dll','ole32.dll','avrt.dll',
     'bcryptprimitives.dll','user32.dll','gdi32.dll','opengl32.dll','ws2_32.dll')
 foreach ($name in $imports) {
@@ -110,6 +116,7 @@ foreach ($name in $imports) {
         throw "Unpackaged runtime dependency: $name"
     }
 }
+if ($requiresRuntime) {
 $runtimeReport = @(& $dumpbin /nologo /dependents $runtime)
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect CRT imports.' }
 foreach ($line in $runtimeReport) {
@@ -119,6 +126,7 @@ foreach ($line in $runtimeReport) {
             throw "Additional CRT dependency needs review: $name"
         }
     }
+}
 }
 
 $sysroot = (& rustc --print sysroot).Trim()
@@ -131,7 +139,7 @@ function Add-Text([string]$Name, [string]$Text) {
     $files.Add($Name, [Text.UTF8Encoding]::new($false).GetBytes($Text.Replace("`r`n","`n")))
 }
 Add-File 'minicraft-rust.exe' $binary
-Add-File 'vcruntime140.dll' $runtime
+if ($requiresRuntime) { Add-File 'vcruntime140.dll' $runtime }
 foreach ($name in @('LICENSE','README.md','THIRD_PARTY_NOTICES.md')) { Add-File $name (Join-Path $repo $name) }
 if ($preview) { Add-File 'docs/infdev.md' (Join-Path $repo 'docs/infdev.md') }
 Add-File 'CREDITS.txt' (Join-Path $repo 'assets/assets/books/credits.txt')
@@ -145,7 +153,8 @@ $build = @(
     $(if ($preview) { "label=$PreviewVersion" } else { 'label=java230-dev2-local-rc' }),
     'platform=windows-x64-msvc', "source_revision=$revision",
     "cargo_lock_sha256=$lockHash", "binary_sha256=$(Get-Digest $files['minicraft-rust.exe'])",
-    "vcruntime_file_version=$($runtimeInfo.FileVersion)", "vcruntime_sha256=$(Get-Digest $files['vcruntime140.dll'])",
+    $(if ($requiresRuntime) { "vcruntime_file_version=$($runtimeInfo.FileVersion)" } else { 'msvc_crt=static' }),
+    $(if ($requiresRuntime) { "vcruntime_sha256=$(Get-Digest $files['vcruntime140.dll'])" } else { 'vcruntime_dll=not-required' }),
     "rustc=$(& rustc -V)", "imports=$($imports -join ',')",
     'assets=embedded 2.2.4 originals and selected fixed dev2 expansion resources',
     'cargo_version=2.2.4 (unchanged; content label does not alter save formats)',
@@ -158,8 +167,9 @@ if ($preview) {
 Minicraft-Rust $PreviewVersion - Windows x64 - Infdev Experimental
 
 Extract the complete folder. Run minicraft-rust.exe to open the title screen.
-Requires Windows 10/11 x64 and a working graphics driver. Keep vcruntime140.dll
-beside the EXE. Assets/audio are embedded; no Java, Rust or repository is needed.
+Requires Windows 10/11 x64 and a working graphics driver. This validated preview
+links the MSVC CRT statically. Assets/audio are embedded; no Java, Rust,
+separate CRT DLL or repository is needed.
 
 Play opens the original fixed-world game (Java224 / Java230-dev2 content).
 For the separate experiment choose Infdev (Experimental), then

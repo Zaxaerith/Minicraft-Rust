@@ -102,9 +102,22 @@ def scan_file(path):
         budget[1] += 1
         if budget[0] > MAX_BYTES or budget[1] > MAX_MEMBERS or depth > 3:
             raise ValueError('archive-resource-limit')
+        compressed_ranges = []
+        if data.startswith(b'PK\x03\x04'):
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                for entry in archive.infolist():
+                    if entry.compress_type != zipfile.ZIP_STORED:
+                        header = entry.header_offset
+                        name_size, extra_size = struct.unpack_from('<HH', data, header + 26)
+                        start = header + 30 + name_size + extra_size
+                        compressed_ranges.append((start, start + entry.compress_size))
         findings, reviewed = [], []
         for finding in scan_bytes(data, prefixes):
-            reason = classify(data, finding)
+            # Compressed bytes are not text. Retain their candidates, and scan
+            # every decoded byte below; metadata/comments stay in the raw scan.
+            reason = ('compressed-payload-scanned-after-decompression' if any(
+                start <= finding['offset'] < end for start, end in compressed_ranges)
+                else classify(data, finding))
             if reason:
                 reviewed.append(dict(**finding, classification=reason))
             else:
@@ -144,7 +157,7 @@ def main():
     args = parser.parse_args()
     try:
         report = scan_file(args.input)
-    except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):
+    except (OSError, ValueError, zipfile.BadZipFile, RuntimeError, struct.error):
         report = dict(status='FAIL', reason='unreadable-invalid-or-unsafe-input')
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')

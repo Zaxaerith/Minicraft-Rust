@@ -97,11 +97,11 @@ Windows 预览版与校验文件以仓库 [Releases](https://github.com/Zaxaerit
 
 ```powershell
 New-Item -ItemType Directory -Force ".\portable-data\saves" | Out-Null
-.\minicraft-rust.exe --import-java "C:\JavaWorldCopies\MyDev2World" --import-to ".\portable-data\saves\JavaDev2Copy"
+.\minicraft-rust.exe --import-java ".\JavaWorldCopies\MyDev2World" --import-to ".\portable-data\saves\JavaDev2Copy"
 .\minicraft-rust.exe --savedir ".\portable-data"
 ```
 
-可在导入命令末尾加 `--java-unlocks "C:\JavaWorldCopies\Unlocks.json"`，明确选择 Java 全局解锁。
+可在导入命令末尾加 `--java-unlocks ".\JavaWorldCopies\Unlocks.json"`，明确选择 Java 全局解锁。
 源目录只读，转换在隔离临时目录完成，校验成功后独占发布；重复目标、损坏数据、未知字段或不支持状态会报错。
 导入支持已验证的玩家/进度、六层地图、彩色物品、容器与死亡箱、独立水壶、带等级敌怪、Spawner 和雕像状态。
 它不保证任意 Java 世界都能转换，也不承诺把 Rust 新增状态无损导出回 Java。
@@ -169,6 +169,7 @@ Rust 预览 Tag 与 Cargo 中保留的 `2.2.4` 内容元数据分开，存档格
 验证日志复用 `target/validation/current/`，不再按开发阶段累积重复目录。
 发行验证与 Windows CI 共用 `scripts/release-build.ps1` 的稳定 Rust 路径重映射，
 保留已有环境编译参数，将本机项目、Cargo、用户目录和工具链路径映射为相对源码名。
+发行配置静态链接 MSVC CRT，避免分发含供应商绝对 PDB 路径的动态 CRT；保留 Microsoft 许可。
 版本化预览打包要求当前干净提交的验证记录、相同编译配置及 EXE 哈希，
 并对 EXE、ZIP 全部文件和内嵌 DOCX 做隐私预检；发现本机路径或可识别密钥即拒绝发布。
 报告仅保留类别、偏移和哈希。Rust 官方 `/rustc/<提交哈希>/library/` 虚拟源码名

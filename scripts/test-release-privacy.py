@@ -71,7 +71,7 @@ class PrivacyTests(unittest.TestCase):
             with zipfile.ZipFile(nested, 'w') as archive:
                 archive.writestr('word/document.xml', r'V:\SyntheticPrivate\file')
             source = root / 'input.zip'
-            with zipfile.ZipFile(source, 'w') as archive:
+            with zipfile.ZipFile(source, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr('license.docx', nested.getvalue())
             report = root / 'report.json'
             result = subprocess.run([sys.executable, str(SCRIPT), str(source), '--report', str(report)], capture_output=True)

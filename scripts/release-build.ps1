@@ -23,6 +23,8 @@ $releaseRemaps = @($releaseMappings.GetEnumerator() | Sort-Object { $_.Key.Lengt
     "--remap-path-prefix=$prefix=$($_.Value)"
     "--remap-path-prefix=$($prefix.Replace('\','/'))=$($_.Value)"
 })
-$env:CARGO_ENCODED_RUSTFLAGS = ($releaseCallerFlags + $releaseRemaps) -join [char]31
+# The signed dynamic CRT contains a vendor absolute PDB path. Link the supported
+# MSVC static CRT instead of modifying that signed DLL or exempting it in scans.
+$env:CARGO_ENCODED_RUSTFLAGS = ($releaseCallerFlags + $releaseRemaps + '-Ctarget-feature=+crt-static') -join [char]31
 $releaseConfigHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
     [Text.Encoding]::UTF8.GetBytes($env:CARGO_ENCODED_RUSTFLAGS))).ToLowerInvariant()
