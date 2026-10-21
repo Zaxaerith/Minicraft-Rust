@@ -40,6 +40,7 @@ pub(crate) enum Kind {
     Animal(dynamic::Animal),
     Enemy(dynamic::Animal),
     Drop(dynamic::ItemDrop),
+    Station(survival::StationKind),
 }
 
 impl Kind {
@@ -100,6 +101,7 @@ impl Page {
             return Err("invalid entity page bounds".into());
         }
         let mut ids = std::collections::BTreeSet::new();
+        let mut stations = std::collections::BTreeSet::new();
         for e in &self.entities {
             if e.id == 0 || e.id >= self.next_id || !ids.insert(e.id) || e.x >= 64 || e.y >= 64 {
                 return Err("invalid/duplicate chunk entity identity".into());
@@ -111,6 +113,12 @@ impl Page {
                 return Err("dynamic entity missing birth identity".into());
             }
             match &e.kind {
+                Kind::Station(_) => {
+                    if !stations.insert((e.x, e.y)) {
+                        return Err("duplicate workstation position".into());
+                    }
+                    continue;
+                }
                 Kind::Pig(p) => {
                     p.validate()?;
                     if p.mob.species != crate::entity::mob::NaturalMob::Pig

@@ -57,6 +57,8 @@ impl World {
     #[cfg(test)]
     pub(in crate::experimental::infdev) fn passive_fixture(&mut self) {
         self.survival.as_mut().unwrap().enemy_rules = EnemyRules::None;
+        self.survival.as_mut().unwrap().station_rules =
+            super::super::survival::StationRules::Session;
     }
     pub(super) fn spawn_enemy(
         &self,

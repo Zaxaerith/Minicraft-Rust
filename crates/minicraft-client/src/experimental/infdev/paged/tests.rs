@@ -941,6 +941,7 @@ fn survival_legacy_session_and_smelting_interruption_preserve_exact_ownership() 
     s.entity_rules = crate::experimental::infdev::survival::EntityRules::Legacy;
     s.food_rules = FoodRules::Legacy;
     s.death_rule = crate::experimental::infdev::survival::DeathRule::KeepInventory;
+    s.station_rules = super::super::survival::StationRules::Session;
     s.stations.push(Station {
         depth: 0,
         x: position.0 + 1,
@@ -1023,6 +1024,7 @@ fn death_fixture(root: &Owned, name: &str) -> (World, crate::item::Inventory) {
     )
     .unwrap();
     w.survival.as_mut().unwrap().entity_rules = super::super::survival::EntityRules::Legacy;
+    w.survival.as_mut().unwrap().station_rules = super::super::survival::StationRules::Session;
     let p = &mut w.survival.as_mut().unwrap().player;
     p.inventory.add(ItemId::Wood, 731);
     p.inventory.add_stack(ItemStack::with_water(731));

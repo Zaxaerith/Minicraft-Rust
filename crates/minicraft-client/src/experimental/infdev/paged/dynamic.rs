@@ -77,13 +77,15 @@ impl World {
         }
         let mut pages = self.dynamic_pages(at, target)?;
         let before = pages.clone();
+        super::stations::project(&mut state, &pages, target)?;
         let was_dead = state.player.health == 0;
         let health_before = state.player.health;
         let hurt_before = state.player.hurt_time;
         let receipt = state.death_recorded;
         let cell = self.cell_at(at.depth, at.x, at.y)?;
-        let can_place =
-            !survival::tile(cell).solid(cell.data) && !state.station_at(at.depth, at.x, at.y);
+        let can_place = !survival::tile(cell).solid(cell.data)
+            && !state.station_at(at.depth, at.x, at.y)
+            && !super::stations::contains(&pages, at);
         if state.player.health == 0 {
             pages
                 .get_mut(&at.key())
@@ -183,6 +185,7 @@ impl World {
                     .unwrap()
                     .interact(target, &mut state.player.inventory);
             }
+            super::stations::collect(&mut state, &mut pages, target)?;
             state.validate()?;
             // Validation cannot perform IO; no checkpoint between page installs and
             // the corresponding session. Candidate pages remain local until here.
@@ -355,6 +358,7 @@ impl World {
                                 };
                                 pages.contains_key(&q.key())
                                     && !state.station_at(q.depth, x, y)
+                                    && !super::stations::contains(pages, q)
                                     && self.loaded_cell(q).is_some_and(|c| {
                                         !survival::tile(c).solid(c.data)
                                             && !matches!(
@@ -367,7 +371,8 @@ impl World {
                             !survival::tile(c).solid(c.data)
                                 && !matches!(c.ground, Ground::Hole | Ground::Water | Ground::Lava)
                         })
-                        && !state.station_at(next.depth, x, y);
+                        && !state.station_at(next.depth, x, y)
+                        && !super::stations::contains(pages, next);
                     if terrain_legal
                         && (dx != 0 || dy != 0)
                         && hostile

@@ -21,12 +21,17 @@ fn run() -> Result<(), String> {
     if backend == "infdev-underground-check" {
         return infdev_console::compare_underground(arguments.collect());
     }
-    if backend == "infdev-storage-measure" {
+    if backend == "infdev-storage-measure" || backend == "infdev-survival-measure" {
         let output = arguments
             .next()
             .ok_or("usage: infdev-storage-measure OUTPUT_DIRECTORY")?;
         if arguments.next().is_some() {
             return Err("unexpected storage measurement arguments".into());
+        }
+        if backend == "infdev-survival-measure" {
+            return minicraft_client::experimental::infdev::paged::diagnostics::measure_survival(
+                Path::new(&output),
+            );
         }
         return minicraft_client::experimental::infdev::paged::diagnostics::measure_storage(
             Path::new(&output),

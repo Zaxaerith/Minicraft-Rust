@@ -29,6 +29,9 @@ pub(super) fn blocked(
             if e.birth == birth && birth.is_some() {
                 return false;
             }
+            if matches!(e.kind, super::super::entities::Kind::Station(_)) {
+                return overlaps(p.position(e), 8, 8);
+            }
             e.kind
                 .mover()
                 .is_some_and(|a| overlaps(p.position(e), i32::from(a.px), i32::from(a.py)))

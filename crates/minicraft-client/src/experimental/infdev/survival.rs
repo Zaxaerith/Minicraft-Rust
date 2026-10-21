@@ -77,6 +77,18 @@ impl EnemyRules {
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub(crate) enum StationRules {
+    #[default]
+    Session,
+    PagedV1,
+}
+impl StationRules {
+    fn is_session(&self) -> bool {
+        *self == Self::Session
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) enum StationKind {
     #[default]
     Workbench,
@@ -147,6 +159,8 @@ pub(crate) enum Panel {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default, skip_serializing_if = "StationRules::is_session")]
+    pub station_rules: StationRules,
     #[serde(default, skip_serializing_if = "EntityRules::is_legacy")]
     pub entity_rules: EntityRules,
     #[serde(default, skip_serializing_if = "EnemyRules::is_none")]
@@ -302,6 +316,7 @@ impl State {
             },
         );
         Self {
+            station_rules: StationRules::PagedV1,
             entity_rules: EntityRules::PassiveV1,
             enemy_rules: EnemyRules::UndergroundZombieV1,
             death_rule: DeathRule::ChestNormal,
@@ -333,6 +348,9 @@ impl State {
             || p.inventory.used_slots() > 27
             || self.drops.len() > MAX_DROPS
             || self.stations.len() > MAX_STATIONS
+            || self.station_rules == StationRules::PagedV1 && !self.stations.is_empty()
+            || self.station_rules == StationRules::PagedV1
+                && self.entity_rules == EntityRules::Legacy
         {
             return Err("invalid bounded Survival player/session".into());
         }
@@ -439,6 +457,7 @@ impl State {
                 if tile(spawn).solid(spawn.data)
                     || matches!(spawn.ground, Ground::Hole | Ground::Water | Ground::Lava)
                     || self.station_at(0, self.spawn.0, self.spawn.1)
+                    || w.paged_station_at(0, self.spawn.0, self.spawn.1)?.is_some()
                 {
                     return Err("saved spawn obstructed; respawn refused".into());
                 }
@@ -620,6 +639,7 @@ impl State {
             if tile(c).solid(c.data)
                 || c.ground == Ground::Hole
                 || self.station_at(w.depth(), tx, ty)
+                || w.paged_station_at(w.depth(), tx, ty)?.is_some()
             {
                 return Ok(());
             }

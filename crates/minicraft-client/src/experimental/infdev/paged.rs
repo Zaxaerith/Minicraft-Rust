@@ -13,6 +13,10 @@ mod objects;
 mod passive;
 #[cfg(test)]
 mod passive_tests;
+mod publication;
+#[cfg(test)]
+mod station_tests;
+mod stations;
 #[cfg(test)]
 mod tests;
 
@@ -329,9 +333,14 @@ impl World {
         }
         w.checkpoint()?;
         w.validate_root(w.saved.root)?;
+        let handles_before = publication::handle_count();
         drop(w); // Close Windows child handle before publishing its directory.
-        crate::saveload::migration::publish_exclusive(&stage.0, &destination)
-            .map_err(|e| format!("cannot exclusively publish experimental world: {e}"))?;
+        publication::publish(
+            &stage.0,
+            &destination,
+            handles_before,
+            publication::handle_count(),
+        )?;
         let mut converted = Self::open(&destination, capacity)?;
         converted.recovered |= legacy.is_some_and(|old| old.recovered_backup());
         Ok(converted)
@@ -685,7 +694,12 @@ impl World {
             crate::saveload::storage::read_text_limited(&primary, MAX_CHECKPOINT)
                 .is_ok_and(|text| text.as_bytes() == bytes);
         if !already_installed {
-            atomic_write(&primary, &bytes)?;
+            atomic_write(&primary, &bytes).map_err(|e| {
+                format!(
+                    "checkpoint atomic_write path={} (temp/sync/replace/backup): {e}",
+                    primary.display()
+                )
+            })?;
         }
         self.saved = next;
         for page in self.entity_cache.values_mut() {

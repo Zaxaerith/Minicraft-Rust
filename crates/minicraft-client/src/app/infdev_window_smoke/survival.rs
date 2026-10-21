@@ -159,6 +159,20 @@ fn craft(
     )
 }
 
+fn station_at(e: &Explorer, depth: i8, x: i64, y: i64) -> bool {
+    e.survival_state().unwrap().station_at(depth, x, y)
+        || e.entity_pages().any(|page| {
+            page.key == paged::Key::at_depth(depth, x, y)
+                && page.entities.iter().any(|entity| {
+                    matches!(
+                        entity.kind,
+                        crate::experimental::infdev::entities::Kind::Station(_)
+                    ) && entity.x == x.rem_euclid(64) as u8
+                        && entity.y == y.rem_euclid(64) as u8
+                })
+        })
+}
+
 fn place(h: &mut Host, e: &mut Explorer, id: ItemId, dir: Point) -> Result<Point, String> {
     stack(h, e, id)?;
     face(h, e, dir)?;
@@ -172,7 +186,7 @@ fn place(h: &mut Host, e: &mut Explorer, id: ItemId, dir: Point) -> Result<Point
             ..Default::default()
         },
     )?;
-    if !e.survival_state().unwrap().station_at(e.depth(), p.0, p.1) {
+    if !station_at(e, e.depth(), p.0, p.1) {
         return Err(format!("earned {id:?} placement failed"));
     }
     Ok(p)
@@ -224,10 +238,7 @@ fn path(
             let Some(c) = e.visible_cell(next.0, next.1) else {
                 continue;
             };
-            if e.survival_state()
-                .unwrap()
-                .station_at(e.depth(), next.0, next.1)
-            {
+            if station_at(e, e.depth(), next.0, next.1) {
                 continue;
             }
             if e.entity_pages().any(|page| {
@@ -473,6 +484,7 @@ pub(super) fn run(
     let evidence = root.join("survival-expect.json");
     let directory = root.join("infdev-survival-v4/Window42");
     let mut samples = Vec::new();
+    let mut station_keys = std::collections::BTreeSet::new();
     if creating {
         if e.survival_state().unwrap().player.inventory.used_slots() != 0 {
             return Err("Survival did not start with an empty inventory".into());
@@ -492,6 +504,7 @@ pub(super) fn run(
             crate::world::Direction::Right => (1, 0),
         };
         let bench = (e.position().0 + d.0, e.position().1 + d.1);
+        station_keys.insert(paged::Key::at(bench.0, bench.1));
         let stand = e.position();
         stack(h, e, ItemId::Workbench)?;
         h.wait(e, |e| {
@@ -506,7 +519,7 @@ pub(super) fn run(
                 ..Default::default()
             },
         )?;
-        if !e.survival_state().unwrap().station_at(0, bench.0, bench.1) {
+        if !station_at(e, 0, bench.0, bench.1) {
             return Err("earned workbench placement failed".into());
         }
         craft(h, e, Some(StationKind::Workbench), "Wood Axe")?;
@@ -532,6 +545,7 @@ pub(super) fn run(
             mine(h, e, furnace_dir, g, &mut samples)?;
         }
         let furnace = place(h, e, ItemId::Furnace, furnace_dir)?;
+        station_keys.insert(paged::Key::at(furnace.0, furnace.1));
         println!("Survival window stage: earned furnace placed");
         gather(h, e, Ground::Rock, ItemId::Coal, 10, &mut samples)?;
         println!("Survival window stage: ten natural coal earned");
@@ -693,6 +707,37 @@ pub(super) fn run(
             terrain.push(serde_json::json!({"depth":depth,"x":x,"y":y,"ground":c.ground as u8,"data":c.data}));
         }
         value["terrain"] = terrain.into();
+        let mut pages = Vec::new();
+        let mut kinds = Vec::new();
+        for key in station_keys {
+            let page = check.entity_page(key)?;
+            let stations: Vec<_> = page
+                .entities
+                .into_iter()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        crate::experimental::infdev::entities::Kind::Station(_)
+                    )
+                })
+                .collect();
+            for station in &stations {
+                if let crate::experimental::infdev::entities::Kind::Station(k) = station.kind {
+                    kinds.push(k);
+                }
+            }
+            pages.push(serde_json::json!({"key":key,"stations":stations}));
+        }
+        if !kinds.contains(&StationKind::Workbench)
+            || !kinds.contains(&StationKind::Anvil)
+            || kinds.contains(&StationKind::Furnace)
+            || count(e, ItemId::Furnace) != 1
+        {
+            return Err(
+                "paged station creation/reclamation did not conserve real furniture".into(),
+            );
+        }
+        value["stationPages"] = pages.into();
         fs_write_evidence(&evidence, value)?;
     } else {
         let value: serde_json::Value =
@@ -716,6 +761,29 @@ pub(super) fn run(
         if serde_json::json!(check.survival().unwrap().stations) != value["stations"] {
             return Err("real workbench did not restore".into());
         }
+        for expected in value["stationPages"]
+            .as_array()
+            .ok_or("missing paged station evidence")?
+        {
+            let key = serde_json::from_value(expected["key"].clone()).map_err(|e| e.to_string())?;
+            let page = check.entity_page(key)?;
+            let stations: Vec<_> = page
+                .entities
+                .into_iter()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        crate::experimental::infdev::entities::Kind::Station(_)
+                    )
+                })
+                .collect();
+            if serde_json::to_value(stations).map_err(|e| e.to_string())? != expected["stations"] {
+                return Err(
+                    "paged furniture identity/configuration did not survive native restart".into(),
+                );
+            }
+        }
+        check.collect_garbage()?;
     }
     println!(
         "PASS real Survival window {}: empty bag -> resources -> furnace -> iron -> anvil -> iron tool -> natural food -> Save/Quit/restart; no fixture injection",

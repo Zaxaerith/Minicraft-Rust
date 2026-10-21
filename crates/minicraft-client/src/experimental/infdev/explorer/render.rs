@@ -229,6 +229,17 @@ fn draw_survival(
             if let Some((x, y)) = point(at.x, at.y) {
                 use super::super::entities::Kind;
                 match &entity.kind {
+                    Kind::Station(kind) => {
+                        assets.furniture_linked(kind.furniture()).render(
+                            assets.sheets(),
+                            screen,
+                            x,
+                            y,
+                            0,
+                            false,
+                            0,
+                        );
+                    }
                     Kind::DeathChest(chest) => {
                         assets
                             .furniture_linked(crate::entity::furniture::FurnitureKind::Chest)

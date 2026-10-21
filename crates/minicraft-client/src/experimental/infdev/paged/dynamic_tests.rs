@@ -324,6 +324,7 @@ fn dynamic_natural_pigs_spawn_only_on_loaded_surface_and_legacy_marker_stays_abs
     // An actual historical empty state has no entity root or new marker.
     let mut old = pig_world(&root.0, "Old", 42, 1).unwrap();
     old.survival.as_mut().unwrap().entity_rules = EntityRules::Legacy;
+    old.survival.as_mut().unwrap().station_rules = super::super::survival::StationRules::Session;
     old.checkpoint().unwrap();
     let bytes = objects::read(
         &old.directory,

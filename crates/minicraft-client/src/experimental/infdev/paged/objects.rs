@@ -108,9 +108,13 @@ pub(super) fn write_with_sync(
         let p = path(root, domain, object);
         match fs::OpenOptions::new().create_new(true).write(true).open(&p) {
             Ok(mut f) => {
-                f.write_all(bytes)
-                    .and_then(|_| sync(&f))
-                    .map_err(|e| e.to_string())?;
+                f.write_all(bytes).and_then(|_| sync(&f)).map_err(|e| {
+                    format!(
+                        "immutable object write/sync path={} win32={:?}: {e}",
+                        p.display(),
+                        e.raw_os_error()
+                    )
+                })?;
                 return Ok(object);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
