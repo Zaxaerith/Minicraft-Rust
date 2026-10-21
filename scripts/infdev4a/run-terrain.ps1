@@ -46,3 +46,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Original passive fixture comparison failed' }
 
 & python -c 'import json,sys; assert json.load(open(sys.argv[1],encoding="utf-8")) == json.load(open(sys.argv[2],encoding="utf-8")), "original enemy Oracle fixture changed"' (Join-Path $output 'enemies.json') (Join-Path $repo 'crates/minicraft-client/tests/fixtures/infdev4a/enemies.json')
 if ($LASTEXITCODE -ne 0) { throw 'Original enemy fixture comparison failed' }
+
+& python -c 'import json,sys; assert json.load(open(sys.argv[1],encoding="utf-8")) == json.load(open(sys.argv[2],encoding="utf-8")), "original environment Oracle fixture changed"' (Join-Path $output 'environment.json') (Join-Path $repo 'crates/minicraft-client/tests/fixtures/infdev4a/environment.json')
+if ($LASTEXITCODE -ne 0) { throw 'Original environment fixture comparison failed' }

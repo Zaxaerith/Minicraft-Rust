@@ -24,6 +24,8 @@ impl Birth {
 pub(crate) struct Animal {
     pub mob: Mob,
     pub age: u32,
+    #[serde(default, skip_serializing_if = "zero_i32")]
+    pub slime_jump: i32,
     pub px: u8,
     pub py: u8,
     #[serde(default, skip_serializing_if = "zero_i8")]
@@ -51,6 +53,7 @@ impl Animal {
             unreachable!()
         };
         Self {
+            slime_jump: 0,
             mob,
             age: 0,
             px: 8,
@@ -71,7 +74,9 @@ impl Animal {
         self.validate_body()
     }
     pub fn validate_enemy(&self) -> Result<(), String> {
-        if self.mob.species != NaturalMob::Zombie || !(1..=3).contains(&self.mob.level) {
+        if !matches!(self.mob.species, NaturalMob::Zombie | NaturalMob::Slime)
+            || !(1..=3).contains(&self.mob.level)
+        {
             return Err("unsupported enemy species/level".into());
         }
         self.validate_body()
@@ -96,6 +101,7 @@ impl Animal {
             || m.attack_delay != 0
             || m.attack_time != 0
             || m.phase != 0
+            || m.species != NaturalMob::Slime && self.slime_jump != 0
         {
             return Err("invalid persistent mob state".into());
         }
@@ -164,4 +170,8 @@ pub(crate) fn animal_drops(
         }
         _ => unreachable!("validated passive species"),
     }
+}
+
+fn zero_i32(v: &i32) -> bool {
+    *v == 0
 }

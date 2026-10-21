@@ -27,9 +27,12 @@ pub(super) fn needed(position: (i64, i64)) -> BTreeSet<Key> {
 }
 
 pub(super) fn needed_at(depth: i8, position: (i64, i64)) -> BTreeSet<Key> {
+    needed_extents(depth, position, VIEW_X, VIEW_Y)
+}
+fn needed_extents(depth: i8, position: (i64, i64), width: i64, height: i64) -> BTreeSet<Key> {
     let mut keys = BTreeSet::new();
-    for dx in [-VIEW_X, 0, VIEW_X] {
-        for dy in [-VIEW_Y, 0, VIEW_Y] {
+    for dx in [-width, 0, width] {
+        for dy in [-height, 0, height] {
             if let (Some(x), Some(y)) = (position.0.checked_add(dx), position.1.checked_add(dy)) {
                 keys.insert(Key::at_depth(depth, x, y));
             }
@@ -261,7 +264,12 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
             }
             let keys = needed_at(state.depth, state.position);
             state.chunks.retain(|key, _| keys.contains(key));
-            state.entities.retain(|key, _| keys.contains(key));
+            let entity_keys = if world.survival().is_some_and(|s| s.environment.is_some()) {
+                needed_extents(state.depth, state.position, VIEW_X + 5, VIEW_Y + 5)
+            } else {
+                keys.clone()
+            };
+            state.entities.retain(|key, _| entity_keys.contains(key));
             if !touched_chunk
                 && !failed_load
                 && let Some(key) = keys
@@ -281,7 +289,7 @@ pub(super) fn run(start: Start, receive: Receiver<Command>, send: SyncSender<Sna
                 changed = true;
             }
             if world.is_survival() {
-                for &key in state.chunks.keys() {
+                for key in entity_keys {
                     match world.entity_page(key) {
                         Ok(page) => {
                             if state

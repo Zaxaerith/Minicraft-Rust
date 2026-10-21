@@ -1,0 +1,5691 @@
+{
+  "slimeDrops": [
+    {
+      "seed": 0,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 1,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 2,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 3,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 4,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 5,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 6,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 7,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 8,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 9,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 10,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 11,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 12,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 13,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 14,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 15,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 16,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 17,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 18,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 19,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 20,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 21,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 22,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 23,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 24,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 25,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 26,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 27,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 28,
+      "loot": {"Slime": 1}
+    },
+    {
+      "seed": 29,
+      "loot": {"Slime": 2}
+    },
+    {
+      "seed": 30,
+      "loot": {"Slime": 3}
+    },
+    {
+      "seed": 31,
+      "loot": {"Slime": 1}
+    }
+  ],
+  "times": [
+    {
+      "phase": 0,
+      "input": -1,
+      "tick": 0,
+      "pastDayOne": false
+    },
+    {
+      "phase": 0,
+      "input": 0,
+      "tick": 0,
+      "pastDayOne": false
+    },
+    {
+      "phase": 0,
+      "input": 16199,
+      "tick": 16199,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "input": 16200,
+      "tick": 16200,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "input": 32399,
+      "tick": 32399,
+      "pastDayOne": false
+    },
+    {
+      "phase": 2,
+      "input": 32400,
+      "tick": 32400,
+      "pastDayOne": false
+    },
+    {
+      "phase": 2,
+      "input": 48599,
+      "tick": 48599,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "input": 48600,
+      "tick": 48600,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "input": 64799,
+      "tick": 64799,
+      "pastDayOne": false
+    },
+    {
+      "phase": 0,
+      "input": 64800,
+      "tick": 0,
+      "pastDayOne": true
+    }
+  ],
+  "surfaceFirstSpawn": [
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 680,
+        "y": -536,
+        "health": 8
+      }],
+      "seed": 0,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -824,
+        "y": -184,
+        "health": 8
+      }],
+      "seed": 1,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -424,
+        "y": 824,
+        "health": 10
+      }],
+      "seed": 2,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 120,
+        "y": -872,
+        "health": 8
+      }],
+      "seed": 3,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 840,
+        "y": 856,
+        "health": 8
+      }],
+      "seed": 4,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -664,
+        "y": -840,
+        "health": 8
+      }],
+      "seed": 5,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": 568,
+        "y": 536,
+        "health": 8
+      }],
+      "seed": 6,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 280,
+        "y": 504,
+        "health": 8
+      }],
+      "seed": 7,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 984,
+        "y": 200,
+        "health": 8
+      }],
+      "seed": 8,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -504,
+        "y": 552,
+        "health": 8
+      }],
+      "seed": 9,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -104,
+        "y": -504,
+        "health": 10
+      }],
+      "seed": 10,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 440,
+        "y": -152,
+        "health": 8
+      }],
+      "seed": 11,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": -904,
+        "y": -456,
+        "health": 8
+      }],
+      "seed": 12,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -344,
+        "y": -120,
+        "health": 8
+      }],
+      "seed": 13,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": 40,
+        "y": 888,
+        "health": 10
+      }],
+      "seed": 14,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 600,
+        "y": -808,
+        "health": 8
+      }],
+      "seed": 15,
+      "pastDayOne": false
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 680,
+        "y": -536,
+        "health": 8
+      }],
+      "seed": 0,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -824,
+        "y": -184,
+        "health": 8
+      }],
+      "seed": 1,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -424,
+        "y": 824,
+        "health": 10
+      }],
+      "seed": 2,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 120,
+        "y": -872,
+        "health": 8
+      }],
+      "seed": 3,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 840,
+        "y": 856,
+        "health": 8
+      }],
+      "seed": 4,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -664,
+        "y": -840,
+        "health": 8
+      }],
+      "seed": 5,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": 568,
+        "y": 536,
+        "health": 8
+      }],
+      "seed": 6,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 280,
+        "y": 504,
+        "health": 8
+      }],
+      "seed": 7,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 984,
+        "y": 200,
+        "health": 8
+      }],
+      "seed": 8,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -504,
+        "y": 552,
+        "health": 8
+      }],
+      "seed": 9,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -104,
+        "y": -504,
+        "health": 10
+      }],
+      "seed": 10,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 440,
+        "y": -152,
+        "health": 8
+      }],
+      "seed": 11,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": -904,
+        "y": -456,
+        "health": 8
+      }],
+      "seed": 12,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -344,
+        "y": -120,
+        "health": 8
+      }],
+      "seed": 13,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": 40,
+        "y": 888,
+        "health": 10
+      }],
+      "seed": 14,
+      "pastDayOne": true
+    },
+    {
+      "phase": 1,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 600,
+        "y": -808,
+        "health": 8
+      }],
+      "seed": 15,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 680,
+        "y": -536,
+        "health": 8
+      }],
+      "seed": 0,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -824,
+        "y": -184,
+        "health": 8
+      }],
+      "seed": 1,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -424,
+        "y": 824,
+        "health": 10
+      }],
+      "seed": 2,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 120,
+        "y": -872,
+        "health": 8
+      }],
+      "seed": 3,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 840,
+        "y": 856,
+        "health": 8
+      }],
+      "seed": 4,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -664,
+        "y": -840,
+        "health": 8
+      }],
+      "seed": 5,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -264,
+        "y": 168,
+        "health": 10
+      }],
+      "seed": 6,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 280,
+        "y": 504,
+        "health": 8
+      }],
+      "seed": 7,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 984,
+        "y": 200,
+        "health": 8
+      }],
+      "seed": 8,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -504,
+        "y": 552,
+        "health": 8
+      }],
+      "seed": 9,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": -104,
+        "y": -504,
+        "health": 10
+      }],
+      "seed": 10,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 440,
+        "y": -152,
+        "health": 8
+      }],
+      "seed": 11,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": -904,
+        "y": -456,
+        "health": 8
+      }],
+      "seed": 12,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Pig",
+        "x": -344,
+        "y": -120,
+        "health": 8
+      }],
+      "seed": 13,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Cow",
+        "x": 40,
+        "y": 888,
+        "health": 10
+      }],
+      "seed": 14,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Sheep",
+        "x": 600,
+        "y": -808,
+        "health": 8
+      }],
+      "seed": 15,
+      "pastDayOne": false
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Zombie",
+        "x": 680,
+        "y": -536,
+        "health": 10
+      }],
+      "seed": 0,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Skeleton",
+        "x": -824,
+        "y": -184,
+        "health": 12
+      }],
+      "seed": 1,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": -424,
+        "y": 824,
+        "health": 2
+      }],
+      "seed": 2,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": 120,
+        "y": -872,
+        "health": 2
+      }],
+      "seed": 3,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Zombie",
+        "x": 840,
+        "y": 856,
+        "health": 10
+      }],
+      "seed": 4,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Skeleton",
+        "x": -664,
+        "y": -840,
+        "health": 12
+      }],
+      "seed": 5,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": -264,
+        "y": 168,
+        "health": 2
+      }],
+      "seed": 6,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": 280,
+        "y": 504,
+        "health": 2
+      }],
+      "seed": 7,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Zombie",
+        "x": 984,
+        "y": 200,
+        "health": 10
+      }],
+      "seed": 8,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Skeleton",
+        "x": -504,
+        "y": 552,
+        "health": 12
+      }],
+      "seed": 9,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": -104,
+        "y": -504,
+        "health": 2
+      }],
+      "seed": 10,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": 440,
+        "y": -152,
+        "health": 2
+      }],
+      "seed": 11,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Zombie",
+        "x": -904,
+        "y": -456,
+        "health": 10
+      }],
+      "seed": 12,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Skeleton",
+        "x": -344,
+        "y": -120,
+        "health": 12
+      }],
+      "seed": 13,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Slime",
+        "x": 40,
+        "y": 888,
+        "health": 2
+      }],
+      "seed": 14,
+      "pastDayOne": true
+    },
+    {
+      "phase": 3,
+      "mobs": [{
+        "level": 1,
+        "kind": "Zombie",
+        "x": 600,
+        "y": -808,
+        "health": 10
+      }],
+      "seed": 15,
+      "pastDayOne": true
+    }
+  ],
+  "slimeContact": [
+    {
+      "difficulty": 0,
+      "level": 1,
+      "health": 9,
+      "hurt": 30
+    },
+    {
+      "difficulty": 0,
+      "level": 2,
+      "health": 8,
+      "hurt": 30
+    },
+    {
+      "difficulty": 0,
+      "level": 3,
+      "health": 7,
+      "hurt": 30
+    },
+    {
+      "difficulty": 1,
+      "level": 1,
+      "health": 9,
+      "hurt": 30
+    },
+    {
+      "difficulty": 1,
+      "level": 2,
+      "health": 8,
+      "hurt": 30
+    },
+    {
+      "difficulty": 1,
+      "level": 3,
+      "health": 7,
+      "hurt": 30
+    },
+    {
+      "difficulty": 2,
+      "level": 1,
+      "health": 8,
+      "hurt": 30
+    },
+    {
+      "difficulty": 2,
+      "level": 2,
+      "health": 6,
+      "hurt": 30
+    },
+    {
+      "difficulty": 2,
+      "level": 3,
+      "health": 4,
+      "hurt": 30
+    }
+  ],
+  "torches": [
+    {
+      "dx": -4,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 0,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 1,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 2,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 3,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 4,
+      "lit": false,
+      "origin": -65,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -3,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -2,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -1,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 0,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 1,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 2,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 3,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 0,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 1,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 2,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 3,
+      "lit": true,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -3,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -2,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -1,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 0,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 1,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 2,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 3,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 4,
+      "lit": false,
+      "origin": 0,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -3,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -2,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": -1,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 0,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 1,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 2,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 3,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -4,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -3,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -2,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": -1,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 0,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 1,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 2,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": -1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 0,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 1,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 2,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 3,
+      "lit": true,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 3,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -3,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -2,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": -1,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 0,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 1,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 2,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 3,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    },
+    {
+      "dx": 4,
+      "dy": 4,
+      "lit": false,
+      "origin": 64,
+      "pixelCall": false
+    }
+  ],
+  "slimeHealth": [
+    [
+      1,
+      4,
+      9
+    ],
+    [
+      2,
+      8,
+      18
+    ],
+    [
+      4,
+      16,
+      36
+    ]
+  ],
+  "slimeWalkSeed42MovingObserver": {
+    "24": [
+      [
+        512,
+        512,
+        1,
+        1,
+        0,
+        0,
+        -1
+      ],
+      [
+        512,
+        512,
+        1,
+        1,
+        0,
+        0,
+        -2
+      ],
+      [
+        513,
+        513,
+        1,
+        1,
+        0,
+        1,
+        -3
+      ],
+      [
+        513,
+        513,
+        1,
+        1,
+        0,
+        1,
+        -4
+      ],
+      [
+        514,
+        514,
+        1,
+        1,
+        0,
+        2,
+        -5
+      ],
+      [
+        514,
+        514,
+        1,
+        1,
+        0,
+        2,
+        -6
+      ],
+      [
+        515,
+        515,
+        1,
+        1,
+        0,
+        3,
+        -7
+      ],
+      [
+        515,
+        515,
+        1,
+        1,
+        0,
+        3,
+        -8
+      ],
+      [
+        516,
+        516,
+        1,
+        1,
+        0,
+        4,
+        -9
+      ],
+      [
+        516,
+        516,
+        1,
+        1,
+        0,
+        4,
+        -10
+      ],
+      [
+        517,
+        517,
+        1,
+        1,
+        0,
+        5,
+        9
+      ],
+      [
+        517,
+        517,
+        1,
+        1,
+        0,
+        5,
+        8
+      ],
+      [
+        518,
+        518,
+        1,
+        1,
+        0,
+        6,
+        7
+      ],
+      [
+        518,
+        518,
+        1,
+        1,
+        0,
+        6,
+        6
+      ],
+      [
+        519,
+        519,
+        1,
+        1,
+        0,
+        7,
+        5
+      ],
+      [
+        519,
+        519,
+        1,
+        1,
+        0,
+        7,
+        4
+      ],
+      [
+        520,
+        520,
+        1,
+        1,
+        0,
+        8,
+        3
+      ],
+      [
+        520,
+        520,
+        1,
+        1,
+        0,
+        8,
+        2
+      ],
+      [
+        521,
+        521,
+        1,
+        1,
+        0,
+        9,
+        1
+      ],
+      [
+        521,
+        521,
+        0,
+        0,
+        0,
+        9,
+        0
+      ],
+      [
+        521,
+        521,
+        0,
+        1,
+        59,
+        9,
+        -1
+      ],
+      [
+        521,
+        521,
+        0,
+        1,
+        58,
+        9,
+        -2
+      ],
+      [
+        521,
+        522,
+        0,
+        1,
+        57,
+        10,
+        -3
+      ],
+      [
+        521,
+        522,
+        0,
+        1,
+        56,
+        10,
+        -4
+      ],
+      [
+        521,
+        523,
+        0,
+        1,
+        55,
+        11,
+        -5
+      ],
+      [
+        521,
+        523,
+        0,
+        1,
+        54,
+        11,
+        -6
+      ],
+      [
+        521,
+        524,
+        0,
+        1,
+        53,
+        12,
+        -7
+      ],
+      [
+        521,
+        524,
+        0,
+        1,
+        52,
+        12,
+        -8
+      ],
+      [
+        521,
+        525,
+        0,
+        1,
+        51,
+        13,
+        -9
+      ],
+      [
+        521,
+        525,
+        0,
+        1,
+        50,
+        13,
+        -10
+      ],
+      [
+        521,
+        526,
+        0,
+        1,
+        49,
+        14,
+        9
+      ],
+      [
+        521,
+        526,
+        0,
+        1,
+        48,
+        14,
+        8
+      ],
+      [
+        521,
+        527,
+        0,
+        1,
+        47,
+        15,
+        7
+      ],
+      [
+        521,
+        527,
+        0,
+        1,
+        46,
+        15,
+        6
+      ],
+      [
+        521,
+        528,
+        0,
+        1,
+        45,
+        16,
+        5
+      ],
+      [
+        521,
+        528,
+        0,
+        1,
+        44,
+        16,
+        4
+      ],
+      [
+        521,
+        529,
+        0,
+        1,
+        43,
+        17,
+        3
+      ],
+      [
+        521,
+        529,
+        0,
+        1,
+        42,
+        17,
+        2
+      ],
+      [
+        521,
+        530,
+        0,
+        1,
+        41,
+        18,
+        1
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        40,
+        18,
+        0
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        39,
+        18,
+        -1
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        38,
+        18,
+        -2
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        37,
+        18,
+        -3
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        36,
+        18,
+        -4
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        35,
+        18,
+        -5
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        34,
+        18,
+        -6
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        33,
+        18,
+        -7
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        32,
+        18,
+        -8
+      ],
+      [
+        521,
+        530,
+        0,
+        0,
+        31,
+        18,
+        -9
+      ],
+      [
+        521,
+        530,
+        1,
+        0,
+        59,
+        18,
+        -10
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        59,
+        19,
+        -11
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        58,
+        19,
+        -12
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        57,
+        19,
+        -13
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        56,
+        19,
+        -14
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        55,
+        19,
+        -15
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        54,
+        19,
+        -16
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        53,
+        19,
+        -17
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        52,
+        19,
+        -18
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        51,
+        19,
+        -19
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        50,
+        19,
+        -20
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        49,
+        19,
+        -21
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        48,
+        19,
+        -22
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        47,
+        19,
+        -23
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        46,
+        19,
+        -24
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        45,
+        19,
+        -25
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        44,
+        19,
+        -26
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        43,
+        19,
+        -27
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        42,
+        19,
+        -28
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        41,
+        19,
+        -29
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        40,
+        19,
+        -30
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        39,
+        19,
+        -31
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        38,
+        19,
+        -32
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        37,
+        19,
+        -33
+      ],
+      [
+        522,
+        530,
+        0,
+        0,
+        36,
+        19,
+        -34
+      ],
+      [
+        522,
+        530,
+        0,
+        1,
+        59,
+        19,
+        9
+      ],
+      [
+        522,
+        530,
+        0,
+        1,
+        58,
+        19,
+        8
+      ],
+      [
+        522,
+        531,
+        0,
+        1,
+        57,
+        20,
+        7
+      ],
+      [
+        522,
+        531,
+        0,
+        1,
+        56,
+        20,
+        6
+      ],
+      [
+        522,
+        532,
+        0,
+        1,
+        55,
+        21,
+        5
+      ],
+      [
+        522,
+        532,
+        0,
+        1,
+        54,
+        21,
+        4
+      ],
+      [
+        522,
+        533,
+        0,
+        1,
+        53,
+        22,
+        3
+      ],
+      [
+        522,
+        533,
+        0,
+        1,
+        52,
+        22,
+        2
+      ],
+      [
+        522,
+        534,
+        0,
+        1,
+        51,
+        23,
+        1
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        50,
+        23,
+        0
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        49,
+        23,
+        -1
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        48,
+        23,
+        -2
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        47,
+        23,
+        -3
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        46,
+        23,
+        -4
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        45,
+        23,
+        -5
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        44,
+        23,
+        -6
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        43,
+        23,
+        -7
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        42,
+        23,
+        -8
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        41,
+        23,
+        -9
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        40,
+        23,
+        -10
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        39,
+        23,
+        -11
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        38,
+        23,
+        -12
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        37,
+        23,
+        -13
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        36,
+        23,
+        -14
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        35,
+        23,
+        -15
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        34,
+        23,
+        -16
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        33,
+        23,
+        -17
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        32,
+        23,
+        -18
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        31,
+        23,
+        -19
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        30,
+        23,
+        -20
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        29,
+        23,
+        -21
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        28,
+        23,
+        -22
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        27,
+        23,
+        -23
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        26,
+        23,
+        -24
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        25,
+        23,
+        -25
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        24,
+        23,
+        -26
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        23,
+        23,
+        -27
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        22,
+        23,
+        -28
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        21,
+        23,
+        -29
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        20,
+        23,
+        -30
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        19,
+        23,
+        -31
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        18,
+        23,
+        -32
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        17,
+        23,
+        -33
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        16,
+        23,
+        -34
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        15,
+        23,
+        -35
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        14,
+        23,
+        -36
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        13,
+        23,
+        -37
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        12,
+        23,
+        -38
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        11,
+        23,
+        -39
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        10,
+        23,
+        -40
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        9,
+        23,
+        -41
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        8,
+        23,
+        -42
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        7,
+        23,
+        -43
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        6,
+        23,
+        -44
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        5,
+        23,
+        -45
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        4,
+        23,
+        -46
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        3,
+        23,
+        -47
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        2,
+        23,
+        -48
+      ],
+      [
+        522,
+        534,
+        0,
+        0,
+        1,
+        23,
+        -49
+      ],
+      [
+        522,
+        534,
+        1,
+        1,
+        0,
+        23,
+        9
+      ],
+      [
+        523,
+        535,
+        1,
+        1,
+        0,
+        24,
+        8
+      ],
+      [
+        523,
+        535,
+        1,
+        1,
+        0,
+        24,
+        7
+      ],
+      [
+        524,
+        536,
+        1,
+        1,
+        0,
+        25,
+        6
+      ],
+      [
+        524,
+        536,
+        1,
+        1,
+        0,
+        25,
+        5
+      ],
+      [
+        525,
+        537,
+        1,
+        1,
+        0,
+        26,
+        4
+      ],
+      [
+        525,
+        537,
+        1,
+        1,
+        0,
+        26,
+        3
+      ],
+      [
+        526,
+        538,
+        1,
+        1,
+        0,
+        27,
+        2
+      ],
+      [
+        526,
+        538,
+        1,
+        1,
+        0,
+        27,
+        1
+      ],
+      [
+        527,
+        539,
+        0,
+        0,
+        0,
+        28,
+        0
+      ],
+      [
+        527,
+        539,
+        1,
+        1,
+        0,
+        28,
+        -1
+      ],
+      [
+        528,
+        540,
+        1,
+        1,
+        0,
+        29,
+        -2
+      ],
+      [
+        528,
+        540,
+        1,
+        1,
+        0,
+        29,
+        -3
+      ],
+      [
+        529,
+        541,
+        1,
+        1,
+        0,
+        30,
+        -4
+      ],
+      [
+        529,
+        541,
+        1,
+        1,
+        0,
+        30,
+        -5
+      ],
+      [
+        530,
+        542,
+        1,
+        1,
+        59,
+        31,
+        -6
+      ],
+      [
+        530,
+        542,
+        1,
+        1,
+        58,
+        31,
+        -7
+      ],
+      [
+        531,
+        543,
+        1,
+        1,
+        57,
+        32,
+        -8
+      ],
+      [
+        531,
+        543,
+        1,
+        1,
+        56,
+        32,
+        -9
+      ],
+      [
+        532,
+        544,
+        1,
+        1,
+        55,
+        33,
+        -10
+      ],
+      [
+        532,
+        544,
+        1,
+        1,
+        54,
+        33,
+        9
+      ],
+      [
+        533,
+        545,
+        1,
+        1,
+        53,
+        34,
+        8
+      ],
+      [
+        533,
+        545,
+        1,
+        1,
+        52,
+        34,
+        7
+      ],
+      [
+        534,
+        546,
+        1,
+        1,
+        51,
+        35,
+        6
+      ],
+      [
+        534,
+        546,
+        1,
+        1,
+        50,
+        35,
+        5
+      ],
+      [
+        535,
+        547,
+        1,
+        1,
+        49,
+        36,
+        4
+      ],
+      [
+        535,
+        547,
+        1,
+        1,
+        48,
+        36,
+        3
+      ]
+    ],
+    "300": [
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -1
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -2
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -3
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -4
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -5
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -6
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -7
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -8
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -9
+      ],
+      [
+        512,
+        512,
+        0,
+        0,
+        0,
+        0,
+        -10
+      ],
+      [
+        512,
+        512,
+        0,
+        1,
+        59,
+        0,
+        9
+      ],
+      [
+        512,
+        512,
+        0,
+        1,
+        58,
+        0,
+        8
+      ],
+      [
+        512,
+        513,
+        0,
+        1,
+        57,
+        1,
+        7
+      ],
+      [
+        512,
+        513,
+        0,
+        1,
+        56,
+        1,
+        6
+      ],
+      [
+        512,
+        514,
+        0,
+        1,
+        55,
+        2,
+        5
+      ],
+      [
+        512,
+        514,
+        0,
+        1,
+        54,
+        2,
+        4
+      ],
+      [
+        512,
+        515,
+        0,
+        1,
+        53,
+        3,
+        3
+      ],
+      [
+        512,
+        515,
+        0,
+        1,
+        52,
+        3,
+        2
+      ],
+      [
+        512,
+        516,
+        0,
+        1,
+        51,
+        4,
+        1
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        50,
+        4,
+        0
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        49,
+        4,
+        -1
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        48,
+        4,
+        -2
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        47,
+        4,
+        -3
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        46,
+        4,
+        -4
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        45,
+        4,
+        -5
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        44,
+        4,
+        -6
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        43,
+        4,
+        -7
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        42,
+        4,
+        -8
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        41,
+        4,
+        -9
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        40,
+        4,
+        -10
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        39,
+        4,
+        -11
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        38,
+        4,
+        -12
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        37,
+        4,
+        -13
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        36,
+        4,
+        -14
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        35,
+        4,
+        -15
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        34,
+        4,
+        -16
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        33,
+        4,
+        -17
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        32,
+        4,
+        -18
+      ],
+      [
+        512,
+        516,
+        0,
+        0,
+        31,
+        4,
+        -19
+      ],
+      [
+        512,
+        516,
+        1,
+        0,
+        59,
+        4,
+        9
+      ],
+      [
+        513,
+        516,
+        1,
+        0,
+        58,
+        5,
+        8
+      ],
+      [
+        513,
+        516,
+        1,
+        0,
+        57,
+        5,
+        7
+      ],
+      [
+        514,
+        516,
+        1,
+        0,
+        56,
+        6,
+        6
+      ],
+      [
+        514,
+        516,
+        1,
+        0,
+        55,
+        6,
+        5
+      ],
+      [
+        515,
+        516,
+        1,
+        0,
+        54,
+        7,
+        4
+      ],
+      [
+        515,
+        516,
+        1,
+        0,
+        53,
+        7,
+        3
+      ],
+      [
+        516,
+        516,
+        1,
+        0,
+        52,
+        8,
+        2
+      ],
+      [
+        516,
+        516,
+        1,
+        0,
+        51,
+        8,
+        1
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        50,
+        9,
+        0
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        49,
+        9,
+        -1
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        48,
+        9,
+        -2
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        47,
+        9,
+        -3
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        46,
+        9,
+        -4
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        45,
+        9,
+        -5
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        44,
+        9,
+        -6
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        43,
+        9,
+        -7
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        42,
+        9,
+        -8
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        41,
+        9,
+        -9
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        40,
+        9,
+        -10
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        39,
+        9,
+        -11
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        38,
+        9,
+        -12
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        37,
+        9,
+        -13
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        36,
+        9,
+        -14
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        35,
+        9,
+        -15
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        34,
+        9,
+        -16
+      ],
+      [
+        517,
+        516,
+        0,
+        0,
+        33,
+        9,
+        -17
+      ],
+      [
+        517,
+        516,
+        0,
+        1,
+        59,
+        9,
+        9
+      ],
+      [
+        517,
+        516,
+        0,
+        1,
+        58,
+        9,
+        8
+      ],
+      [
+        517,
+        517,
+        0,
+        1,
+        57,
+        10,
+        7
+      ],
+      [
+        517,
+        517,
+        0,
+        1,
+        56,
+        10,
+        6
+      ],
+      [
+        517,
+        518,
+        0,
+        1,
+        55,
+        11,
+        5
+      ],
+      [
+        517,
+        518,
+        0,
+        1,
+        54,
+        11,
+        4
+      ],
+      [
+        517,
+        519,
+        0,
+        1,
+        53,
+        12,
+        3
+      ],
+      [
+        517,
+        519,
+        0,
+        1,
+        52,
+        12,
+        2
+      ],
+      [
+        517,
+        520,
+        0,
+        1,
+        51,
+        13,
+        1
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        50,
+        13,
+        0
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        49,
+        13,
+        -1
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        48,
+        13,
+        -2
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        47,
+        13,
+        -3
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        46,
+        13,
+        -4
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        45,
+        13,
+        -5
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        44,
+        13,
+        -6
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        43,
+        13,
+        -7
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        42,
+        13,
+        -8
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        41,
+        13,
+        -9
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        40,
+        13,
+        -10
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        39,
+        13,
+        -11
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        38,
+        13,
+        -12
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        37,
+        13,
+        -13
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        36,
+        13,
+        -14
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        35,
+        13,
+        -15
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        34,
+        13,
+        -16
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        33,
+        13,
+        -17
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        32,
+        13,
+        -18
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        31,
+        13,
+        -19
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        30,
+        13,
+        -20
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        29,
+        13,
+        -21
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        28,
+        13,
+        -22
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        27,
+        13,
+        -23
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        26,
+        13,
+        -24
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        25,
+        13,
+        -25
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        24,
+        13,
+        -26
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        23,
+        13,
+        -27
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        22,
+        13,
+        -28
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        21,
+        13,
+        -29
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        20,
+        13,
+        -30
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        19,
+        13,
+        -31
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        18,
+        13,
+        -32
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        17,
+        13,
+        -33
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        16,
+        13,
+        -34
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        15,
+        13,
+        -35
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        14,
+        13,
+        -36
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        13,
+        13,
+        -37
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        12,
+        13,
+        -38
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        11,
+        13,
+        -39
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        10,
+        13,
+        -40
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        9,
+        13,
+        -41
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        8,
+        13,
+        -42
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        7,
+        13,
+        -43
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        6,
+        13,
+        -44
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        5,
+        13,
+        -45
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        4,
+        13,
+        -46
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        3,
+        13,
+        -47
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        2,
+        13,
+        -48
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        1,
+        13,
+        -49
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -50
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -51
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -52
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -53
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -54
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -55
+      ],
+      [
+        517,
+        520,
+        0,
+        0,
+        0,
+        13,
+        -56
+      ],
+      [
+        517,
+        520,
+        1,
+        1,
+        60,
+        13,
+        9
+      ],
+      [
+        517,
+        520,
+        1,
+        1,
+        59,
+        13,
+        8
+      ],
+      [
+        518,
+        521,
+        1,
+        1,
+        58,
+        14,
+        7
+      ],
+      [
+        518,
+        521,
+        1,
+        1,
+        57,
+        14,
+        6
+      ],
+      [
+        519,
+        522,
+        1,
+        1,
+        56,
+        15,
+        5
+      ],
+      [
+        519,
+        522,
+        1,
+        1,
+        55,
+        15,
+        4
+      ],
+      [
+        520,
+        523,
+        1,
+        1,
+        54,
+        16,
+        3
+      ],
+      [
+        520,
+        523,
+        1,
+        1,
+        53,
+        16,
+        2
+      ],
+      [
+        521,
+        524,
+        1,
+        1,
+        52,
+        17,
+        1
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        51,
+        17,
+        0
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        50,
+        17,
+        -1
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        49,
+        17,
+        -2
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        48,
+        17,
+        -3
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        47,
+        17,
+        -4
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        46,
+        17,
+        -5
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        45,
+        17,
+        -6
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        44,
+        17,
+        -7
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        43,
+        17,
+        -8
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        42,
+        17,
+        -9
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        41,
+        17,
+        -10
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        40,
+        17,
+        -11
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        39,
+        17,
+        -12
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        38,
+        17,
+        -13
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        37,
+        17,
+        -14
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        36,
+        17,
+        -15
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        35,
+        17,
+        -16
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        34,
+        17,
+        -17
+      ],
+      [
+        521,
+        524,
+        0,
+        0,
+        33,
+        17,
+        -18
+      ]
+    ]
+  },
+  "lanterns": [
+    {
+      "pixelCall": false,
+      "tile": 0,
+      "type": "NORM",
+      "radius": 9,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": 0,
+      "type": "IRON",
+      "radius": 12,
+      "tileCall": false
+    },
+    {
+      "pixelCall": true,
+      "tile": 0,
+      "type": "GOLD",
+      "radius": 15,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": 8,
+      "type": "NORM",
+      "radius": 9,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": 8,
+      "type": "IRON",
+      "radius": 12,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": 8,
+      "type": "GOLD",
+      "radius": 15,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": -65,
+      "type": "NORM",
+      "radius": 9,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": -65,
+      "type": "IRON",
+      "radius": 12,
+      "tileCall": false
+    },
+    {
+      "pixelCall": false,
+      "tile": -65,
+      "type": "GOLD",
+      "radius": 15,
+      "tileCall": false
+    }
+  ]
+}

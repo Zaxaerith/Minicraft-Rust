@@ -14,6 +14,7 @@ use crate::{
 fn pig_world(root: &std::path::Path, name: &str, seed: i64, cap: usize) -> Result<World, String> {
     let mut w = World::create_survival(root, name, seed, cap)?;
     w.survival.as_mut().unwrap().entity_rules = EntityRules::PigV1;
+    w.survival.as_mut().unwrap().environment = None;
     w.survival.as_mut().unwrap().enemy_rules = super::super::survival::EnemyRules::None;
     w.checkpoint()?;
     Ok(w)
@@ -323,6 +324,7 @@ fn dynamic_natural_pigs_spawn_only_on_loaded_surface_and_legacy_marker_stays_abs
     );
     // An actual historical empty state has no entity root or new marker.
     let mut old = pig_world(&root.0, "Old", 42, 1).unwrap();
+    old.survival.as_mut().unwrap().environment = None;
     old.survival.as_mut().unwrap().entity_rules = EntityRules::Legacy;
     old.survival.as_mut().unwrap().station_rules = super::super::survival::StationRules::Session;
     old.checkpoint().unwrap();

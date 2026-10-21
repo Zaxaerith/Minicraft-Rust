@@ -264,16 +264,22 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
             | "combat-create"
             | "combat-death"
             | "combat-recover"
+            | "environment-create"
+            | "environment-reopen"
     ) {
         return Err("window smoke mode must be create or reopen".into());
     }
     let survival = mode.starts_with("survival-")
         || mode.starts_with("death-")
         || mode.starts_with("hunt-")
-        || mode.starts_with("combat-");
+        || mode.starts_with("combat-")
+        || mode.starts_with("environment-");
     let creating = mode.ends_with("create");
     if mode == "hunt-reopen" {
         survival::hunt::preflight(&root)?;
+    }
+    if mode == "environment-reopen" {
+        survival::environment::preflight(&root)?;
     }
     if mode == "combat-death" {
         survival::combat::preflight(&root)?;
@@ -300,7 +306,14 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
         saw_enemy_hit: false,
         watch_enemy_death: false,
         last_alive: None,
-        deadline: Instant::now() + Duration::from_secs(if survival { 480 } else { 90 }),
+        deadline: Instant::now()
+            + Duration::from_secs(if mode.starts_with("environment-") {
+                1800
+            } else if survival {
+                480
+            } else {
+                90
+            }),
     };
     let locale = Localization::load("en-us", &[]);
     let mut title = infdev_ui::title_menu(&locale, 7);
@@ -391,6 +404,9 @@ pub(super) fn run(mode: &str, root: PathBuf) -> Result<(), String> {
                 })
             })
     })?;
+    if mode.starts_with("environment-") {
+        return survival::environment::run(&mut host, &mut explorer, &root, creating);
+    }
     if mode.starts_with("combat-") {
         return survival::combat::run(&mut host, &mut explorer, &root, mode);
     }

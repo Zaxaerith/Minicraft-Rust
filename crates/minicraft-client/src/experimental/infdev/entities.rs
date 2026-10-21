@@ -41,6 +41,7 @@ pub(crate) enum Kind {
     Enemy(dynamic::Animal),
     Drop(dynamic::ItemDrop),
     Station(survival::StationKind),
+    Torch,
 }
 
 impl Kind {
@@ -113,7 +114,7 @@ impl Page {
                 return Err("dynamic entity missing birth identity".into());
             }
             match &e.kind {
-                Kind::Station(_) => {
+                Kind::Station(_) | Kind::Torch => {
                     if !stations.insert((e.x, e.y)) {
                         return Err("duplicate workstation position".into());
                     }

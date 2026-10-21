@@ -3,6 +3,7 @@
 use super::*;
 pub(super) mod combat;
 mod death;
+pub(super) mod environment;
 pub(super) mod hunt;
 pub(super) fn run_death(
     h: &mut Host,
@@ -336,6 +337,9 @@ fn mine(
         if p.0.abs_diff(e.position().0) + p.1.abs_diff(e.position().1) != 1 {
             return Ok(());
         }
+        if h.auto_combat {
+            face(h, e, (p.0 - e.position().0, p.1 - e.position().1))?;
+        }
         h.wait(e, |e| e.visible_cell(p.0, p.1).is_some())?;
         if e.visible_cell(p.0, p.1).unwrap().ground != g {
             samples.push((e.depth(), p));
@@ -380,7 +384,14 @@ fn walk(
             mine(h, e, d, c.ground, samples)?;
         }
         let mut stalled = 0;
+        let mut moves = 0;
         loop {
+            moves += 1;
+            if moves > 128 {
+                // Defense can keep changing the route without making progress.
+                // Bound the diagnostic and replan; never alter the game state.
+                return Ok(());
+            }
             if h.auto_combat && combat::defend(h, e)? {
                 continue;
             }

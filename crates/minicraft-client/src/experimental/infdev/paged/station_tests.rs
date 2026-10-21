@@ -225,6 +225,7 @@ fn full_station_page_refuses_without_consuming_items_or_overwriting_entities() {
 fn legacy_station_rule_is_omitted_and_paged_session_duplicates_are_rejected() {
     use crate::experimental::infdev::survival::{State, Station};
     let mut s = State::new(42);
+    s.environment = None;
     s.station_rules = StationRules::Session;
     s.stations.push(Station {
         depth: -1,

@@ -84,7 +84,7 @@ fn zombie_original_java_health_contact_and_128_seed_loot_are_exact() {
 #[test]
 fn zombie_original_underground_spawn_retains_unsupported_rolls_and_exact_levels() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Spawn", 42, 8).unwrap();
+    let mut w = zombie_world(&root.0, "Spawn", 42, 8).unwrap();
     assert!(w.survival().unwrap().enemy_rules == EnemyRules::UndergroundZombieV1);
     for depth in -3..=-1 {
         w.visit_layer(depth, 0, 0).unwrap();
@@ -134,7 +134,7 @@ fn zombie_original_underground_spawn_retains_unsupported_rolls_and_exact_levels(
 #[test]
 fn zombie_original_isolated_chase_and_wander_match_every_tick() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "AI", 42, 4).unwrap();
+    let mut w = zombie_world(&root.0, "AI", 42, 4).unwrap();
     w.visit_layer(-1, 0, 0).unwrap();
     for x in 27..58 {
         for y in 27..58 {
@@ -193,7 +193,7 @@ fn zombie_original_isolated_chase_and_wander_match_every_tick() {
 #[test]
 fn zombie_attack_death_fault_recovery_and_real_chest_pickup_are_one_transaction() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Death", 42, 4).unwrap();
+    let mut w = zombie_world(&root.0, "Death", 42, 4).unwrap();
     w.visit_layer(-1, -65, -65).unwrap();
     for x in -66..=-64 {
         for y in -66..=-64 {
@@ -286,7 +286,7 @@ fn zombie_attack_death_fault_recovery_and_real_chest_pickup_are_one_transaction(
 #[test]
 fn zombie_cross_page_knockback_full_page_and_persistence_keep_instance() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Cross", 42, 4).unwrap();
+    let mut w = zombie_world(&root.0, "Cross", 42, 4).unwrap();
     w.visit_layer(-1, -4, 2).unwrap();
     for x in -2..=1 {
         for y in -1..=1 {
@@ -341,8 +341,9 @@ fn zombie_cross_page_knockback_full_page_and_persistence_keep_instance() {
 #[test]
 fn zombie_legacy_rules_stay_absent_and_sword_uses_original_material_costs() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Legacy", 42, 4).unwrap();
+    let mut w = zombie_world(&root.0, "Legacy", 42, 4).unwrap();
     let s = w.survival.as_mut().unwrap();
+    s.environment = None;
     s.enemy_rules = EnemyRules::None;
     let old = serde_json::to_value(&s).unwrap();
     assert!(old.get("enemy_rules").is_none());
@@ -392,7 +393,7 @@ fn zombie_legacy_rules_stay_absent_and_sword_uses_original_material_costs() {
 #[test]
 fn zombie_kill_full_bag_last_tool_and_corrupt_pickup_keep_exact_loot_owner() {
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Loot", 42, 4).unwrap();
+    let mut w = zombie_world(&root.0, "Loot", 42, 4).unwrap();
     w.visit_layer(-1, 0, 0).unwrap();
     for x in -1..=1 {
         for y in -1..=2 {
@@ -508,7 +509,7 @@ fn zombie_occupied_natural_stair_allows_escape_without_deleting_or_moving_enemy(
     assert_eq!(observation["enemyX"], 512);
     assert_eq!(observation["enemyHealth"], 10);
     let root = Owned::new();
-    let mut w = World::create_survival(&root.0, "Arrival", 42, 16).unwrap();
+    let mut w = zombie_world(&root.0, "Arrival", 42, 16).unwrap();
     let stair = (-32, -20);
     w.visit(stair.0, stair.1).unwrap();
     assert_eq!(w.cell(stair.0, stair.1).unwrap().ground, Ground::StairsDown);
@@ -560,4 +561,17 @@ fn zombie_occupied_natural_stair_allows_escape_without_deleting_or_moving_enemy(
     let mut w = World::open(&directory, 1).unwrap();
     assert_eq!(w.position(), pos);
     assert!(w.entity_page(at.key()).unwrap() == enemy);
+}
+
+// These are the historical UndergroundZombieV1 fixtures, not the new calendar rules.
+fn zombie_world(
+    root: &std::path::Path,
+    name: &str,
+    seed: i64,
+    capacity: usize,
+) -> Result<World, String> {
+    let mut w = World::create_survival(root, name, seed, capacity)?;
+    w.survival.as_mut().unwrap().environment = None;
+    w.checkpoint()?;
+    Ok(w)
 }

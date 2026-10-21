@@ -17,6 +17,7 @@ group.add_argument("--survival-only",action="store_true")
 group.add_argument("--death-only",action="store_true")
 group.add_argument("--hunt-only",action="store_true")
 group.add_argument("--combat-only",action="store_true")
+group.add_argument("--environment-only",action="store_true")
 options=parser.parse_args()
 
 repo = Path(__file__).resolve().parents[2]
@@ -26,9 +27,9 @@ exe = repo / "target/release/minicraft-rust.exe"
 with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as owned:
     root = Path(owned).resolve()
     assert root.is_relative_to(output.resolve()) and root.name.startswith("infdev-owned-window-")
-    modes=("combat-create","combat-death","combat-recover") if options.combat_only else ("hunt-create","hunt-reopen") if options.hunt_only else ("survival-create","survival-reopen") if options.survival_only else (("death-create","death-recover","death-reopen") if options.death_only else ("create","reopen","survival-create","survival-reopen","death-create","death-recover","death-reopen","hunt-create","hunt-reopen"))
+    modes=("environment-create","environment-reopen") if options.environment_only else ("combat-create","combat-death","combat-recover") if options.combat_only else ("hunt-create","hunt-reopen") if options.hunt_only else ("survival-create","survival-reopen") if options.survival_only else (("death-create","death-recover","death-reopen") if options.death_only else ("create","reopen","survival-create","survival-reopen","death-create","death-recover","death-reopen","hunt-create","hunt-reopen"))
     for mode in modes:
-        session_root=root/"combat" if mode.startswith("combat-") else root/"hunt" if mode.startswith("hunt-") else root/"death" if mode.startswith("death-") else root/"survival" if mode.startswith("survival-") else root
+        session_root=root/"environment" if mode.startswith("environment-") else root/"combat" if mode.startswith("combat-") else root/"hunt" if mode.startswith("hunt-") else root/"death" if mode.startswith("death-") else root/"survival" if mode.startswith("survival-") else root
         with subprocess.Popen([str(exe), "--infdev-window-smoke", mode, str(session_root)],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8") as process:
             outcome={"forced":False}
@@ -41,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
             reader=threading.Thread(target=forward,daemon=True)
             reader.start()
             try:
-                process.wait(timeout=510 if mode.startswith(("survival-","death-","hunt-","combat-")) else 110)
+                process.wait(timeout=1830 if mode.startswith("environment-") else 510 if mode.startswith(("survival-","death-","hunt-","combat-")) else 110)
             except subprocess.TimeoutExpired:
                 process.kill();process.wait()
                 raise
@@ -54,6 +55,11 @@ with tempfile.TemporaryDirectory(prefix="infdev-owned-window-", dir=output) as o
                     if (session_root/name).is_file():
                         shutil.copyfile(session_root/name,output/name)
                 raise RuntimeError(f"Real window {mode} failed: exit={process.returncode}")
+    if options.environment_only:
+        for name in ("environment-expect.json","environment-result.json","environment-day.png","environment-night.png","environment-underground.png"):
+            shutil.copyfile(root/"environment"/name,output/name)
+        print("PASS native calendar/torch/slime: earned gear and fuel/light, natural battle/drop, real-time day/night, isolated Save/Quit/restart, exact pre-tick clock/inventory/light and GC")
+        raise SystemExit(0)
     if options.combat_only:
         evidence=json.loads((root/"combat/combat-expect.json").read_text(encoding="utf-8"))
         assert evidence["hurt"] and evidence["cloth"]>0

@@ -1,5 +1,6 @@
 //! Immutable AVL index pages + chunk objects, constant-sized checkpoint root.
 //! Windows writer lock covers saving, validation and reachability collection.
+mod cycle_spawn;
 #[doc(hidden)]
 pub mod diagnostics;
 mod dynamic;
@@ -9,6 +10,9 @@ mod enemy;
 #[cfg(test)]
 mod enemy_tests;
 mod entities;
+mod environment;
+#[cfg(test)]
+mod environment_tests;
 mod objects;
 mod passive;
 #[cfg(test)]

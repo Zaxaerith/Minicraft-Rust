@@ -53,6 +53,7 @@ public final class AnimalOracle {
         Files.writeString(out.resolve("animals.json"),result.toString(2)+"\n");
         passive(out);
         hostile(out);
+        environment(out);
         System.out.println("PASS original Infdev Pig: actual constructor health, seeded Normal death drops and120 real AI ticks");
     }
     static void passive(Path out)throws Exception {
@@ -190,6 +191,59 @@ public final class AnimalOracle {
 
         Files.writeString(out.resolve("enemies.json"),result.toString(2)+"\n");
         System.out.println("PASS original Zombie: three difficulties/levels, actual contact/drops/AI and private underground trySpawn (all original species retained)");
+    }
+
+    static void environment(Path out)throws Exception {
+        JSONObject result=new JSONObject();JSONArray times=new JSONArray();
+        for(int tick:new int[]{-1,0,16199,16200,32399,32400,48599,48600,64799,64800}){
+            minicraft.core.Updater.pastDay1=false;minicraft.core.Updater.setTime(tick);
+            times.put(new JSONObject().put("input",tick).put("tick",minicraft.core.Updater.tickCount).put("pastDayOne",minicraft.core.Updater.pastDay1).put("phase",minicraft.core.Updater.getTime().ordinal()));
+        }
+        result.put("times",times);JSONArray lights=new JSONArray();
+        for(int origin:new int[]{-65,0,64}) {
+            Observed floor=new Observed(-1);floor.setTile(origin,origin,minicraft.level.tile.Tiles.get("Torch"),0);
+            for(int dx=-4;dx<=4;dx++)for(int dy=-4;dy<=4;dy++)lights.put(new JSONObject().put("origin",origin).put("dx",dx).put("dy",dy).put("lit",floor.isLight(origin+dx,origin+dy)).put("pixelCall",floor.isLight((origin+dx)*16+8,(origin+dy)*16+8)));
+        }
+        result.put("torches",lights);JSONArray lanterns=new JSONArray();
+        for(int tile:new int[]{0,8,-65})for(minicraft.entity.furniture.Lantern.Type type:minicraft.entity.furniture.Lantern.Type.values()){
+            Observed floor=new Observed(-1);minicraft.entity.furniture.Lantern lamp=new minicraft.entity.furniture.Lantern(type);floor.add(lamp,tile*16+8,tile*16+8);floor.tick(false);
+            lanterns.put(new JSONObject().put("tile",tile).put("type",type.name()).put("radius",lamp.getLightRadius()).put("tileCall",floor.isLight(tile,tile)).put("pixelCall",floor.isLight(tile*16+8,tile*16+8)));
+        }
+        result.put("lanterns",lanterns);
+        JSONArray hp=new JSONArray(),drops=new JSONArray(),contact=new JSONArray();
+        Observed floor=new Observed(-1);for(int x=0;x<64;x++)for(int y=0;y<64;y++)floor.setTile(x,y,Tiles.get("Dirt"));
+        Player player=new Player(null,null);Game.player=player;floor.add(player,800,800);floor.tick(false);
+        for(int difficulty=0;difficulty<3;difficulty++){
+            Settings.getEntry("diff").setSelection(difficulty);JSONArray row=new JSONArray();
+            for(int level=1;level<=3;level++) {Slime slime=new Slime(level);row.put(slime.maxHealth);slime.setLevel(floor,512,512);player.health=10;player.hurtTime=0;slime.touchedBy(player);contact.put(new JSONObject().put("difficulty",difficulty).put("level",level).put("health",player.health).put("hurt",player.hurtTime));}
+            hp.put(row);
+        }
+        Settings.getEntry("diff").setSelection(1);
+        for(int seed=0;seed<32;seed++) {Slime slime=new Slime(1);slime.setLevel(floor,512,512);seed(slime,seed);floor.loot.clear();slime.die();drops.put(new JSONObject().put("seed",seed).put("loot",new JSONObject(floor.loot)));}
+        Field jump=Slime.class.getDeclaredField("jumpTime");jump.setAccessible(true);
+        JSONObject walks=new JSONObject();
+        for(int distance:new int[]{24,300}) {
+            Slime slime=new Slime(1);slime.setLevel(floor,512,512);seed(slime,42);JSONArray walk=new JSONArray();
+            for(int tick=0;tick<160;tick++) {player.x=slime.x+distance;player.y=slime.y+distance;slime.tick();walk.put(new JSONArray(new int[]{slime.x,slime.y,slime.xmov,slime.ymov,slime.randomWalkTime,slime.walkDist,jump.getInt(slime)}));}
+            walks.put(Integer.toString(distance),walk);
+        }
+        result.put("slimeHealth",hp).put("slimeContact",contact).put("slimeDrops",drops).put("slimeWalkSeed42MovingObserver",walks);
+        JSONArray surfaceSpawns=new JSONArray();
+        Field rng=Level.class.getDeclaredField("random");rng.setAccessible(true);
+        java.lang.reflect.Method spawn=Level.class.getDeclaredMethod("trySpawn");spawn.setAccessible(true);
+        for(int phase:new int[]{1,3})for(boolean past:new boolean[]{false,true})for(int input=0;input<16;input++) {
+            minicraft.core.Updater.changeTimeOfDay(phase==1?minicraft.core.Updater.Time.Day:minicraft.core.Updater.Time.Night);minicraft.core.Updater.pastDay1=past;
+            Observed habitat=new Observed(0);for(int x=-64;x<64;x++)for(int y=-64;y<64;y++)habitat.setTile(x,y,Tiles.get("Grass"));
+            Player observer=new Player(null,null);Game.player=observer;habitat.add(observer,8,8);habitat.tick(false);((Random)rng.get(habitat)).setSeed(input);
+            spawn.invoke(habitat);habitat.tick(false);JSONArray found=new JSONArray();
+            for(Entity entity:habitat.getEntityArray())if(entity instanceof MobAi) {
+                MobAi mob=(MobAi)entity;found.put(new JSONObject().put("kind",mob.getClass().getSimpleName()).put("x",mob.x).put("y",mob.y).put("health",mob.health).put("level",mob instanceof EnemyMob?((EnemyMob)mob).lvl:1));
+            }
+            surfaceSpawns.put(new JSONObject().put("phase",phase).put("pastDayOne",past).put("seed",input).put("mobs",found));
+        }
+        result.put("surfaceFirstSpawn",surfaceSpawns);
+        Files.writeString(out.resolve("environment.json"),result.toString(2)+"\n");
+        System.out.println("PASS original calendar/Torch/Lantern unit observations and Slime health/contact/drop/jump AI");
     }
 
 }

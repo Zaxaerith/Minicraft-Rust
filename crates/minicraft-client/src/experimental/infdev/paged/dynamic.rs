@@ -102,12 +102,25 @@ impl World {
             pages.get(&target.key()).unwrap().reserve(3)?;
             pages.get(&at.key()).unwrap().reserve(1)?;
         }
+        let pre_tick = !was_dead
+            && state.environment.is_some()
+            && state.panel == Panel::Closed
+            && matches!(action, Action::Tick);
+        if pre_tick {
+            state.act(self, action)?;
+        }
         let mut grazes = Vec::new();
         if !was_dead && state.panel == Panel::Closed && matches!(action, Action::Tick) {
             grazes = self.tick_animals(&mut state, &mut pages, at)?;
-            self.spawn_animal(&mut state, &mut pages, at)?;
-            if state.enemy_rules == survival::EnemyRules::UndergroundZombieV1 {
-                self.spawn_enemy(&mut state, &mut pages, at)?;
+            if state.environment.is_some() {
+                if state.player.health > 0 {
+                    self.spawn_environment(&mut state, &mut pages, at)?;
+                }
+            } else {
+                self.spawn_animal(&mut state, &mut pages, at)?;
+                if state.enemy_rules == survival::EnemyRules::UndergroundZombieV1 {
+                    self.spawn_enemy(&mut state, &mut pages, at)?;
+                }
             }
         }
         let hit = !was_dead
@@ -120,7 +133,9 @@ impl World {
             None
         };
         let result = (|| {
-            if !hit {
+            let torch_handled =
+                !hit && self.torch_action(&mut state, &mut pages, action, target, cell.ground)?;
+            if !hit && !torch_handled && !pre_tick {
                 state.act(self, action)?;
             }
             // Original mining/drop/station code remains the producer of all items.
@@ -205,6 +220,7 @@ impl World {
                 || produced
                 || taken
                 || hit
+                || torch_handled
                 || death_change
                 || !receipt && state.death_recorded;
             // Grazing and regrowth join the SAME publication as the animal.
@@ -419,7 +435,8 @@ impl World {
                 full && matches!(
                     pig.mob.species,
                     crate::entity::mob::NaturalMob::Cow | crate::entity::mob::NaturalMob::Sheep
-                ) && !grazes.contains(&pos)
+                ) && !super::environment::torch_at(pages, pos)
+                    && !grazes.contains(&pos)
                     && self
                         .loaded_cell(pos)
                         .is_some_and(|c| c.ground == Ground::Grass)
@@ -506,7 +523,10 @@ impl World {
             if occupied || page.reserve(1).is_err() {
                 continue;
             }
-            let species = crate::world::spawn::choose_passive(false, roll);
+            let species = crate::world::spawn::choose_passive(
+                state.environment.as_ref().is_some_and(|e| e.night()),
+                roll,
+            );
             let full = state.entity_rules == survival::EntityRules::PassiveV1;
             if !full && species != crate::entity::mob::NaturalMob::Pig {
                 break;

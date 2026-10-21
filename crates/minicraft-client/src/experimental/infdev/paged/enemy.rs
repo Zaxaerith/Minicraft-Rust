@@ -29,7 +29,15 @@ pub(super) fn expired(e: &Animal, pos: Position, at: Position, p: &Player) -> bo
             && delta(pos.y, i32::from(e.py), at.y, p.y).abs() < 76)
 }
 fn randomize(e: &mut Animal, r: &mut JavaRandom, by_chance: bool) {
-    if !by_chance && r.next_int(200) != 0 {
+    if e.mob.species == NaturalMob::Slime && e.slime_jump > 0 {
+        return;
+    }
+    let chance = if e.mob.species == NaturalMob::Slime {
+        40
+    } else {
+        200
+    };
+    if !by_chance && r.next_int(chance) != 0 {
         return;
     }
     e.mob.walk_time = 60;
@@ -37,14 +45,16 @@ fn randomize(e: &mut Animal, r: &mut JavaRandom, by_chance: bool) {
     e.mob.y_move = r.next_int(3) - 1;
 }
 pub(super) fn think(e: &mut Animal, pos: Position, at: Position, p: &Player, r: &mut JavaRandom) {
-    if r.next_int(200) == 0 {
+    let slime = e.mob.species == NaturalMob::Slime;
+    if r.next_int(if slime { 40 } else { 200 }) == 0 {
         randomize(e, r, true);
     }
     e.mob.walk_time = e.mob.walk_time.saturating_sub(1);
     if e.mob.walk_time == 0 {
         let dx = delta(at.x, p.x, pos.x, i32::from(e.px));
         let dy = delta(at.y, p.y, pos.y, i32::from(e.py));
-        if dx * dx + dy * dy < 100 * 100 {
+        let distance = if slime { 50 } else { 100 };
+        if dx * dx + dy * dy < distance * distance {
             // Preserve the original sig0=1 asymmetry, including aligned axes.
             e.mob.x_move = if dx < 1 { -1 } else { i32::from(dx > 1) };
             e.mob.y_move = if dy < 1 { -1 } else { i32::from(dy > 1) };
@@ -52,10 +62,21 @@ pub(super) fn think(e: &mut Animal, pos: Position, at: Position, p: &Player, r: 
             randomize(e, r, false);
         }
     }
+    if slime {
+        if e.slime_jump <= -10 && (e.mob.x_move != 0 || e.mob.y_move != 0) {
+            e.slime_jump = 10;
+        }
+        e.slime_jump = e.slime_jump.wrapping_sub(1);
+        if e.slime_jump == 0 {
+            e.mob.x_move = 0;
+            e.mob.y_move = 0;
+        }
+    }
 }
 impl World {
     #[cfg(test)]
     pub(in crate::experimental::infdev) fn passive_fixture(&mut self) {
+        self.survival.as_mut().unwrap().environment = None;
         self.survival.as_mut().unwrap().enemy_rules = EnemyRules::None;
         self.survival.as_mut().unwrap().station_rules =
             super::super::survival::StationRules::Session;

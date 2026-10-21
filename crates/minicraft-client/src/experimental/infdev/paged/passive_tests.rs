@@ -679,6 +679,7 @@ fn passive_world(
     capacity: usize,
 ) -> Result<World, String> {
     let mut w = World::create_survival(root, name, seed, capacity)?;
+    w.survival.as_mut().unwrap().environment = None;
     w.survival.as_mut().unwrap().enemy_rules =
         crate::experimental::infdev::survival::EnemyRules::None;
     w.checkpoint()?;

@@ -159,6 +159,8 @@ pub(crate) enum Panel {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<super::environment::Environment>,
     #[serde(default, skip_serializing_if = "StationRules::is_session")]
     pub station_rules: StationRules,
     #[serde(default, skip_serializing_if = "EntityRules::is_legacy")]
@@ -297,6 +299,15 @@ impl State {
                     ),
             );
         }
+        if self.environment.is_some() {
+            result.extend(
+                recipe_views(station.map(StationKind::furniture))
+                    .into_iter()
+                    .filter(
+                        |r| matches!(r.output, RecipeOutput::Stack(s) if s.item == ItemId::Torch),
+                    ),
+            );
+        }
         result
     }
     pub fn new(seed: i64) -> Self {
@@ -316,6 +327,7 @@ impl State {
             },
         );
         Self {
+            environment: Some(super::environment::Environment::new()),
             station_rules: StationRules::PagedV1,
             entity_rules: EntityRules::PassiveV1,
             enemy_rules: EnemyRules::UndergroundZombieV1,
@@ -337,6 +349,15 @@ impl State {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(env) = &self.environment {
+            env.validate()?;
+            if self.station_rules != StationRules::PagedV1
+                || self.entity_rules != EntityRules::PassiveV1
+                || self.enemy_rules != EnemyRules::UndergroundZombieV1
+            {
+                return Err("environment requires paged passive/hostile rules".into());
+            }
+        }
         let p = &self.player;
         if !(0..16).contains(&p.x)
             || !(0..16).contains(&p.y)
@@ -415,7 +436,7 @@ impl State {
             _ => None,
         }
     }
-    fn cleanup_active(&mut self) {
+    pub(super) fn cleanup_active(&mut self) {
         if let Some(ActiveItem::Stack(id)) = self.player.active_item
             && self.player.inventory.count(id) == 0
         {
@@ -548,6 +569,9 @@ impl State {
     fn tick(&mut self, w: &mut World) -> Result<(), String> {
         if self.panel != Panel::Closed {
             return Ok(());
+        }
+        if let Some(env) = &mut self.environment {
+            env.advance();
         }
         self.ticks = self.ticks.wrapping_add(1);
         self.player.attack_time = self.player.attack_time.saturating_sub(1);

@@ -83,7 +83,12 @@ pub(super) fn draw(explorer: &Explorer, screen: &mut Screen, assets: &Assets) {
                     data,
                     draw_x,
                     draw_y,
-                    explorer.ticks as i32,
+                    explorer
+                        .snapshot
+                        .survival
+                        .as_ref()
+                        .and_then(|s| s.environment.as_ref())
+                        .map_or(explorer.ticks as i32, |e| e.game_time),
                     explorer.animation_enter_millis,
                     mask(explorer, x, y, layer),
                 );
@@ -200,7 +205,10 @@ fn draw_survival(
     let point = |x: i64, y: i64| {
         x.checked_sub(cx)
             .zip(y.checked_sub(cy))
-            .filter(|(dx, dy)| dx.unsigned_abs() <= 11 && dy.unsigned_abs() <= 8)
+            .filter(|(dx, dy)| {
+                dx.unsigned_abs() <= if s.environment.is_some() { 16 } else { 11 }
+                    && dy.unsigned_abs() <= if s.environment.is_some() { 13 } else { 8 }
+            })
             .map(|(dx, dy)| {
                 (
                     WIDTH as i32 / 2 - 8 + dx as i32 * 16 + explorer.camera_offset.0,
@@ -229,6 +237,26 @@ fn draw_survival(
             if let Some((x, y)) = point(at.x, at.y) {
                 use super::super::entities::Kind;
                 match &entity.kind {
+                    Kind::Torch => {
+                        assets.render_tile(
+                            screen,
+                            Tile::Torch,
+                            0,
+                            x,
+                            y,
+                            explorer
+                                .snapshot
+                                .survival
+                                .as_ref()
+                                .and_then(|s| s.environment.as_ref())
+                                .map_or(explorer.ticks as i32, |e| e.game_time),
+                            explorer.animation_enter_millis,
+                            [false; 8],
+                        );
+                        if s.environment.is_some() {
+                            screen.render_light(x + 8, y + 8, 5 * 8);
+                        }
+                    }
                     Kind::Station(kind) => {
                         assets.furniture_linked(kind.furniture()).render(
                             assets.sheets(),
@@ -257,7 +285,10 @@ fn draw_survival(
                         );
                     }
                     Kind::Pig(pig) | Kind::Animal(pig) | Kind::Enemy(pig) => {
-                        let d = if pig.mob.x_move < 0 {
+                        let slime = pig.mob.species == crate::entity::mob::NaturalMob::Slime;
+                        let d = if slime {
+                            0
+                        } else if pig.mob.x_move < 0 {
                             2
                         } else if pig.mob.x_move > 0 {
                             3
@@ -271,7 +302,11 @@ fn draw_survival(
                                 pig.mob.species,
                                 pig.mob.level,
                                 d,
-                                ((pig.mob.walk_distance >> 3) % 2) as usize,
+                                if slime {
+                                    usize::from(pig.slime_jump > 0)
+                                } else {
+                                    ((pig.mob.walk_distance >> 3) % 2) as usize
+                                },
                                 pig.mob.sheared,
                             )
                             .set_white_tint(
@@ -289,7 +324,9 @@ fn draw_survival(
                                 assets.sheets(),
                                 screen,
                                 x + i32::from(pig.px) - 8,
-                                y + i32::from(pig.py) - 11,
+                                y + i32::from(pig.py)
+                                    - 11
+                                    - if slime && pig.slime_jump > 0 { 4 } else { 0 },
                                 0,
                                 pig.mob.hurt_time > 0,
                                 0,
@@ -323,10 +360,24 @@ fn draw_survival(
             );
         }
     }
+    if let Some(env) = &s.environment {
+        screen.render_light(WIDTH as i32 / 2 - 1, HEIGHT as i32 / 2 - 4, 5 * 8);
+        let xo = (cx.rem_euclid(4) * 16 + i64::from(s.player.x)) as i32;
+        let yo = (cy.rem_euclid(4) * 16 + i64::from(s.player.y)) as i32;
+        screen.overlay(
+            crate::gfx::lighting::java_level_index(explorer.depth()),
+            xo,
+            yo,
+            env.day_tick as i32,
+            env.past_day_one,
+        );
+    }
     screen.rect(0, 0, WIDTH as i32, 24, 0xFF101820);
     screen.text(
         assets.font(),
-        if s.food_rules == super::super::survival::FoodRules::Legacy {
+        if let Some(env) = &s.environment {
+            env.label()
+        } else if s.food_rules == super::super::survival::FoodRules::Legacy {
             "INFDEV / LEGACY HUNGER OFF"
         } else {
             "INFDEV / SURVIVAL CHECKPOINT"

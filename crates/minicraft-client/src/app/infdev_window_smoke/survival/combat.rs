@@ -6,7 +6,7 @@ use crate::experimental::infdev::{
 };
 use crate::item::Inventory;
 use std::collections::BTreeSet;
-fn zombies(e: &Explorer) -> Vec<(Birth, Point)> {
+pub(super) fn zombies(e: &Explorer) -> Vec<(Birth, Point)> {
     e.entity_pages()
         .flat_map(|p| {
             p.entities.iter().filter_map(move |entity| {
@@ -41,7 +41,7 @@ fn corpse(e: &Explorer, at: Point) -> Option<Inventory> {
         })
         .next()
 }
-fn advance(
+pub(super) fn advance(
     h: &mut Host,
     e: &mut Explorer,
     samples: &mut Vec<(i8, Point)>,
@@ -99,9 +99,24 @@ pub(super) fn defend(h: &mut Host, e: &mut Explorer) -> Result<bool, String> {
         return Ok(true);
     }
     if q.0 != e.position().0 && q.1 != e.position().1 {
-        // Step back from a diagonal bite; existing melee targets one cardinal tile.
-        face(h, e, ((e.position().0 - q.0).signum(), 0))?;
-        return Ok(true);
+        // Align with the target through a free cardinal neighbor. Repeatedly
+        // retreating along X can pin the diagnostic against a cave wall forever.
+        let p = e.position();
+        let direction = [(q.0 - p.0, 0), (0, q.1 - p.1)].into_iter().find(|d| {
+            e.visible_cell(p.0 + d.0, p.1 + d.1)
+                .is_some_and(|c| !survival::tile(c).solid(c.data))
+        });
+        if let Some(d) = direction {
+            let before = (
+                p,
+                e.survival_state().unwrap().player.x,
+                e.survival_state().unwrap().player.y,
+            );
+            face(h, e, d)?;
+            let player = &e.survival_state().unwrap().player;
+            return Ok((e.position(), player.x, player.y) != before);
+        }
+        return Ok(false);
     }
     if q == e.position() {
         // Existing tile-target melee requires stepping out of the shared tile.
@@ -122,7 +137,9 @@ pub(super) fn defend(h: &mut Host, e: &mut Explorer) -> Result<bool, String> {
         let player = &e.survival_state().unwrap().player;
         let dx = i32::from(a.px) - player.x;
         let dy = i32::from(a.py) - player.y;
-        let d = if dx.abs() > dy.abs() {
+        let d = if dx == 0 && dy == 0 {
+            (1, 0)
+        } else if dx.abs() > dy.abs() {
             (-i64::from(dx.signum()), 0)
         } else {
             (0, -i64::from(dy.signum()))
