@@ -1,7 +1,8 @@
 #requires -Version 7.0
 param(
     [string]$RuntimeDll,
-    [string]$PreviewVersion,
+    [Alias('PreviewVersion')]
+    [string]$ReleaseVersion,
     [switch]$Replace
 )
 # Build separately. This script only packages an existing, clean Windows build.
@@ -11,26 +12,30 @@ if (-not $IsWindows) { throw 'This RC supports Windows x64 only.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $output = Join-Path $repo 'target/rc/java230-dev2'
 $stem = 'Minicraft-Rust-java230-dev2-windows-x64-rc'
-$preview = -not [string]::IsNullOrWhiteSpace($PreviewVersion)
-if ($preview) {
-    if ($PreviewVersion -notmatch '^v\d+\.\d+\.\d+-preview\.[1-9]\d*$') {
-        throw 'PreviewVersion must be an explicit vX.Y.Z-preview.N version.'
+$publicRelease = -not [string]::IsNullOrWhiteSpace($ReleaseVersion)
+if ($publicRelease) {
+    if ($ReleaseVersion -notmatch '^v\d+\.\d+\.\d+$') {
+        throw 'ReleaseVersion must be an explicit vX.Y.Z version.'
     }
     if ($Replace) { throw 'Public preview assets must never be replaced.' }
-    $output = Join-Path $repo "target/rc/$PreviewVersion"
-    $stem = "Minicraft-Rust-$PreviewVersion-windows-x64"
+    $output = Join-Path $repo "target/rc/$ReleaseVersion"
+    $stem = "minicraft-rust-$($ReleaseVersion.Substring(1))-windows-x86_64"
 }
 $archivePath = Join-Path $output "$stem.zip"
 $binary = Join-Path $repo 'target/release/minicraft-rust.exe'
+$cargoVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $repo 'Cargo.toml')), '(?m)^version\s*=\s*"([^"]+)"\s*$').Groups[1].Value
+if (-not $cargoVersion -or ($publicRelease -and $ReleaseVersion -ne "v$cargoVersion")) {
+    throw 'Release tag must match the Cargo application version.'
+}
 $revision = (& git -C $repo rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
 $changes = @(& git -C $repo status --porcelain)
 if ($LASTEXITCODE -ne 0 -or $changes.Count) { throw 'Commit or preserve working changes before packaging a clean RC.' }
 if (Test-Path -LiteralPath $archivePath) {
-    if ($preview) { throw "Preview already exists; replacement refused: $archivePath" }
+    if ($publicRelease) { throw "Preview already exists; replacement refused: $archivePath" }
     if (-not $Replace) { throw "RC already exists: $archivePath (use -Replace explicitly)." }
 }
-if ($preview) {
+if ($publicRelease) {
     foreach ($name in @("$stem.files.json", "$stem.zip.sha256")) {
         if (Test-Path -LiteralPath (Join-Path $output $name)) { throw "Preview metadata already exists: $name" }
     }
@@ -56,14 +61,17 @@ function Get-Digest([byte[]]$Bytes) {
     finally { $sha.Dispose() }
 }
 Assert-X64Pe $binary
-if ($preview) {
+if ($publicRelease) {
     . "$PSScriptRoot/release-build.ps1"
     $proof = Get-Content -Raw (Join-Path $repo 'target/validation/current/release-build.json') | ConvertFrom-Json
     $validation = Get-Content (Join-Path $repo 'target/validation/current/validation.txt')
-    if ($proof.revision -ne $revision -or $proof.dirty -or $proof.config -ne $releaseConfigHash -or
+    if ($proof.package_version -ne $cargoVersion -or $proof.revision -ne $revision -or $proof.dirty -or $proof.config -ne $releaseConfigHash -or
         $proof.binary_sha256 -ne (Get-Digest ([IO.File]::ReadAllBytes($binary))) -or
         $validation -notcontains 'status=pass' -or $validation -notcontains "revision=$revision" -or
         $validation -notcontains 'dirty=False') { throw 'Preview requires a matching clean validation/build/configuration proof.' }
+    if ((Get-Item -LiteralPath $binary).VersionInfo.ProductVersion -ne $cargoVersion) {
+        throw 'PE product version does not match release metadata.'
+    }
     & python "$PSScriptRoot/release-privacy.py" $binary --report (Join-Path $repo 'target/validation/current/privacy-binary.json')
     if ($LASTEXITCODE -ne 0) { throw 'Binary privacy preflight failed.' }
 }
@@ -141,7 +149,7 @@ function Add-Text([string]$Name, [string]$Text) {
 Add-File 'minicraft-rust.exe' $binary
 if ($requiresRuntime) { Add-File 'vcruntime140.dll' $runtime }
 foreach ($name in @('LICENSE','README.md','THIRD_PARTY_NOTICES.md')) { Add-File $name (Join-Path $repo $name) }
-if ($preview) { Add-File 'docs/infdev.md' (Join-Path $repo 'docs/infdev.md') }
+if ($publicRelease) { Add-File 'docs/infdev.md' (Join-Path $repo 'docs/infdev.md') }
 Add-File 'CREDITS.txt' (Join-Path $repo 'assets/assets/books/credits.txt')
 Add-File 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt' (Join-Path $repo 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.txt')
 Add-File 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.docx' (Join-Path $repo 'licenses/MICROSOFT-VC-RUNTIME-LICENSE.docx')
@@ -150,21 +158,21 @@ Add-File 'licenses/UPSTREAM-RESOURCES.md' (Join-Path $repo 'assets/expansion230/
 Add-File 'licenses/EXPANSION230-MANIFEST.json' (Join-Path $repo 'assets/expansion230/manifest.json')
 $lockHash = Get-Digest ([IO.File]::ReadAllBytes((Join-Path $repo 'Cargo.lock')))
 $build = @(
-    $(if ($preview) { "label=$PreviewVersion" } else { 'label=java230-dev2-local-rc' }),
+    $(if ($publicRelease) { "label=$ReleaseVersion" } else { 'label=java230-dev2-local-rc' }),
     'platform=windows-x64-msvc', "source_revision=$revision",
     "cargo_lock_sha256=$lockHash", "binary_sha256=$(Get-Digest $files['minicraft-rust.exe'])",
     $(if ($requiresRuntime) { "vcruntime_file_version=$($runtimeInfo.FileVersion)" } else { 'msvc_crt=static' }),
     $(if ($requiresRuntime) { "vcruntime_sha256=$(Get-Digest $files['vcruntime140.dll'])" } else { 'vcruntime_dll=not-required' }),
     "rustc=$(& rustc -V)", "imports=$($imports -join ',')",
     'assets=embedded 2.2.4 originals and selected fixed dev2 expansion resources',
-    'cargo_version=2.2.4 (unchanged; content label does not alter save formats)',
-    $(if ($preview) { 'distribution=github-prerelease; publication is a separate validated operation' }
+    "cargo_version=$cargoVersion",
+    $(if ($publicRelease) { 'distribution=github-prerelease; publication is a separate validated operation' }
       else { 'private_local_rc=true; no automatic publication or source-availability claim' })
 ) -join "`n"
 Add-Text 'BUILD-INFO.txt' ($build + "`n")
-if ($preview) {
-    Add-Text 'PREVIEW-README.txt' @"
-Minicraft-Rust $PreviewVersion - Windows x64 - Infdev Experimental
+if ($publicRelease) {
+    Add-Text 'WINDOWS-README.txt' @"
+Minicraft-Rust $ReleaseVersion - Windows x64 - Infdev Experimental
 
 Extract the complete folder. Run minicraft-rust.exe to open the title screen.
 Requires Windows 10/11 x64 and a working graphics driver. This validated preview
@@ -185,7 +193,7 @@ Fixed saves use saves/; experiments use experiments/infdev-v2, infdev-v3 and
 infdev-survival-v4. Existing rules are preserved; there is no automatic upgrade.
 Back up complete save directories. Older EXEs may not read new saves.
 
-This is a PRE-RELEASE, not complete Infdev parity. Sky, other enemies, Bosses,
+This is a PRE-RELEASE, not complete Infdev parity. Lantern, sky, other enemies, Bosses,
 boats and multiplayer are unfinished. The native first-night long test was
 interrupted by WM_CLOSE (sender UNKNOWN); its night restart was not run.
 Short native acquisition/combat/save/restart and clock/disk tests passed.
@@ -193,16 +201,16 @@ Historical intermittent Windows MoveFileW publication failures remain UNKNOWN.
 The user approved preview publication after manual playtesting; that does not
 turn incomplete automated long tests into PASS. See GitHub release notes.
 
-Release tag and Cargo's legacy 2.2.4 content metadata are separate; save format
-identifiers are unchanged. GPL-3.0-only source/assets: preserve LICENSE, credits,
+Application version: $cargoVersion. Historical save and wire format identifiers
+are unchanged. GPL-3.0-only source/assets: preserve LICENSE, credits,
 SOURCE.txt and THIRD_PARTY_NOTICES.md. This is not an official upstream release.
 "@
     Add-Text 'SOURCE.txt' @"
-Minicraft-Rust $PreviewVersion, exact corresponding source revision:
+Minicraft-Rust $ReleaseVersion, exact corresponding source revision:
 https://github.com/Zaxaerith/Minicraft-Rust/tree/$revision
 Source archive for this revision:
 https://github.com/Zaxaerith/Minicraft-Rust/archive/$revision.zip
-Release tag: $PreviewVersion
+Release tag: $ReleaseVersion
 
 The matching public Git revision includes project source, embedded assets,
 Cargo.lock, licenses and build/package scripts. Build instructions: README.md.
@@ -267,7 +275,7 @@ try {
             try { $content.Write($entry.Value, 0, $entry.Value.Length) } finally { $content.Dispose() }
         }
     } finally { $zip.Dispose(); $stream.Dispose() }
-    if ($preview) {
+    if ($publicRelease) {
         & python "$PSScriptRoot/release-privacy.py" $temporary --report (Join-Path $output 'privacy-package.json')
         if ($LASTEXITCODE -ne 0) { throw 'Package privacy preflight failed; no preview asset published.' }
     }

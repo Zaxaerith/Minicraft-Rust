@@ -118,7 +118,10 @@ pub(super) fn render_title_menu(
         HEIGHT as i32 / 2 - 44,
         splash_color as u32,
     );
-    let version = localization.format("minicraft.displays.title.display.version", &["2.2.4"]);
+    let version = localization.format(
+        "minicraft.displays.title.display.version",
+        &[crate::network::network::LOCAL_RELEASE_VERSION],
+    );
     screen.text_colored(assets.font(), &version, 1, 1, 0x333333);
     let latest = localization.text("minicraft.displays.title.display.latest_already");
     crate::gfx::font::draw_centered(screen, assets.font(), latest, 76, 0x333333);
@@ -141,6 +144,7 @@ pub(super) fn render_title_menu(
     }
 }
 
+// Frozen Java224 reference scene; the live title above uses the Rust release version.
 pub(crate) fn render_title(
     screen: &mut Screen,
     assets: &Assets,

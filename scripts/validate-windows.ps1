@@ -39,7 +39,12 @@ if ($JavaOracle) {
 $revision = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify validated revision' }
 $dirty = [bool](& git status --porcelain)
+$packageVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $repo 'Cargo.toml')), '(?m)^version\s*=\s*"([^"]+)"\s*$').Groups[1].Value
+if ((Get-Item target/release/minicraft-rust.exe).VersionInfo.ProductVersion -ne $packageVersion) {
+    throw 'Release executable version does not match Cargo metadata'
+}
 @{ revision=$revision; dirty=$dirty; config=$releaseConfigHash;
+    package_version=$packageVersion;
     binary_sha256=(Get-FileHash target/release/minicraft-rust.exe -Algorithm SHA256).Hash.ToLowerInvariant() } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-build.json') -Encoding utf8
 @('status=pass', "revision=$revision", "dirty=$dirty", "java_oracle=$JavaOracle", "completed_utc=$([DateTime]::UtcNow.ToString('o'))") |

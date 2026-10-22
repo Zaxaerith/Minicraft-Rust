@@ -1,6 +1,6 @@
 [package]
 name = "minicraft-rust"
-version = "2.2.4"
+version = "2.2.5"
 edition = "2024"
 description = "A clean Rust reimplementation of Minicraft"
 license = "GPL-3.0-only"

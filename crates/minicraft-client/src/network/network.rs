@@ -16,7 +16,7 @@ use crate::world::Level;
 
 /// Java `Game.VERSION` used on the Network error path. The multiplayer wire
 /// keeps the separate `GAME_VERSION` label (`2.2.4-rust`).
-pub const LOCAL_RELEASE_VERSION: &str = "2.2.4";
+pub const LOCAL_RELEASE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Java `minicraft.core.VersionInfo`.
 #[derive(Debug, Clone, PartialEq, Eq)]

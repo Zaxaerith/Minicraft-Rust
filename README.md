@@ -1,10 +1,11 @@
-# Minicraft-Rust
+# Minicraft-Rust v2.2.5
 
 [Minicraft-Rust](https://github.com/Zaxaerith/Minicraft-Rust) 是基于
 [Minicraft+](https://github.com/MinicraftPlus/minicraft-plus-revived) 的 Rust 游戏实现，
 目前只维护 **Windows x64（MSVC）**。以 Java 2.2.4 的兼容修复为基础，移植传统固定地图的
 **Java 2.3.0-dev2** 玩法，另有隔离的 Infdev 实验模式。
-Windows 预览版与校验文件以仓库 [Releases](https://github.com/Zaxaerith/Minicraft-Rust/releases) 页面为准；
+v2.2.5 延续 v2.2.4 的发行版本，GitHub 标记为 Pre-release，以提示 Infdev Experimental 的范围限制。
+Windows 发行包与校验文件以仓库 [Releases](https://github.com/Zaxaerith/Minicraft-Rust/releases) 页面为准；
 历史本地 RC 仍是未包含 Infdev 的固定世界包。本项目不是上游官方发行版。
 
 ## 可以玩什么
@@ -156,14 +157,15 @@ pwsh -NoProfile -File .\scripts\package-windows-rc.ps1
 脚本使用现有 Release 产物，输出
 `target\rc\java230-dev2\Minicraft-Rust-java230-dev2-windows-x64-rc.zip`、SHA-256 和文件清单，
 不自动构建、上传或发布。RC 不包含测试存档、Oracle、Java 参考源码或构建缓存。
-制作独立的版本化预览包时，显式传入未占用的预览版本，例如：
+制作 v2.2.5 Windows x64 包时，显式传入发行版本：
 
 ```powershell
-pwsh -NoProfile -File .\scripts\package-windows-rc.ps1 -PreviewVersion v0.1.0-preview.1
+pwsh -NoProfile -File .\scripts\package-windows-rc.ps1 -ReleaseVersion v2.2.5
 ```
 
-输出为 `target\rc\v0.1.0-preview.1\`，拒绝覆盖同名包或使用 `-Replace`；不会覆盖历史 RC，也不会自动发布。
-Rust 预览 Tag 与 Cargo 中保留的 `2.2.4` 内容元数据分开，存档格式标识不随发行名改变。
+输出为 `target\rc\v2.2.5\minicraft-rust-2.2.5-windows-x86_64.zip`，
+附带 SHA-256 和文件清单。拒绝覆盖同名包或使用 `-Replace`；不会覆盖历史 RC，也不会自动发布。
+Cargo 与 EXE 的应用版本为 2.2.5；存档、生成器和网络协议的历史兼容标记不随发行号改变。
 工程记录见 [文档索引](docs/README.md)。日常完整验证可运行
 `pwsh -NoProfile -File scripts/validate-windows.ps1`；加 `-JavaOracle` 可重新执行固定源码 Oracle。
 验证日志复用 `target/validation/current/`，不再按开发阶段累积重复目录。
