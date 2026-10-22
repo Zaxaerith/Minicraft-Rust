@@ -168,7 +168,12 @@ mod tests {
             fs::create_dir(source.join(directory)).unwrap();
             for entry in fs::read_dir(reference_dir.join(directory)).unwrap() {
                 let entry = entry.unwrap();
-                fs::copy(entry.path(), source.join(directory).join(entry.file_name())).unwrap();
+                let bucket = source.join(directory).join(entry.file_name());
+                fs::create_dir(&bucket).unwrap();
+                for object in fs::read_dir(entry.path()).unwrap() {
+                    let object = object.unwrap();
+                    fs::copy(object.path(), bucket.join(object.file_name())).unwrap();
+                }
             }
         }
         let child = source.join("checkpoint.json");
