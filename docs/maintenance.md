@@ -1,5 +1,25 @@
 # Windows 工作区维护（2026-10-18）
 
+## Windows 目录发布调查（2026-10-22）
+
+候选预览发布曾在 Infdev v2 创建时遇到 MoveFileW / Win32 5。当前历史根因仍为 UNKNOWN，
+没有证明是自身泄漏、特定外部进程、ACL 或过滤驱动。未安装/提升权限运行 ProcMon，未修改安全配置。
+参考：[MoveFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefilew)、
+[CreateFileW 共享规则](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)、
+[Restart Manager](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/nf-restartmanager-rmregisterresources)。
+
+`scripts/infdev4a/publication-diagnostic.py` 是有界 Win32 后备实验，区分自身/子进程子文件与目录占用。
+它记录时间、PID、CreateFileW/CloseHandle/MoveFileW、DACL AccessCheck、卷、重解析点与规范化路径；
+无内核调用栈，不能代替 ProcMon 或证明历史过滤驱动行为。私有目录前缀脱敏，样本与失败均保留。
+真实原故障日志 `target/validation/current/infdev-storage.log` 不覆盖；新 Smoke 日志使用
+`infdev-publication-storage.log`，汇总为同目录 `infdev-publication-investigation.md`。
+
+确认的修正是失败现场保护：已校验的新世界发布失败后不再由 Stage guard 自动删除；
+Smoke 也不再自动删除失败 fixture。没有把这一修正宣称为 Win32 5 根因修复。
+后续若使用 ProcMon，需要先取得工具安装和管理员采集授权；只过滤隔离目录并保留 PML 于忽略目录，
+关注 CreateFile、SetRenameInformationFile、CloseFile 及共享/拒绝访问结果，不公开未脱敏的路径或栈。
+本次仅本地提交，禁止 Push、Tag、Release；再次成功的单个 Smoke 不能将历史 UNKNOWN 改成已修复。
+
 RC `ab54e552e96d00ecf5cb262252e153f44333a223` 从旧 main
 `164c1c7aab0b76766fdf85bd5d986951d1fceae4` 快进，保留全部历史，已实际推送。
 后续的目录整理和 Windows CI 修正继续在 main 提交；Infdev 实验只在独立功能分支开发。

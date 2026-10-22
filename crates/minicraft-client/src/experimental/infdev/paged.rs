@@ -274,7 +274,7 @@ impl World {
         if fs::symlink_metadata(&destination).is_ok() {
             return Err("destination already exists; never replaced".into());
         }
-        let stage = objects::Stage::create(&namespace)?;
+        let mut stage = objects::Stage::create(&namespace)?;
         fs::create_dir(stage.0.join("chunks")).map_err(|e| e.to_string())?;
         fs::create_dir(stage.0.join("nodes")).map_err(|e| e.to_string())?;
         if format == SURVIVAL_FORMAT {
@@ -338,12 +338,14 @@ impl World {
         w.checkpoint()?;
         w.validate_root(w.saved.root)?;
         let handles_before = publication::handle_count();
+        let lock_witness = publication::lock_witness(&w._lock);
         drop(w); // Close Windows child handle before publishing its directory.
-        publication::publish(
-            &stage.0,
+        publication::publish_stage(
+            &mut stage,
             &destination,
             handles_before,
             publication::handle_count(),
+            lock_witness,
         )?;
         let mut converted = Self::open(&destination, capacity)?;
         converted.recovered |= legacy.is_some_and(|old| old.recovered_backup());

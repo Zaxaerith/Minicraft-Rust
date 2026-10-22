@@ -172,7 +172,7 @@ pub(super) fn hold_recovery(root: &Path) -> Result<(), String> {
     }
 }
 
-pub(super) struct Stage(pub PathBuf);
+pub(super) struct Stage(pub PathBuf, bool);
 impl Stage {
     pub fn create(parent: &Path) -> Result<Self, String> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -183,16 +183,22 @@ impl Stage {
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
             match fs::create_dir(&p) {
-                Ok(()) => return Ok(Self(p)),
+                Ok(()) => return Ok(Self(p, false)),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(e) => return Err(e.to_string()),
             }
         }
     }
+
+    // A fully validated world must remain recoverable after a failed rename.
+    // Incomplete construction still uses the ordinary cleanup-on-drop path.
+    pub fn retain(&mut self) {
+        self.1 = true;
+    }
 }
 impl Drop for Stage {
     fn drop(&mut self) {
-        if self.0.exists() {
+        if !self.1 && self.0.exists() {
             let _ = fs::remove_dir_all(&self.0);
         }
     }

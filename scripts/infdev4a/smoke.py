@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import argparse
 import sys
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 
 repo = Path(__file__).resolve().parents[2]
@@ -30,7 +32,22 @@ def run(args, commands, check=True):
 def snapshot(root):
     return {str(p.relative_to(root)):p.read_bytes() for p in root.rglob("*") if p.is_file()}
 
-with tempfile.TemporaryDirectory(prefix="infdev-owned-smoke-", dir=output) as owned:
+@contextmanager
+def owned_fixture():
+    # Preserve failed fixtures, including retained production publication stages.
+    # Successful fixtures are exclusively ours and remain safe to clean up.
+    root = Path(tempfile.mkdtemp(prefix="infdev-owned-smoke-", dir=output)).resolve()
+    assert root.parent == output.resolve() and root.name.startswith("infdev-owned-smoke-")
+    try:
+        yield root
+    except BaseException:
+        print(f"FAILED FIXTURE RETAINED: {root}", file=sys.stderr, flush=True)
+        raise
+    else:
+        shutil.rmtree(root)
+
+
+with owned_fixture() as owned:
     root=Path(owned)
     for create,namespace,name,ground,data in [
         ("infdev-create","infdev4a-v1","Legacy42","rock",731),

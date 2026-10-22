@@ -2,6 +2,97 @@
 //! sharing permissions; the exclusive operation remains the migration helper.
 use std::{fs, path::Path};
 
+fn trace(event: serde_json::Value) {
+    if std::env::var_os("MINICRAFT_TRACE_PUBLICATION").is_some() {
+        eprintln!("INFDEV_PUBLICATION_TRACE {event}");
+    }
+}
+
+/// Opt-in observation of the specific session.lock handle, not a total count.
+pub(super) fn lock_witness(file: &fs::File) -> Option<usize> {
+    std::env::var_os("MINICRAFT_TRACE_PUBLICATION")?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let handle = file.as_raw_handle() as usize;
+        trace(
+            serde_json::json!({"event":"before_world_drop", "pid":std::process::id(),
+            "time_unix_ms":now(), "session_lock_handle":handle, "handle_status":handle_status(handle)}),
+        );
+        Some(handle)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = file;
+        None
+    }
+}
+
+fn now() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+}
+
+fn path_units(path: &Path) -> usize {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_os_str().encode_wide().count()
+    }
+    #[cfg(not(windows))]
+    path.to_string_lossy().encode_utf16().count()
+}
+
+fn handle_status(handle: usize) -> serde_json::Value {
+    #[cfg(windows)]
+    {
+        #[link(name = "Kernel32")]
+        unsafe extern "system" {
+            fn GetHandleInformation(handle: *mut std::ffi::c_void, flags: *mut u32) -> i32;
+        }
+        let mut flags = 0;
+        // SAFETY: Win32 validates the handle value; flags is writable. We never
+        // close or duplicate this borrowed value, which may already be invalid.
+        let valid = unsafe { GetHandleInformation(handle as *mut _, &mut flags) } != 0;
+        let error = (!valid).then(|| std::io::Error::last_os_error().raw_os_error());
+        serde_json::json!({"query_succeeded":valid,"win32":error,"flags":flags,
+            "limit":"invalid means this handle value was closed; valid may mean reuse; says nothing about other handles"})
+    }
+    #[cfg(not(windows))]
+    serde_json::json!({"unsupported":true,"handle":handle})
+}
+
+pub(super) fn publish_stage(
+    stage: &mut super::objects::Stage,
+    to: &Path,
+    before_close: Option<u32>,
+    after_close: Option<u32>,
+    closed_lock: Option<usize>,
+) -> Result<(), String> {
+    if std::env::var_os("MINICRAFT_TRACE_PUBLICATION").is_some() {
+        trace(
+            serde_json::json!({"event":"before_MoveFileW","pid":std::process::id(),"time_unix_ms":now(),
+            "from":stage.0,"to":to,"from_utf16_length":path_units(&stage.0),
+            "to_utf16_length":path_units(to),
+            "canonical_from":fs::canonicalize(&stage.0).ok(),
+            "canonical_target_parent":to.parent().and_then(|p| fs::canonicalize(p).ok()),
+            "parent_status":to.parent().map(status),
+            "session_lock_after_world_drop":closed_lock.map(handle_status)}),
+        );
+    }
+    let result = publish(&stage.0, to, before_close, after_close);
+    trace(
+        serde_json::json!({"event":"after_MoveFileW","pid":std::process::id(),
+        "time_unix_ms":now(),"success":result.is_ok(),"from":stage.0,"to":to}),
+    );
+    result.map_err(|error| {
+        stage.retain();
+        format!("{error}; complete validated stage retained for recovery at {}; destination not published", stage.0.display())
+    })
+}
+
 #[cfg(windows)]
 pub(super) fn handle_count() -> Option<u32> {
     #[link(name = "Kernel32")]
@@ -62,6 +153,43 @@ mod tests {
     use super::*;
     use crate::experimental::infdev::paged::tests::Owned;
     use std::os::windows::fs::OpenOptionsExt;
+
+    #[test]
+    fn failed_publication_retains_complete_stage_after_guard_drop() {
+        let owned = Owned::new();
+        let reference =
+            crate::experimental::infdev::paged::World::create(&owned.0, "reference", 42, 1)
+                .unwrap();
+        let reference_dir = reference.directory().to_path_buf();
+        drop(reference);
+        let mut stage = super::super::objects::Stage::create(&owned.0).unwrap();
+        let source = stage.0.clone();
+        for directory in ["chunks", "nodes"] {
+            fs::create_dir(source.join(directory)).unwrap();
+            for entry in fs::read_dir(reference_dir.join(directory)).unwrap() {
+                let entry = entry.unwrap();
+                fs::copy(entry.path(), source.join(directory).join(entry.file_name())).unwrap();
+            }
+        }
+        let child = source.join("checkpoint.json");
+        let checkpoint = fs::read(reference_dir.join("checkpoint.json")).unwrap();
+        fs::write(&child, &checkpoint).unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&child)
+            .unwrap();
+        let target = owned.0.join("must-not-appear");
+        let error = publish_stage(&mut stage, &target, None, None, None).unwrap_err();
+        assert!(error.contains("stage retained for recovery"));
+        drop(stage);
+        assert!(source.is_dir() && !target.exists());
+        drop(held);
+        assert_eq!(fs::read(child).unwrap(), checkpoint);
+        let mut recovered = crate::experimental::infdev::paged::World::open(&source, 1).unwrap();
+        assert_eq!(recovered.seed(), 42);
+        assert_eq!(recovered.saved_chunk_count().unwrap(), 1);
+    }
 
     #[test]
     fn held_source_directory_without_delete_sharing_refuses_publish_then_release_succeeds() {
