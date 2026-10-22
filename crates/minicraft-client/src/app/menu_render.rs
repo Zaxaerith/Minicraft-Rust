@@ -120,7 +120,7 @@ pub(super) fn render_title_menu(
     );
     let version = localization.format(
         "minicraft.displays.title.display.version",
-        &[crate::network::network::LOCAL_RELEASE_VERSION],
+        &[crate::network::LOCAL_RELEASE_VERSION],
     );
     screen.text_colored(assets.font(), &version, 1, 1, 0x333333);
     let latest = localization.text("minicraft.displays.title.display.latest_already");
